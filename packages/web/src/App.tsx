@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 type MqttScope = "city" | "county" | "state" | "country" | "all";
 import { foremanClient } from "./ws/client.js";
 import type { DeviceInfo, NodeInfo, MqttNode, NodeOverride, ActivityEntry, LogEntry, DeviceConfig } from "@foreman/shared";
+import { IntroModal } from "./pages/IntroModal.js";
 import { NodesPage } from "./pages/NodesPage.js";
 import { MapPage } from "./pages/MapPage.js";
 import { NodeOverridesPage } from "./pages/NodeOverridesPage.js";
@@ -120,6 +121,8 @@ export function App() {
   const [connected, setConnected] = useState(false);
   const [tab, setTab] = useState<Tab>("nodes");
   const [deviceConfigs, setDeviceConfigs] = useState<Map<string, DeviceConfig>>(new Map());
+  const [introOpen, setIntroOpen] = useState(() => !localStorage.getItem("foreman_intro_seen"));
+  const [pendingWizard, setPendingWizard] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -712,6 +715,19 @@ export function App() {
           )}
         </div>
 
+        {/* ── Help button ───────────────────────────────────────────────────── */}
+        <button
+          onClick={() => setIntroOpen(true)}
+          style={{
+            background: "#0f172a", border: "1px solid #1e293b", color: "#475569",
+            padding: "0.25rem 0.55rem", borderRadius: "0.375rem", cursor: "pointer",
+            fontFamily: "monospace", fontSize: "0.78rem", flexShrink: 0,
+          }}
+          title="Open introduction guide"
+        >
+          ?
+        </button>
+
         {/* ── Settings menu ─────────────────────────────────────────────────── */}
         <div ref={settingsRef} style={styles.menuContainer}>
           <button onClick={() => setSettingsOpen((v) => !v)} style={menuBtnStyle(settingsOpen, true)}>
@@ -808,13 +824,34 @@ export function App() {
       )}
       {tab === "config" && (
         <div style={{ flex: 1, overflowY: "auto" }}>
-          <DeviceConfigPage devices={devices} configs={deviceConfigs} />
+          <DeviceConfigPage
+            devices={devices}
+            configs={deviceConfigs}
+            autoOpenWizard={pendingWizard}
+            onWizardOpened={() => setPendingWizard(false)}
+          />
         </div>
       )}
       {tab === "analytics" && (
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           <AnalyticsPage nodes={effectiveNodes} mqttNodes={effectiveMqttNodes} devices={devices} />
         </div>
+      )}
+
+      {/* ── Intro modal ───────────────────────────────────────────────────── */}
+      {introOpen && (
+        <IntroModal
+          onClose={() => {
+            localStorage.setItem("foreman_intro_seen", "1");
+            setIntroOpen(false);
+          }}
+          onSetupWizard={() => {
+            localStorage.setItem("foreman_intro_seen", "1");
+            setIntroOpen(false);
+            navigate("config");
+            setPendingWizard(true);
+          }}
+        />
       )}
 
       {/* ── API Docs modal ─────────────────────────────────────────────────── */}

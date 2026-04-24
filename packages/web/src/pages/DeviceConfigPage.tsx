@@ -5,6 +5,8 @@ import { foremanClient } from "../ws/client.js";
 interface Props {
   devices: DeviceInfo[];
   configs: Map<string, DeviceConfig>;
+  autoOpenWizard?: boolean;
+  onWizardOpened?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +129,7 @@ function visibleEntries(data: Record<string, unknown>): [string, unknown][] {
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
-export function DeviceConfigPage({ devices, configs }: Props) {
+export function DeviceConfigPage({ devices, configs, autoOpenWizard, onWizardOpened }: Props) {
   const connectedDevices = devices.filter(d => d.status === "connected");
   const [selectedId, setSelectedId] = useState<string | null>(connectedDevices[0]?.id ?? null);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -139,6 +141,13 @@ export function DeviceConfigPage({ devices, configs }: Props) {
     if (!selectedId) return;
     foremanClient.send({ type: "device:config-request", payload: { deviceId: selectedId } });
   }, [selectedId]);
+
+  useEffect(() => {
+    if (autoOpenWizard && selectedId && config) {
+      setWizardOpen(true);
+      onWizardOpened?.();
+    }
+  }, [autoOpenWizard, selectedId, config]);
 
   const radioEntries = config
     ? Object.entries(config.radioConfig).filter(([k, v]) =>
