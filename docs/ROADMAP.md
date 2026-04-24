@@ -13,6 +13,8 @@
 
 ## In progress / exploring
 
+- [ ] **Add an introduction to help new users** - A new user has lots of things, especially little unknowns, that a intro page on first start could help with. Also could add a help button to bring it back up.
+- [ ] **After the intro it should also off them the setup wizard** - right now you have to know to go find the wizard, a new user should be asked if they want to use it.
 - [ ] **Message delivery confirmation** — combine MQTT data with the message system to create a back-channel for verifying receipt
 - [ ] **Cross-mesh relay** — when a recipient is out of direct range, use MQTT to hand the message off to another relay node that can reach them
 - [ ] **Traceroute visualization** — display traceroute paths on the map
