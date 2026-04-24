@@ -1,0 +1,285 @@
+/* ── Brand colors — main site slate + blue ─────────────────────── */
+
+:root {
+  --vp-c-brand: #2563eb;
+  --vp-c-brand-1: #3b82f6;
+  --vp-c-brand-2: #1d4ed8;
+  --vp-c-brand-3: #1e40af;
+  --vp-c-brand-soft: rgba(59, 130, 246, 0.12);
+
+  --vp-button-brand-bg: #2563eb;
+  --vp-button-brand-hover-bg: #3b82f6;
+  --vp-button-brand-active-bg: #1d4ed8;
+  --vp-button-brand-border: #2563eb;
+  --vp-button-brand-hover-border: #3b82f6;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+
+  --vp-font-family-base: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --vp-font-family-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-soft: #f1f5f9;
+  --vp-c-bg-alt: #f8fafc;
+
+  --vp-c-text-1: #0f172a;
+  --vp-c-text-2: #475569;
+  --vp-c-text-3: #94a3b8;
+
+  --vp-c-border: #cbd5e1;
+  --vp-c-divider: #cbd5e1;
+}
+
+.dark {
+  --vp-c-brand: #3b82f6;
+  --vp-c-brand-1: #60a5fa;
+  --vp-c-brand-2: #2563eb;
+  --vp-c-brand-3: #1d4ed8;
+  --vp-c-brand-soft: rgba(59, 130, 246, 0.14);
+
+  --vp-c-bg: #0f172a;
+  --vp-c-bg-soft: #1e293b;
+  --vp-c-bg-alt: #0d1117;
+
+  --vp-c-text-1: #e2e8f0;
+  --vp-c-text-2: #94a3b8;
+  --vp-c-text-3: #475569;
+
+  --vp-c-border: #1e293b;
+  --vp-c-divider: #1e293b;
+}
+
+/* ── Fork pill in navbar ──────────────────────────────────────── */
+
+.VPNavBarMenu a[href="https://meshtastic.org"] {
+  background-color: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  color: #ca8a04 !important;
+  border-radius: 20px;
+  padding: 0.2rem 0.75rem !important;
+  font-size: 0.8rem !important;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dark .VPNavBarMenu a[href="https://meshtastic.org"] {
+  background-color: rgba(234, 179, 8, 0.1);
+  border-color: rgba(234, 179, 8, 0.3);
+  color: #fbbf24 !important;
+}
+
+.VPNavBarMenu a[href="https://meshtastic.org"]:hover {
+  background-color: rgba(234, 179, 8, 0.2);
+}
+
+/* ── Navbar ───────────────────────────────────────────────────── */
+
+.VPNavBar {
+  border-bottom: 1px solid var(--vp-c-border);
+  backdrop-filter: blur(8px);
+}
+
+.VPNavBarTitle .title {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────── */
+
+.VPSidebar {
+  background-color: var(--vp-c-bg-soft);
+  border-right: 1px solid var(--vp-c-border);
+}
+
+.VPSidebarItem.is-active .text {
+  color: var(--vp-c-brand);
+  font-weight: 600;
+  background-color: var(--vp-c-brand-soft);
+  border-radius: 4px;
+}
+
+/* ── Doc content ──────────────────────────────────────────────── */
+
+.vp-doc {
+  max-width: 800px !important;
+  padding-top: 2rem;
+}
+
+h1 {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  margin-bottom: 0.5em;
+}
+
+h2, h3 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 1.5em;
+}
+
+/* ── Vertical accent line + MF badge on hero ──────────────────── */
+
+.VPHome .VPHero .main {
+  position: relative;
+  /* padding-left: 6rem; */
+}
+
+/* Hero accent images injected via HeroAccent.vue */
+
+div[class*='language-'] {
+  border-radius: 6px;
+  border: 1px solid var(--vp-c-border);
+  background-color: var(--vp-c-bg-alt);
+}
+
+:not(pre) > code {
+  background-color: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-border);
+  border-radius: 4px;
+  font-size: 0.875em;
+  padding: 0.2em 0.4em;
+}
+
+table {
+  border: 1px solid var(--vp-c-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+th {
+  background-color: var(--vp-c-bg-soft);
+  font-weight: 600;
+}
+
+/* ── Buttons (global) ─────────────────────────────────────────── */
+
+.VPButton {
+  border-radius: 20px !important;
+  font-weight: 600;
+  transition: opacity 0.15s ease;
+}
+
+.VPButton:hover {
+  opacity: 0.85;
+}
+
+/* ── Homepage only (layout: home) ────────────────────────────── */
+
+.VPHome {
+  padding-bottom: 4rem;
+}
+
+/* Hero — two-column: text left, image right */
+.VPHome .VPHero {
+  padding: 5rem 2rem 4rem;
+}
+
+.VPHome .VPHero .name {
+  font-size: clamp(2.2rem, 5vw, 3.8rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  color: #3b82f6 !important;
+  -webkit-text-fill-color: #3b82f6 !important;
+}
+
+.VPHome .VPHero .text {
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--vp-c-text-1) !important;
+  -webkit-text-fill-color: var(--vp-c-text-1) !important;
+}
+
+.VPHome .VPHero .tagline {
+  font-size: 1rem;
+  color: var(--vp-c-text-2);
+  line-height: 1.6;
+  margin-top: 1rem;
+}
+
+/* CTA buttons — left-aligned, pill-shaped */
+.VPHome .VPHero .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+/* .VPImage {
+  margin-top: 35px;
+} */
+/* Hero image */
+.VPHome .VPHero .image-container {
+  /* max-width: 640px !important; */
+  flex-shrink: 0;
+}
+
+.VPHome .VPHero .image-container img,
+.VPHome .VPHero .image-container .image-src,
+img.VPImage.image-src {
+  margin-top: 2rem;
+  margin-left: 5.35rem;
+  width: 375px !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.VPHome .VPHero .image-bg {
+  display: none;
+}
+
+/* Feature cards */
+.VPHome .VPFeature {
+  border: 1px solid var(--vp-c-border);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.VPHome .VPFeature:hover {
+  border-color: var(--vp-c-brand);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.dark .VPHome .VPFeature:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+.VPHome .VPFeature .title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.VPHome .VPFeature .details {
+  font-size: 0.875rem;
+  color: var(--vp-c-text-2);
+  line-height: 1.6;
+}
+
+/* "Learn more" link on feature cards */
+.VPHome .VPFeature .link-text {
+  color: var(--vp-c-brand);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+/* ── Misc ─────────────────────────────────────────────────────── */
+
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
+}
+
+.VPNavBarLogo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.VPNavBarTitle .logo {
+  width: 40px !important;
+  height: 40px !important;
+}

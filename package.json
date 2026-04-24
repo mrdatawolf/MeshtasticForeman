@@ -4,6 +4,9 @@
   "private": true,
   "description": "Persistent daemon + web UI for Meshtastic device management",
   "scripts": {
+    "docs:dev": "pnpm --filter @foreman/docs dev",
+    "docs:build": "pnpm --filter @foreman/docs build",
+    "docs:preview": "pnpm --filter @foreman/docs preview",
     "dev": "pnpm --parallel -r dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
