@@ -195,7 +195,7 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }
           onClick={() => onDeleteConversation(nodeId)}
           title="Delete this conversation"
         >
-          Delete
+          Delete All
         </button>
       </div>
 

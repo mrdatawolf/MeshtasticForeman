@@ -8,7 +8,6 @@ export function IntroModal({ onClose, onSetupWizard }: {
 
         <div style={styles.header}>
           <span style={styles.headerLabel}>Welcome to Meshtastic Foreman</span>
-          <button style={styles.closeBtn} onClick={onClose}>✕ skip</button>
         </div>
 
         <div style={styles.body}>
