@@ -99,6 +99,7 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId }: ThreadProps) {
       ackStatus: "pending",
       ackAt: null,
       ackError: null,
+      replyToPacketId: 0,
     };
     addOptimisticMessage(optimistic);
     setMsgText("");
@@ -106,6 +107,77 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId }: ThreadProps) {
   }
 
   const name = nodeName(nodeId, nodes, mqttNodes);
+  const isBroadcast = nodeId === BROADCAST;
+
+  // Build a packetId → message index for reply lookups (broadcast only).
+  const byPacketId = isBroadcast
+    ? new Map(messages.filter((m) => m.packetId !== 0).map((m) => [m.packetId, m]))
+    : null;
+
+  // Split into top-level messages and replies.
+  // A reply is any message with replyToPacketId !== 0 whose parent is in the
+  // current window. Orphaned replies (parent pruned) are shown as top-level.
+  const replyChildren = isBroadcast
+    ? (() => {
+        const map = new Map<string, Message[]>();
+        for (const m of messages) {
+          if (m.replyToPacketId !== 0 && byPacketId?.has(m.replyToPacketId)) {
+            const parent = byPacketId.get(m.replyToPacketId)!;
+            const bucket = map.get(parent.id) ?? [];
+            bucket.push(m);
+            map.set(parent.id, bucket);
+          }
+        }
+        return map;
+      })()
+    : null;
+
+  const isInlineReply = (m: Message) =>
+    isBroadcast && m.replyToPacketId !== 0 && byPacketId?.has(m.replyToPacketId);
+
+  function renderBubble(m: Message, indent = false) {
+    const outgoing = m.role === "sent";
+    return (
+      <div key={m.id} style={{ ...bubbleWrapStyle(outgoing), paddingLeft: indent ? "2rem" : 0 }}>
+        {indent && <div style={styles.replyConnector} />}
+        <div style={bubbleStyle(outgoing, m.role === "relayed", indent)}>
+          {m.role === "relayed" && (
+            <div style={styles.relayedLabel}>relayed</div>
+          )}
+          {isBroadcast && !outgoing && (
+            <div style={styles.senderLabel}>
+              {nodeName(m.fromNodeId, nodes, mqttNodes)}
+            </div>
+          )}
+          {indent && (
+            <div style={styles.replyingToLabel}>
+              ↩ replying to {nodeName(
+                byPacketId?.get(m.replyToPacketId)?.fromNodeId ?? m.replyToPacketId,
+                nodes, mqttNodes
+              )}
+            </div>
+          )}
+          <div style={{ ...styles.msgText, opacity: m.role === "relayed" ? 0.5 : 1 }}>
+            {m.text ?? <em style={{ color: "#475569" }}>encrypted</em>}
+          </div>
+          <div style={styles.msgMeta}>
+            {formatTime(m.rxTime)}
+            {m.rxSnr != null && ` · SNR ${m.rxSnr.toFixed(1)}`}
+            {m.viaMqtt && " · MQTT"}
+            {outgoing && m.ackStatus === "pending" && (
+              <span style={styles.ackPending} title="Waiting for ACK">⏳</span>
+            )}
+            {outgoing && m.ackStatus === "acked" && (
+              <span style={styles.ackOk} title="Delivered">✓</span>
+            )}
+            {outgoing && m.ackStatus === "error" && (
+              <span style={styles.ackErr} title={m.ackError ?? "Delivery failed"}>✗</span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.thread}>
@@ -120,41 +192,14 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId }: ThreadProps) {
         {messages.length === 0 ? (
           <div style={styles.empty}>No messages yet.</div>
         ) : (
-          messages.map((m) => {
-            const outgoing = m.role === "sent";
-            const isBroadcast = nodeId === BROADCAST;
-            return (
-              <div key={m.id} style={bubbleWrapStyle(outgoing)}>
-                <div style={bubbleStyle(outgoing, m.role === "relayed")}>
-                  {m.role === "relayed" && (
-                    <div style={styles.relayedLabel}>relayed</div>
-                  )}
-                  {isBroadcast && !outgoing && (
-                    <div style={styles.senderLabel}>
-                      {nodeName(m.fromNodeId, nodes, mqttNodes)}
-                    </div>
-                  )}
-                  <div style={{ ...styles.msgText, opacity: m.role === "relayed" ? 0.5 : 1 }}>
-                    {m.text ?? <em style={{ color: "#475569" }}>encrypted</em>}
-                  </div>
-                  <div style={styles.msgMeta}>
-                    {formatTime(m.rxTime)}
-                    {m.rxSnr != null && ` · SNR ${m.rxSnr.toFixed(1)}`}
-                    {m.viaMqtt && " · MQTT"}
-                    {outgoing && m.ackStatus === "pending" && (
-                      <span style={styles.ackPending} title="Waiting for ACK">⏳</span>
-                    )}
-                    {outgoing && m.ackStatus === "acked" && (
-                      <span style={styles.ackOk} title="Delivered">✓</span>
-                    )}
-                    {outgoing && m.ackStatus === "error" && (
-                      <span style={styles.ackErr} title={m.ackError ?? "Delivery failed"}>✗</span>
-                    )}
-                  </div>
-                </div>
+          messages
+            .filter((m) => !isInlineReply(m))
+            .map((m) => (
+              <div key={m.id}>
+                {renderBubble(m, false)}
+                {replyChildren?.get(m.id)?.map((r) => renderBubble(r, true))}
               </div>
-            );
-          })
+            ))
         )}
         <div ref={msgEndRef} />
       </div>
@@ -328,15 +373,16 @@ export function MessagesPage({ devices, nodes, mqttNodes, initialNodeId, onIniti
 function bubbleWrapStyle(outgoing: boolean): React.CSSProperties {
   return {
     display: "flex",
+    alignItems: "flex-start",
     justifyContent: outgoing ? "flex-end" : "flex-start",
   };
 }
 
-function bubbleStyle(outgoing: boolean, relayed: boolean): React.CSSProperties {
+function bubbleStyle(outgoing: boolean, relayed: boolean, reply = false): React.CSSProperties {
   return {
     maxWidth: "72%",
     background: relayed ? "#0f172a" : outgoing ? "#1e3a5f" : "#1e293b",
-    border: `1px solid ${relayed ? "#1e293b" : outgoing ? "#2563eb" : "#334155"}`,
+    border: `1px solid ${relayed ? "#1e293b" : reply ? "#7c3aed" : outgoing ? "#2563eb" : "#334155"}`,
     borderRadius: "0.5rem",
     padding: "0.45rem 0.7rem",
     opacity: relayed ? 0.7 : 1,
@@ -529,6 +575,20 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: "uppercase",
     letterSpacing: "0.06em",
     marginBottom: "0.15rem",
+  },
+  replyConnector: {
+    width: "1px",
+    alignSelf: "stretch",
+    background: "#7c3aed",
+    opacity: 0.4,
+    marginRight: "0.5rem",
+    flexShrink: 0,
+  },
+  replyingToLabel: {
+    color: "#7c3aed",
+    fontSize: "0.62rem",
+    marginBottom: "0.2rem",
+    opacity: 0.85,
   },
   senderLabel: {
     color: "#60a5fa",

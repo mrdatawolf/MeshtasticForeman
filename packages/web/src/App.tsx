@@ -238,11 +238,7 @@ export function App() {
         }
       }
       if (event.type === "node:list") {
-        setNodes((prev) => {
-          const map = new Map(prev.map((n) => [n.nodeId, n]));
-          for (const n of event.payload) map.set(n.nodeId, n);
-          return sortNodes([...map.values()]);
-        });
+        setNodes(sortNodes(event.payload));
       }
       if (event.type === "node:update") {
         setNodes((prev) => {
@@ -254,11 +250,7 @@ export function App() {
         });
       }
       if (event.type === "mqtt_node:list") {
-        setMqttNodes((prev) => {
-          const map = new Map(prev.map((n) => [n.nodeId, n]));
-          for (const n of event.payload) map.set(n.nodeId, n);
-          return sortMqttNodes([...map.values()]);
-        });
+        setMqttNodes(sortMqttNodes(event.payload));
       }
       if (event.type === "mqtt_node:update") {
         setMqttNodes((prev) => {

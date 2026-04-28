@@ -49,6 +49,8 @@ export class DeviceManager extends EventEmitter {
   private gpsAcquired = new Set<string>();
   /** Latest GPS detail per device */
   private gpsDetails = new Map<string, GpsDetail>();
+  /** Correlates packetId → replyId for in-flight text packets between onMeshPacket and onMessagePacket */
+  private pendingReplyIds = new Map<number, number>();
 
   constructor(private readonly db: PGlite) {
     super();
@@ -375,7 +377,7 @@ export class DeviceManager extends EventEmitter {
     let query = `
       SELECT id, packet_id, from_node_id, to_node_id, channel_index, text,
              rx_time, rx_snr, rx_rssi, hop_limit, want_ack, via_mqtt, role,
-             ack_status, ack_at, ack_error
+             ack_status, ack_at, ack_error, reply_to_packet_id
       FROM messages
       WHERE device_id = $1`;
     const params: unknown[] = [deviceId];
@@ -414,6 +416,7 @@ export class DeviceManager extends EventEmitter {
       ack_status: string | null;
       ack_at: string | null;
       ack_error: string | null;
+      reply_to_packet_id: number;
     }>(query, params);
 
     return rows.map((r) => ({
@@ -433,6 +436,7 @@ export class DeviceManager extends EventEmitter {
       ackStatus: r.ack_status as Message["ackStatus"],
       ackAt: r.ack_at,
       ackError: r.ack_error,
+      replyToPacketId: r.reply_to_packet_id ?? 0,
     }));
   }
 
@@ -572,12 +576,14 @@ export class DeviceManager extends EventEmitter {
   ) {
     const id = randomUUID();
     const rxTime = packet.rxTime.toISOString();
+    const replyToPacketId = this.pendingReplyIds.get(packet.id) ?? 0;
+    this.pendingReplyIds.delete(packet.id);
 
     await this.db.query(
-      `INSERT INTO messages(id, packet_id, device_id, from_node_id, to_node_id, channel_index, text, rx_time, role)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'received')
+      `INSERT INTO messages(id, packet_id, device_id, from_node_id, to_node_id, channel_index, text, rx_time, role, reply_to_packet_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'received', $9)
        ON CONFLICT(id) DO NOTHING`,
-      [id, packet.id, deviceId, packet.from, packet.to, packet.channel, packet.data, rxTime]
+      [id, packet.id, deviceId, packet.from, packet.to, packet.channel, packet.data, rxTime, replyToPacketId]
     );
     await this.db.query("UPDATE devices SET last_seen = $1 WHERE id = $2", [rxTime, deviceId]);
 
@@ -600,6 +606,7 @@ export class DeviceManager extends EventEmitter {
         ackStatus: null,
         ackAt: null,
         ackError: null,
+        replyToPacketId,
       },
     };
     this.emit("event", event);
@@ -678,8 +685,8 @@ export class DeviceManager extends EventEmitter {
 
     await this.db.query(
       `INSERT INTO messages(id, packet_id, device_id, from_node_id, to_node_id, channel_index,
-         text, rx_time, want_ack, role, ack_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, 'sent', null)`,
+         text, rx_time, want_ack, role, ack_status, reply_to_packet_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, 'sent', null, 0)`,
       [msgId, packetId, deviceId, myNodeId, toNodeId, channelIndex, reply, txTime]
     );
 
@@ -702,6 +709,7 @@ export class DeviceManager extends EventEmitter {
         ackStatus: null,
         ackAt: null,
         ackError: null,
+        replyToPacketId: 0,
       },
     };
     this.emit("event", botEvent);
@@ -717,6 +725,14 @@ export class DeviceManager extends EventEmitter {
     const isEncrypted = p.payloadVariant?.case === "encrypted";
 
     const portnum: number = isDecoded ? (p.payloadVariant.value.portnum ?? 0) : 0;
+
+    // Stash replyId synchronously before any await so _handleMessage can consume it.
+    // onMeshPacket fires before the derived onMessagePacket, so the map entry will be
+    // present by the time _handleMessage reads it.
+    const TEXT_MESSAGE_APP_PORT = 1;
+    if (portnum === TEXT_MESSAGE_APP_PORT && isDecoded && (p.id ?? 0) !== 0) {
+      this.pendingReplyIds.set(p.id, p.replyId ?? 0);
+    }
     const portnumName: string =
       (Protobuf.Portnums.PortNum as Record<number, string>)[portnum] ?? "UNKNOWN_APP";
 
@@ -901,12 +917,12 @@ export class DeviceManager extends EventEmitter {
       const relayId = randomUUID();
       await this.db.query(
         `INSERT INTO messages(id, packet_id, device_id, from_node_id, to_node_id, channel_index,
-           text, rx_time, rx_snr, rx_rssi, hop_limit, want_ack, via_mqtt, role)
-         VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9, $10, $11, $12, 'relayed')`,
+           text, rx_time, rx_snr, rx_rssi, hop_limit, want_ack, via_mqtt, role, reply_to_packet_id)
+         VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9, $10, $11, $12, 'relayed', $13)`,
         [
           relayId, p.id ?? 0, deviceId, fromNodeId, toNodeId, p.channel ?? 0,
           rxTime, p.rxSnr || null, p.rxRssi || null, p.hopLimit || null,
-          p.wantAck ?? false, p.viaMqtt ?? false,
+          p.wantAck ?? false, p.viaMqtt ?? false, p.replyId ?? 0,
         ]
       );
     }

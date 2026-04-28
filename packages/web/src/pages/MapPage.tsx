@@ -490,6 +490,12 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
       : [...mappableMesh, ...mappableMqtt];
     if (allNodes.length === 0) return;
 
+    // Evict stale cache entries for nodes no longer in the visible set to prevent unbounded memory growth.
+    const activeKeys = new Set(allNodes.map((n) => `${n.nodeId}`));
+    for (const key of viewshedCache.current.keys()) {
+      if (!activeKeys.has(key)) viewshedCache.current.delete(key);
+    }
+
     // Initialise status without resetting already-cached nodes — avoids the
     // "X/76 loading" flicker when the effect fires due to unrelated node updates.
     // Cache key is just nodeId — always fetched at TERRAIN_FETCH_RADIUS_KM (20km).

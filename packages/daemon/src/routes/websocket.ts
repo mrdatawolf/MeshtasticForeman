@@ -209,8 +209,8 @@ async function handleClientCommand(
       if (db) {
         await db.query(
           `INSERT INTO messages(id, packet_id, device_id, from_node_id, to_node_id, channel_index,
-             text, rx_time, want_ack, role, ack_status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'sent', $10)`,
+             text, rx_time, want_ack, role, ack_status, reply_to_packet_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'sent', $10, 0)`,
           [msgId, packetId, deviceId, myNodeId, toNodeId, channelIndex, text, txTime, wantAck, ackStatus]
         );
       }
@@ -231,6 +231,7 @@ async function handleClientCommand(
         ackStatus,
         ackAt: null,
         ackError: null,
+        replyToPacketId: 0,
       };
       if (broadcast) broadcast({ type: "message:sent", payload: sentMsg });
       console.log(`[ws] message:send → ${device.name} to node ${toNodeId}`);

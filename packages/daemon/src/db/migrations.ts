@@ -312,6 +312,15 @@ const migrations: string[] = [
   CREATE INDEX IF NOT EXISTS mqtt_json_packets_from_time  ON mqtt_json_packets(from_node, rx_time DESC);
   CREATE INDEX IF NOT EXISTS mqtt_json_packets_type_time  ON mqtt_json_packets(type, rx_time DESC);
   `,
+
+  /* 018 – reply threading: tracks which packet a message is replying to.
+            The Meshtastic MeshPacket protobuf carries a reply_id field (field 23)
+            that the official apps populate when a user replies to a specific message.
+            Stored as 0 when no reply (older firmware, non-reply messages). */
+  `
+  ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_packet_id BIGINT NOT NULL DEFAULT 0;
+  CREATE INDEX IF NOT EXISTS messages_reply ON messages(device_id, reply_to_packet_id) WHERE reply_to_packet_id != 0;
+  `,
 ];
 
 export async function runMigrations(db: PGlite) {

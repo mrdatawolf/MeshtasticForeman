@@ -106,6 +106,7 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
       ackStatus: "pending" as const,
       ackAt: null,
       ackError: null,
+      replyToPacketId: 0,
     };
     addOptimisticMessage(optimistic);
     setMsgText("");
