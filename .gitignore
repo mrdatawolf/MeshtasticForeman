@@ -14,3 +14,4 @@ package-lock.json
 TD_cache/
 /dist-daemon
 /dist-electron
+/.claude

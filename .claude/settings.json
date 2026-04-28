@@ -13,7 +13,8 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/meshtastic/firmware/develop/src/gps/GPS.h\")",
       "WebSearch",
       "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); [print\\(p['id'], p['name']\\) for p in data]\")",
-      "Read(//d/Projects/GitHub/Client-Time-Tracker/**)"
+      "Read(//d/Projects/GitHub/Client-Time-Tracker/**)",
+      "Bash(python -c ' *)"
     ]
   }
 }
