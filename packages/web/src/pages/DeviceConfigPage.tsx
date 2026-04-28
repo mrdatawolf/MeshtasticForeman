@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import type { DeviceConfig, DeviceInfo, Channel } from "@foreman/shared";
 import { foremanClient } from "../ws/client.js";
+import regionPresetsFallback from "../../../../region-presets.json";
 
 interface Props {
   devices: DeviceInfo[];
@@ -235,8 +236,7 @@ export function DeviceConfigPage({ devices, configs, autoOpenWizard, onWizardOpe
 function SetupWizard({ deviceId, onClose }: { deviceId: string; onClose: () => void }) {
   const [step, setStep]           = useState<0 | 1 | 2 | 3>(0);
   const [role, setRole]           = useState<number | null>(null);
-  const [parentRegion, setParentRegion] = useState<RegionNode | null>(null);
-  const [childRegion, setChildRegion]   = useState<RegionNode | null>(null);
+  const [selectedRegions, setSelectedRegions] = useState<RegionNode[]>([]);
   const [mqttEnabled, setMqttEnabled]   = useState(false);
   const [mqttAddress, setMqttAddress]   = useState("");
   const [mqttUser, setMqttUser]         = useState("");
@@ -249,28 +249,39 @@ function SetupWizard({ deviceId, onClose }: { deviceId: string; onClose: () => v
   const listenerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    fetch("/api/region-presets").then(r => r.json()).then(setPresets).catch(console.error);
+    let cancelled = false;
+    fetch("/api/region-presets")
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data: RegionPresets) => {
+        if (!cancelled && Array.isArray(data?.regions)) setPresets(data);
+      })
+      .catch(() => {
+        if (!cancelled) setPresets(regionPresetsFallback as RegionPresets);
+      });
     return () => { listenerRef.current?.(); };
   }, []);
 
+  const selectedLeaf = selectedRegions.at(-1) ?? null;
+
   // Pre-fill MQTT fields from region defaults when region changes
   useEffect(() => {
-    const leaf = childRegion ?? parentRegion;
-    if (leaf?.mqttDefaults) {
-      if (leaf.mqttDefaults.address)  setMqttAddress(leaf.mqttDefaults.address);
-      if (leaf.mqttDefaults.username) setMqttUser(leaf.mqttDefaults.username);
-      if (leaf.mqttDefaults.password) setMqttPass(leaf.mqttDefaults.password);
+    if (selectedLeaf?.mqttDefaults) {
+      if (selectedLeaf.mqttDefaults.address)  setMqttAddress(selectedLeaf.mqttDefaults.address);
+      if (selectedLeaf.mqttDefaults.username) setMqttUser(selectedLeaf.mqttDefaults.username);
+      if (selectedLeaf.mqttDefaults.password) setMqttPass(selectedLeaf.mqttDefaults.password);
     }
-  }, [parentRegion, childRegion]);
+  }, [selectedLeaf]);
 
   const mergedRegionSettings = useMemo(() => {
-    const path = [parentRegion, childRegion].filter(Boolean) as RegionNode[];
-    return path.reduce((acc, node) => {
+    return selectedRegions.reduce((acc, node) => {
       return node.settings
         ? deepMerge(acc, node.settings as Record<string, unknown>)
         : acc;
     }, {} as Record<string, unknown>);
-  }, [parentRegion, childRegion]);
+  }, [selectedRegions]);
 
   const changes = useMemo(() => buildWizardChanges(
     role, mergedRegionSettings,
@@ -328,8 +339,8 @@ function SetupWizard({ deviceId, onClose }: { deviceId: string; onClose: () => v
           {step === 1 && (
             <RegionStep
               presets={presets}
-              parentRegion={parentRegion} setParentRegion={r => { setParentRegion(r); setChildRegion(null); }}
-              childRegion={childRegion} setChildRegion={setChildRegion}
+              selectedRegions={selectedRegions}
+              setSelectedRegions={setSelectedRegions}
               onBack={() => setStep(0)} onNext={() => setStep(2)} />
           )}
           {step === 2 && (
@@ -387,54 +398,100 @@ function RoleStep({ role, setRole, onNext }: {
 // ---------------------------------------------------------------------------
 // Step 2 — Region
 // ---------------------------------------------------------------------------
-function RegionStep({ presets, parentRegion, setParentRegion, childRegion, setChildRegion, onBack, onNext }: {
+function RegionStep({ presets, selectedRegions, setSelectedRegions, onBack, onNext }: {
   presets: RegionPresets | null;
-  parentRegion: RegionNode | null;
-  setParentRegion: (r: RegionNode) => void;
-  childRegion: RegionNode | null;
-  setChildRegion: (r: RegionNode | null) => void;
+  selectedRegions: RegionNode[];
+  setSelectedRegions: (regions: RegionNode[]) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
   const topLevel = presets?.regions ?? [];
-  const children = parentRegion?.children ?? [];
+  const selectedLeaf = selectedRegions.at(-1) ?? null;
+  const columns: { title: string; options: RegionNode[]; level: number; optional: boolean }[] = [];
+
+  if (topLevel.length > 0) {
+    columns.push({
+      title: "Region",
+      options: topLevel,
+      level: 0,
+      optional: false,
+    });
+  }
+
+  selectedRegions.forEach((region, index) => {
+    if ((region.children?.length ?? 0) > 0) {
+      columns.push({
+        title: `Specific area within ${region.label}`,
+        options: region.children ?? [],
+        level: index + 1,
+        optional: true,
+      });
+    }
+  });
+
+  function selectRegion(level: number, region: RegionNode) {
+    setSelectedRegions([...selectedRegions.slice(0, level), region]);
+  }
 
   return (
     <div style={wizardStyles.step}>
       <div style={wizardStyles.stepTitle}>Where is this device?</div>
       <div style={wizardStyles.stepSub}>Sets the LoRa region, modem preset, and MQTT defaults for your area.</div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "0.5rem", marginTop: "1rem" }}>
-        {topLevel.map(r => (
-          <button key={r.id} style={wizardRegionBtn(parentRegion?.id === r.id)} onClick={() => setParentRegion(r)}>
-            <span style={{ color: "#e2e8f0", fontSize: "0.85rem", fontWeight: "bold" }}>{r.label}</span>
-            {r.description && <span style={{ color: "#64748b", fontSize: "0.72rem" }}>{r.description}</span>}
-          </button>
-        ))}
-      </div>
+      {presets === null ? (
+        <div style={wizardStyles.stepEmpty}>Loading region presets…</div>
+      ) : columns.length === 0 ? (
+        <div style={wizardStyles.stepEmpty}>No region presets are available.</div>
+      ) : (
+        <>
+          {selectedRegions.length > 0 && (
+            <div style={wizardStyles.breadcrumbs}>
+              {selectedRegions.map((region, index) => (
+                <button
+                  key={region.id}
+                  style={wizardBreadcrumbBtn(index === selectedRegions.length - 1)}
+                  onClick={() => setSelectedRegions(selectedRegions.slice(0, index + 1))}
+                >
+                  {region.label}
+                </button>
+              ))}
+            </div>
+          )}
 
-      {children.length > 0 && (
-        <div style={{ marginTop: "1rem" }}>
-          <div style={{ color: "#64748b", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.4rem" }}>
-            Specific area within {parentRegion?.label} (optional)
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "0.5rem" }}>
-            {children.map(c => (
-              <button key={c.id}
-                style={wizardRegionBtn(childRegion?.id === c.id, true)}
-                onClick={() => setChildRegion(childRegion?.id === c.id ? null : c)}
-              >
-                <span style={{ color: "#e2e8f0", fontSize: "0.85rem", fontWeight: "bold" }}>{c.label}</span>
-                {c.description && <span style={{ color: "#64748b", fontSize: "0.72rem" }}>{c.description}</span>}
-              </button>
-            ))}
-          </div>
-        </div>
+          {columns.map((column) => (
+            <div key={`${column.title}-${column.level}`} style={{ marginTop: "1rem" }}>
+              <div style={{ color: "#64748b", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.4rem" }}>
+                {column.title}{column.optional ? " (optional)" : ""}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "0.5rem" }}>
+                {column.options.map((region) => {
+                  const active = selectedRegions[column.level]?.id === region.id;
+                  return (
+                    <button
+                      key={region.id}
+                      style={wizardRegionBtn(active, column.level > 0)}
+                      onClick={() => selectRegion(column.level, region)}
+                    >
+                      <span style={{ color: "#e2e8f0", fontSize: "0.85rem", fontWeight: "bold" }}>{region.label}</span>
+                      {region.description && <span style={{ color: "#64748b", fontSize: "0.72rem" }}>{region.description}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {selectedLeaf?.children?.length === 0 && (
+            <div style={wizardStyles.selectionHint}>
+              {selectedLeaf ? `Selected: ${selectedRegions.map((region) => region.label).join(" / ")}` : ""}
+            </div>
+          )}
+        </>
       )}
 
       <div style={wizardStyles.nav}>
         <button style={navBtn(false)} onClick={onBack}>← Back</button>
-        <button style={navBtn(parentRegion === null)} disabled={parentRegion === null} onClick={onNext}>
+        <button style={navBtn(selectedRegions.length === 0)} disabled={selectedRegions.length === 0} onClick={onNext}>
           Next →
         </button>
       </div>
@@ -866,6 +923,18 @@ function wizardRegionBtn(active: boolean, child = false): React.CSSProperties {
   };
 }
 
+function wizardBreadcrumbBtn(active: boolean): React.CSSProperties {
+  return {
+    background: active ? "#1e3a5f" : "#0d1420",
+    border: `1px solid ${active ? "#3b82f6" : "#1e293b"}`,
+    color: active ? "#dbeafe" : "#94a3b8",
+    padding: "0.2rem 0.55rem",
+    borderRadius: "9999px",
+    cursor: "pointer",
+    fontSize: "0.72rem",
+  };
+}
+
 function featureBlock(active: boolean): React.CSSProperties {
   return {
     background: active ? "#0f2a1a" : "#0d1420",
@@ -914,6 +983,26 @@ const wizardStyles: Record<string, React.CSSProperties> = {
   nav: {
     display: "flex", justifyContent: "space-between", alignItems: "center",
     marginTop: "1.5rem", paddingTop: "1rem", borderTop: "1px solid #1e293b",
+  },
+  stepEmpty: {
+    marginTop: "1rem",
+    padding: "0.85rem 1rem",
+    borderRadius: "0.5rem",
+    background: "#0d1420",
+    border: "1px solid #1e293b",
+    color: "#94a3b8",
+    fontSize: "0.82rem",
+  },
+  breadcrumbs: {
+    display: "flex",
+    flexWrap: "wrap" as const,
+    gap: "0.4rem",
+    marginTop: "1rem",
+  },
+  selectionHint: {
+    marginTop: "0.9rem",
+    color: "#64748b",
+    fontSize: "0.76rem",
   },
 };
 
