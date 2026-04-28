@@ -1,6 +1,6 @@
 {
   "name": "meshtastic-foreman",
-  "version": "0.7.6",
+  "version": "0.8.0",
   "private": true,
   "description": "Persistent daemon + web UI for Meshtastic device management",
   "scripts": {
