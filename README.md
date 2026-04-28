@@ -43,6 +43,8 @@ Pre-built installers for Windows and Linux are on the [Releases](../../releases)
 
 Patches, bug reports, and feature suggestions are welcome. Fork the repo, make your change on a branch, and open a pull request with a clear description. Not sure where to start? Open an issue first — no PR required to start a conversation.
 
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for setup, workflow, and PR expectations.
+
 ## Thanks
 
 None of this would exist without the [Meshtastic](https://meshtastic.org) team and community — they built the firmware, protocol, and client libraries this project builds on top of.

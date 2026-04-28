@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup and configuration docs
+    url: https://github.com/mrdatawolf/MeshtasticForeman/blob/main/docs/SETUP.md
+    about: Check setup, ports, environment variables, and installer details
+  - name: Architecture and API docs
+    url: https://github.com/mrdatawolf/MeshtasticForeman/blob/main/README.md
+    about: Review project structure and linked documentation before filing an issue
