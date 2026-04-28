@@ -8,6 +8,9 @@ import { foremanClient } from "../ws/client.js";
 
 export const BROADCAST = 0xffffffff;
 
+// Prevent unbounded memory growth: keep only the most recent messages per conversation.
+const MAX_MESSAGES_PER_CONVERSATION = 500;
+
 const conversations = new Map<number, Message[]>();
 const listeners = new Set<() => void>();
 
@@ -31,7 +34,8 @@ function addOrUpdate(msg: Message) {
     next[idx] = msg;
     conversations.set(key, next);
   } else {
-    conversations.set(key, [...existing, msg]);
+    const next = [...existing, msg];
+    conversations.set(key, next.length > MAX_MESSAGES_PER_CONVERSATION ? next.slice(-MAX_MESSAGES_PER_CONVERSATION) : next);
   }
   notify();
 }
@@ -88,7 +92,7 @@ export function initMessageStore() {
         const merged = [...newMsgs, ...optimistic].sort(
           (a, b) => new Date(a.rxTime).getTime() - new Date(b.rxTime).getTime()
         );
-        conversations.set(key, merged);
+        conversations.set(key, merged.length > MAX_MESSAGES_PER_CONVERSATION ? merged.slice(-MAX_MESSAGES_PER_CONVERSATION) : merged);
       }
       notify();
     }

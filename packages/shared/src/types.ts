@@ -69,6 +69,7 @@ export interface Message {
   ackStatus: AckStatus | null; // null = no ACK requested (wantAck false) or non-sent message
   ackAt: string | null;
   ackError: string | null;
+  replyToPacketId: number; // 0 = not a reply; populated from MeshPacket.reply_id (field 23)
 }
 
 export interface Packet {
