@@ -74,7 +74,7 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
       }
     });
     return () => { off(); };
-  }, [deviceId, nodeId, onClose]);
+  }, [deviceId, nodeId]);
 
   // Auto-scroll messages
   useEffect(() => {
