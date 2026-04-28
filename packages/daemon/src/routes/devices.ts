@@ -81,6 +81,16 @@ export async function registerDeviceRoutes(
     return reply.status(204).send();
   });
 
+  app.delete("/api/devices/:id/messages/:nodeId", async (req, reply) => {
+    const { id, nodeId: rawNodeId } = req.params as { id: string; nodeId: string };
+    const nodeId = Number(rawNodeId);
+    if (!Number.isInteger(nodeId) || nodeId < 0) {
+      return reply.status(400).send({ error: "Invalid nodeId" });
+    }
+    await deviceManager.deleteConversation(id, nodeId);
+    return reply.status(204).send();
+  });
+
   // ---------------------------------------------------------------------------
   // Node overrides — local fallback names/positions, never written to the mesh
   // ---------------------------------------------------------------------------

@@ -440,6 +440,15 @@ export class DeviceManager extends EventEmitter {
     }));
   }
 
+  async deleteConversation(deviceId: string, nodeId: number): Promise<void> {
+    await this.db.query(
+      `DELETE FROM messages
+       WHERE device_id = $1
+         AND (to_node_id = $2 OR from_node_id = $2)`,
+      [deviceId, nodeId]
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------

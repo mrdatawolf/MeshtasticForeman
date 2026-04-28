@@ -6,6 +6,7 @@ import {
   useConversation,
   loadConversation,
   addOptimisticMessage,
+  clearConversation,
   BROADCAST,
 } from "../store/messages.js";
 
@@ -58,9 +59,10 @@ interface ThreadProps {
   nodes: NodeInfo[];
   mqttNodes: MqttNode[];
   deviceId: string;
+  onDeleteConversation: (nodeId: number) => void;
 }
 
-function ThreadView({ nodeId, nodes, mqttNodes, deviceId }: ThreadProps) {
+function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }: ThreadProps) {
   const messages = useConversation(nodeId);
   const [msgText, setMsgText] = useState("");
   const [channel, setChannel] = useState(0);
@@ -182,10 +184,19 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId }: ThreadProps) {
   return (
     <div style={styles.thread}>
       <div style={styles.threadHeader}>
-        <span style={styles.threadName}>{name}</span>
-        {nodeId !== BROADCAST && (
-          <span style={styles.threadHex}>{nodeHex(nodeId)}</span>
-        )}
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem" }}>
+          <span style={styles.threadName}>{name}</span>
+          {nodeId !== BROADCAST && (
+            <span style={styles.threadHex}>{nodeHex(nodeId)}</span>
+          )}
+        </div>
+        <button
+          style={styles.deleteBtn}
+          onClick={() => onDeleteConversation(nodeId)}
+          title="Delete this conversation"
+        >
+          Delete
+        </button>
       </div>
 
       <div style={styles.messageList}>
@@ -245,6 +256,20 @@ export function MessagesPage({ devices, nodes, mqttNodes, initialNodeId, onIniti
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const deviceId = devices.find((d) => d.status === "connected")?.id ?? null;
+
+  const deleteConversation = useCallback(async (nodeId: number) => {
+    if (!deviceId) return;
+    const name = nodeName(nodeId, nodes, mqttNodes);
+    const ok = window.confirm(`Delete conversation with ${name}?`);
+    if (!ok) return;
+    await fetch(`/api/devices/${deviceId}/messages/${nodeId}`, { method: "DELETE" });
+    clearConversation(nodeId);
+    setSelectedNodeId((current) => {
+      if (current !== nodeId) return current;
+      const remaining = conversations.filter((c) => c.nodeId !== nodeId);
+      return remaining[0]?.nodeId ?? null;
+    });
+  }, [conversations, deviceId, mqttNodes, nodes]);
 
   // Honour external navigation (e.g. "✉ Msg" from Nodes page)
   useEffect(() => {
@@ -355,6 +380,7 @@ export function MessagesPage({ devices, nodes, mqttNodes, initialNodeId, onIniti
             nodes={nodes}
             mqttNodes={mqttNodes}
             deviceId={deviceId}
+            onDeleteConversation={deleteConversation}
           />
         ) : (
           <div style={styles.placeholder}>
@@ -535,7 +561,8 @@ const styles: Record<string, React.CSSProperties> = {
     borderBottom: "1px solid #1e293b",
     flexShrink: 0,
     display: "flex",
-    alignItems: "baseline",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: "0.75rem",
   },
   threadName: {
@@ -547,6 +574,17 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#475569",
     fontSize: "0.78rem",
     fontFamily: "monospace",
+  },
+  deleteBtn: {
+    background: "#450a0a",
+    border: "1px solid #991b1b",
+    color: "#f87171",
+    padding: "0.2rem 0.55rem",
+    borderRadius: "0.3rem",
+    cursor: "pointer",
+    fontFamily: "monospace",
+    fontSize: "0.72rem",
+    flexShrink: 0,
   },
   messageList: {
     flex: 1,
