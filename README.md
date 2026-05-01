@@ -17,7 +17,7 @@ MeshtasticForeman is a Node.js daemon that maintains a persistent serial connect
 
 It also acts as an **MQTT gateway** — if you set a broker in `.env`, it re-encrypts and publishes mesh traffic so nRF52-based devices (no built-in WiFi) can appear on the public map.
 
-> **Alpha software and built with AI.** Goals are clear, but it is still evolving. Built in partnership with AI — if that bothers you, this probably isn't for you.
+> **Beta software and built with AI.** Goals are clear, but it is still evolving. Built in partnership with AI — if that bothers you, this probably isn't for you.
 
 ## Quick start
 

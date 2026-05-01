@@ -274,6 +274,8 @@ interface Props {
 
 export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, setShowMqtt, deviceId, deviceConfigs, onMessage, focusedNodeId, onClearFocusedNode, presetFilter = null, setPresetFilter }: Props) {
   const [selected, setSelected] = useState<SelectedNode | null>(null);
+  const [stackedNodes, setStackedNodes] = useState<SelectedNode[]>([]);
+  const [mapSearch, setMapSearch] = useState("");
   const [traceroutes, setTraceroutes] = useState<StoredTraceroute[]>([]);
   const [showTraceroutes, setShowTraceroutes] = useState(true);
   const [ageHours, setAgeHours] = useState(24);
@@ -349,10 +351,10 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
 
   // Clear popup when the relevant source is hidden
   useEffect(() => {
-    if (!showMesh && selected?.source === "mesh") setSelected(null);
+    if (!showMesh && selected?.source === "mesh") { setSelected(null); setStackedNodes([]); }
   }, [showMesh]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!showMqtt && selected?.source === "mqtt") setSelected(null);
+    if (!showMqtt && selected?.source === "mqtt") { setSelected(null); setStackedNodes([]); }
   }, [showMqtt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch stored traceroutes from the API
@@ -468,6 +470,37 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
     return mqttNodes.filter((n) => n.latitude != null && n.longitude != null && !meshIds.has(n.nodeId));
   }, [mqttGpsKey, meshGpsKey]);
   const allMappable = [...mappableMesh, ...mappableMqtt];
+
+  // Search filter — matches shortName, longName, or !hex node ID (case-insensitive).
+  const filteredMesh = useMemo(() => {
+    const q = mapSearch.trim().toLowerCase();
+    if (!q) return mappableMesh;
+    return mappableMesh.filter((n) =>
+      (n.shortName ?? "").toLowerCase().includes(q) ||
+      (n.longName  ?? "").toLowerCase().includes(q) ||
+      nodeHex(n.nodeId).toLowerCase().includes(q)
+    );
+  }, [mappableMesh, mapSearch]);
+
+  const filteredMqtt = useMemo(() => {
+    const q = mapSearch.trim().toLowerCase();
+    if (!q) return mappableMqtt;
+    return mappableMqtt.filter((n) =>
+      (n.shortName ?? "").toLowerCase().includes(q) ||
+      (n.longName  ?? "").toLowerCase().includes(q) ||
+      nodeHex(n.nodeId).toLowerCase().includes(q)
+    );
+  }, [mappableMqtt, mapSearch]);
+
+  // Count of visible (filtered) nodes at each lat:lon — drives the +N stack badge.
+  const colocatedCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const n of [...filteredMesh, ...filteredMqtt]) {
+      const key = `${n.latitude}:${n.longitude}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [filteredMesh, filteredMqtt]);
 
   // Name of the currently focused node (for display in coverage panel)
   const effectiveFocusedNode = effectiveFocusedNodeId != null
@@ -723,17 +756,43 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
 
   const handleMeshClick = useCallback((node: NodeInfo, e: { originalEvent: MouseEvent }) => {
     e.originalEvent.stopPropagation();
-    setSelected((prev) =>
-      prev?.source === "mesh" && prev.node.nodeId === node.nodeId ? null : { source: "mesh", node }
-    );
-  }, []);
+    setSelected((prev) => {
+      if (prev?.source === "mesh" && prev.node.nodeId === node.nodeId) {
+        setStackedNodes([]);
+        return null;
+      }
+      return { source: "mesh", node };
+    });
+    const colocated: SelectedNode[] = [
+      ...filteredMesh
+        .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
+        .map((n): SelectedNode => ({ source: "mesh", node: n })),
+      ...filteredMqtt
+        .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
+        .map((n): SelectedNode => ({ source: "mqtt", node: n })),
+    ];
+    setStackedNodes(colocated.length > 1 ? colocated : []);
+  }, [filteredMesh, filteredMqtt]);
 
   const handleMqttClick = useCallback((node: MqttNode, e: { originalEvent: MouseEvent }) => {
     e.originalEvent.stopPropagation();
-    setSelected((prev) =>
-      prev?.source === "mqtt" && prev.node.nodeId === node.nodeId ? null : { source: "mqtt", node }
-    );
-  }, []);
+    setSelected((prev) => {
+      if (prev?.source === "mqtt" && prev.node.nodeId === node.nodeId) {
+        setStackedNodes([]);
+        return null;
+      }
+      return { source: "mqtt", node };
+    });
+    const colocated: SelectedNode[] = [
+      ...filteredMesh
+        .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
+        .map((n): SelectedNode => ({ source: "mesh", node: n })),
+      ...filteredMqtt
+        .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
+        .map((n): SelectedNode => ({ source: "mqtt", node: n })),
+    ];
+    setStackedNodes(colocated.length > 1 ? colocated : []);
+  }, [filteredMesh, filteredMqtt]);
 
   const selectedLon =
     selected?.source === "mesh" ? selected.node.longitude :
@@ -846,9 +905,12 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
         </Source>
 
         {/* Mesh node markers */}
-        {showMesh && mappableMesh.map((node) => {
+        {showMesh && filteredMesh.map((node) => {
           const isLocal = node.hopsAway === 0;
           const color = nodeColor(node.nodeId);
+          const stackCount = colocatedCounts.get(`${node.latitude}:${node.longitude}`) ?? 1;
+          const hasStack = stackCount > 1;
+          const size = hasStack ? "2.4rem" : "2rem";
           return (
             <Marker
               key={`mesh-${node.nodeId}`}
@@ -864,6 +926,8 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
                 <div
                   style={{
                     ...styles.markerInner,
+                    width: size,
+                    height: size,
                     background: isLocal ? color : "#0f172a",
                     color: isLocal ? "#fff" : color,
                     border: `2px solid ${color}`,
@@ -872,14 +936,20 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
                   {(node.shortName ?? nodeHex(node.nodeId).slice(-4)).slice(0, 4)}
                 </div>
                 {isLocal && <div style={styles.localRing} />}
+                {hasStack && (
+                  <div style={styles.stackBadge}>+{stackCount}</div>
+                )}
               </div>
             </Marker>
           );
         })}
 
         {/* MQTT node markers — dashed border to distinguish from mesh */}
-        {showMqtt && mappableMqtt.map((node) => {
+        {showMqtt && filteredMqtt.map((node) => {
           const color = nodeColor(node.nodeId);
+          const stackCount = colocatedCounts.get(`${node.latitude}:${node.longitude}`) ?? 1;
+          const hasStack = stackCount > 1;
+          const size = hasStack ? "2.4rem" : "2rem";
           return (
             <Marker
               key={`mqtt-${node.nodeId}`}
@@ -890,16 +960,24 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
             >
               <div
                 title={`[MQTT] ${node.longName ?? nodeHex(node.nodeId)}`}
-                style={{
-                  ...styles.markerInner,
-                  background: "#0f172a",
-                  color,
-                  border: `2px dashed ${color}`,
-                  boxShadow: `0 0 0 2px ${color}22`,
-                  cursor: "pointer",
-                }}
+                style={{ ...styles.markerOuter, cursor: "pointer" }}
               >
-                {(node.shortName ?? nodeHex(node.nodeId).slice(-4)).slice(0, 4)}
+                <div
+                  style={{
+                    ...styles.markerInner,
+                    width: size,
+                    height: size,
+                    background: "#0f172a",
+                    color,
+                    border: `2px dashed ${color}`,
+                    boxShadow: `0 0 0 2px ${color}22`,
+                  }}
+                >
+                  {(node.shortName ?? nodeHex(node.nodeId).slice(-4)).slice(0, 4)}
+                </div>
+                {hasStack && (
+                  <div style={styles.stackBadge}>+{stackCount}</div>
+                )}
               </div>
             </Marker>
           );
@@ -1050,9 +1128,39 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
             offset={20}
             closeButton={true}
             closeOnClick={false}
-            onClose={() => setSelected(null)}
+            onClose={() => { setSelected(null); setStackedNodes([]); }}
             style={{ fontFamily: "monospace" }}
           >
+            {stackedNodes.length > 1 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", padding: "0.35rem 0.5rem", borderBottom: "1px solid #1e293b", marginBottom: "0.35rem", maxWidth: "260px" }}>
+                <span style={{ fontSize: "0.65rem", color: "#64748b", width: "100%", marginBottom: "0.1rem" }}>
+                  {stackedNodes.length} nodes at this location:
+                </span>
+                {stackedNodes.map((sn) => {
+                  const isActive = selected.node.nodeId === sn.node.nodeId;
+                  const label = (sn.node.shortName ?? nodeHex(sn.node.nodeId).slice(-4)).slice(0, 6);
+                  return (
+                    <button
+                      key={`${sn.source}-${sn.node.nodeId}`}
+                      onClick={() => setSelected(sn)}
+                      style={{
+                        padding: "0.15rem 0.4rem",
+                        fontSize: "0.7rem",
+                        fontFamily: "monospace",
+                        borderRadius: "0.25rem",
+                        border: `1px solid ${isActive ? nodeColor(sn.node.nodeId) : "#334155"}`,
+                        background: isActive ? `${nodeColor(sn.node.nodeId)}22` : "#0f172a",
+                        color: isActive ? nodeColor(sn.node.nodeId) : "#94a3b8",
+                        cursor: "pointer",
+                      }}
+                      title={sn.node.longName ?? nodeHex(sn.node.nodeId)}
+                    >
+                      {label}{sn.source === "mqtt" ? "*" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             {selected.source === "mesh" ? (
               <MeshPopup
                 node={selected.node}
@@ -1453,6 +1561,42 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
         })()}
       </div>
 
+      {/* Search filter — top center */}
+      <div style={{
+        position: "absolute", top: "0.75rem", left: "50%", transform: "translateX(-50%)",
+        display: "flex", alignItems: "center", gap: "0.35rem",
+        background: "#0f172a", border: "1px solid #334155", borderRadius: "0.5rem",
+        padding: "0.25rem 0.5rem", zIndex: 10, boxShadow: "0 2px 8px #0008",
+      }}>
+        <span style={{ color: "#64748b", fontSize: "0.75rem", userSelect: "none" }}>🔍</span>
+        <input
+          type="text"
+          placeholder="node name or !hex…"
+          value={mapSearch}
+          onChange={(e) => setMapSearch(e.target.value)}
+          style={{
+            background: "transparent", border: "none", outline: "none",
+            color: "#e2e8f0", fontSize: "0.75rem", fontFamily: "monospace",
+            width: "14rem",
+          }}
+        />
+        {mapSearch && (
+          <>
+            <span style={{ color: "#94a3b8", fontSize: "0.7rem", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+              {filteredMesh.length + filteredMqtt.length} shown
+            </span>
+            <button
+              onClick={() => setMapSearch("")}
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: "#64748b", fontSize: "0.85rem", lineHeight: 1, padding: "0 0.1rem",
+              }}
+              title="Clear search"
+            >✕</button>
+          </>
+        )}
+      </div>
+
       {/* Legend — bottom left */}
       <div style={styles.legend}>
         <span style={styles.legendItem}>
@@ -1501,7 +1645,9 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
           </span>
         )}
         <span style={{ color: "#64748b" }}>
-          {mappableMesh.length + mappableMqtt.length} / {nodes.length + mqttNodes.length} with GPS
+          {mapSearch
+            ? `${filteredMesh.length + filteredMqtt.length} / ${mappableMesh.length + mappableMqtt.length} matching`
+            : `${mappableMesh.length + mappableMqtt.length} / ${nodes.length + mqttNodes.length} with GPS`}
         </span>
       </div>
     </div>
@@ -1851,6 +1997,25 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "50%",
     border: "2px dashed #22c55e",
     pointerEvents: "none",
+  },
+  stackBadge: {
+    position: "absolute",
+    top: "-5px",
+    right: "-5px",
+    background: "#f59e0b",
+    color: "#000",
+    fontSize: "0.5rem",
+    fontWeight: "bold",
+    fontFamily: "monospace",
+    borderRadius: "0.6rem",
+    padding: "0 0.25rem",
+    minWidth: "1rem",
+    height: "1rem",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    pointerEvents: "none",
+    lineHeight: 1,
   },
   controls: {
     position: "absolute",
