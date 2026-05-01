@@ -382,9 +382,13 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
 
   const apply = (list: MergedNode[]) => sortMerged(list, sortCol, sortDir, protoMap);
 
-  const matched  = apply(filtered.filter((n) => n.mesh && n.mqtt));
-  const meshOnly = apply(filtered.filter((n) => n.mesh && !n.mqtt));
-  const mqttOnly = apply(filtered.filter((n) => !n.mesh && n.mqtt));
+  const isUnknown = (n: MergedNode) =>
+    (n.mesh ?? n.mqtt)?.longName?.toLowerCase() === "unknown";
+
+  const matched      = apply(filtered.filter((n) => n.mesh && n.mqtt && !isUnknown(n)));
+  const meshOnly     = apply(filtered.filter((n) => n.mesh && !n.mqtt && !isUnknown(n)));
+  const mqttOnly     = apply(filtered.filter((n) => !n.mesh && n.mqtt && !isUnknown(n)));
+  const unknownNodes = apply(filtered.filter(isUnknown));
 
   const totalUnique = nodes.length + allMerged.filter((n) => !n.mesh && n.mqtt).length;
   const isEmpty = nodes.length === 0 && mqttNodes.length === 0;
@@ -486,6 +490,13 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
                     <SectionHeader label="MQTT only" count={mqttOnly.length} colCount={8} color="#34d399"
                       collapsed={!!collapsed["mqtt"]} onToggle={() => toggleSection("mqtt")} />
                     {!collapsed["mqtt"] && mqttOnly.map((m) => <NodeRows key={m.nodeId} merged={m} {...nodeRowProps} />)}
+                  </>
+                )}
+                {unknownNodes.length > 0 && (
+                  <>
+                    <SectionHeader label="Unknown" count={unknownNodes.length} colCount={8} color="#6b7280"
+                      collapsed={!!collapsed["unknown"]} onToggle={() => toggleSection("unknown")} />
+                    {!collapsed["unknown"] && unknownNodes.map((m) => <NodeRows key={m.nodeId} merged={m} {...nodeRowProps} />)}
                   </>
                 )}
               </tbody>

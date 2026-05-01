@@ -14,7 +14,10 @@
       "WebSearch",
       "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); [print\\(p['id'], p['name']\\) for p in data]\")",
       "Read(//d/Projects/GitHub/Client-Time-Tracker/**)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(curl -s http://127.0.0.1:3750/api/devices)",
+      "Bash(findstr \"3750\\\\|LISTEN\")",
+      "Bash(node_modules\\\\.bin\\\\tsc.CMD --noEmit)"
     ]
   }
 }
