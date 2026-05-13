@@ -7,7 +7,8 @@
       "Bash(curl -s \"http://localhost:3172/api/devices\")",
       "Bash(grep -r \"HardwareModel\" /c/Users/Public/Projects/GitHub/MeshtasticForeman/node_modules/.pnpm/@meshtastic+core*/node_modules/@meshtastic/core/dist/ --include=\"*.d.ts\" -l)",
       "Bash(grep -o 'HardwareModel\\\\$1\\\\[HardwareModel\\\\$1\\\\[\"[^\"]*\"\\\\] = [0-9]*\\\\] = \"[^\"]*\"' /c/Users/Public/Projects/GitHub/MeshtasticForeman/node_modules/.pnpm/@meshtastic+core@2.6.7/node_modules/@meshtastic/core/dist/mod.js)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(pnpm install *)"
     ]
   }
 }
