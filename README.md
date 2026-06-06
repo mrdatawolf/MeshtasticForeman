@@ -48,3 +48,10 @@ See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for setup, workflow, and PR expec
 ## Thanks
 
 None of this would exist without the [Meshtastic](https://meshtastic.org) team and community — they built the firmware, protocol, and client libraries this project builds on top of.
+
+
+---
+
+*Setup instructions for this project are maintained in [SETUP.md](SETUP.md). The setup documentation above may be outdated — please refer to SETUP.md for the current process.*
+
+<!-- project-brain-setup-pointer -->
