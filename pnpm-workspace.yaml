@@ -1,3 +1,11 @@
 packages:
   - "packages/*"
   - "docs"
+allowBuilds:
+  '@meshtastic/core': true
+  '@meshtastic/transport-node-serial': true
+  '@serialport/bindings-cpp': true
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  vitepress-carbon: true
