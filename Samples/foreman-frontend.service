@@ -1,0 +1,41 @@
+# Meshtastic Foreman — Frontend systemd unit
+#
+# Starts start-frontend.sh on boot and keeps it running.
+#
+# Ordered to start after foreman-api.service, but unit ordering only
+# guarantees the API *process* has been launched, not that it is done
+# booting and listening yet. start-frontend.sh itself polls the API's
+# TCP port before starting pnpm, so the frontend won't come up ahead
+# of a genuinely ready API even under this extra safety margin.
+#
+# Install:
+#   sudo cp Samples/foreman-frontend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now foreman-frontend.service
+#
+# Logs:
+#   journalctl -u foreman-frontend.service -f
+#
+# Adjust before installing on another machine/user:
+#   - User
+#   - WorkingDirectory / ExecStart paths
+#   - PATH                (must point at the node/pnpm install used by this checkout; pnpm here is
+#                          installed via nvm, which systemd does not source from .bashrc on its own)
+
+[Unit]
+Description=Meshtastic Foreman - Frontend
+After=network-online.target foreman-api.service
+Wants=network-online.target
+Requires=foreman-api.service
+
+[Service]
+Type=simple
+User=patrick
+WorkingDirectory=/home/patrick/Documents/Github/MeshtasticForeman
+Environment=PATH=/home/patrick/.nvm/versions/node/v24.16.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin
+ExecStart=/home/patrick/Documents/Github/MeshtasticForeman/start-frontend.sh
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
