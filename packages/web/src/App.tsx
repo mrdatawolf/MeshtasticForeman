@@ -560,6 +560,7 @@ export function App() {
                       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", width: "100%" }}>
                         <span style={{ color: d.status === "connected" ? "#22c55e" : d.status === "connecting" ? "#f59e0b" : "#ef4444" }}>●</span>
                         <span style={{ color: "#e2e8f0", fontWeight: "bold" }}>{d.port}</span>
+                        <span style={{ color: "#64748b", textTransform: "capitalize" }}>{d.status}</span>
                         {d.firmwareVersion && <span style={{ color: "#475569" }}>fw {d.firmwareVersion}</span>}
                         {d.lastSeenAt && <span style={{ color: "#475569" }}>{formatRelative(d.lastSeenAt)}</span>}
                         {d.batteryLevel != null && <BatteryBar level={d.batteryLevel} />}
@@ -691,7 +692,7 @@ export function App() {
               {/* WS status */}
               <div style={{ ...styles.menuSection, justifyContent: "flex-end" }}>
                 <span style={{ ...styles.badge, background: connected ? "#22c55e" : "#ef4444" }}>
-                  {connected ? "connected" : "disconnected"}
+                  {connected ? "API connected" : "API disconnected"}
                 </span>
               </div>
 

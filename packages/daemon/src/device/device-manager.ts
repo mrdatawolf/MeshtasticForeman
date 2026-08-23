@@ -34,6 +34,8 @@ export class DeviceManager extends EventEmitter {
   private devices = new Map<string, ConnectedDevice>();
   /** Ports with a pending reconnect timer — prevents stacked reconnect loops */
   private reconnectingPorts = new Set<string>();
+  /** Pending reconnect timers, so an explicit disconnect can cancel them. */
+  private reconnectTimers = new Map<string, NodeJS.Timeout>();
   /** Reconnect attempt count per port — used for exponential backoff */
   private reconnectAttempts = new Map<string, number>();
   private mqttGateway: MqttGateway | null = null;
@@ -126,7 +128,15 @@ export class DeviceManager extends EventEmitter {
     this._emitStatus(id, name, port, "connecting");
 
     // Open serial port and create transport
-    const transport = await TransportNodeSerial.create(port, 115200);
+    let transport: TransportNodeSerial;
+    try {
+      transport = await TransportNodeSerial.create(port, 115200);
+    } catch (err) {
+      // A failed open must replace the earlier "connecting" event; otherwise
+      // the UI remains stuck even though no connection attempt is active.
+      this._emitStatus(id, name, port, "error");
+      throw err;
+    }
 
     // MeshDevice constructor starts piping the fromDevice stream immediately
     const meshDevice = new MeshDevice(transport);
@@ -168,7 +178,9 @@ export class DeviceManager extends EventEmitter {
 
     meshDevice.events.onDeviceStatus.subscribe((status: Types.DeviceStatusEnum) => {
       console.log(`[devices] status ${name} → ${Types.DeviceStatusEnum[status] ?? status}`);
-      this._handleDeviceStatus(id, name, port, status);
+      void this._handleDeviceStatus(id, name, port, transport, status).catch((err) =>
+        console.warn(`[devices] disconnect cleanup failed for ${name}:`, err)
+      );
     });
 
     // Diagnostic: log every FromRadio frame so we know if the stream is alive
@@ -293,6 +305,10 @@ export class DeviceManager extends EventEmitter {
     const device = this.devices.get(deviceId);
     if (!device) return;
 
+    const reconnectTimer = this.reconnectTimers.get(device.port);
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    this.reconnectTimers.delete(device.port);
+    this.reconnectingPorts.delete(device.port);
     this.devices.delete(deviceId);
     this.myNodeIds.delete(deviceId);
     this.batteryLevels.delete(deviceId);
@@ -517,17 +533,32 @@ export class DeviceManager extends EventEmitter {
     this.emit("event", event);
   }
 
-  private _handleDeviceStatus(
+  private async _handleDeviceStatus(
     deviceId: string,
     name: string,
     port: string,
+    transport: TransportNodeSerial,
     status: Types.DeviceStatusEnum
   ) {
     if (status === Types.DeviceStatusEnum.DeviceDisconnected) {
+      const device = this.devices.get(deviceId);
+      // Ignore duplicate/late events from a transport that has already been
+      // removed or replaced (including events caused by manual disconnect()).
+      if (!device || device.transport !== transport) return;
       // Stop watchdog — reconnect will start a fresh one
       const wt = this.watchdogTimers.get(deviceId);
       if (wt) { clearInterval(wt); this.watchdogTimers.delete(deviceId); }
       this.devices.delete(deviceId);
+      this.myNodeIds.delete(deviceId);
+      this.batteryLevels.delete(deviceId);
+      this.gpsAcquired.delete(deviceId);
+      this.gpsDetails.delete(deviceId);
+      this.mqttGateway?.detachDevice(deviceId);
+
+      // Releasing the old SerialPort handle is essential on Windows. Without
+      // this, an automatic reopen can race the stale handle and COMx remains
+      // unavailable even though the manager considers it disconnected.
+      if (device) await device.transport.disconnect().catch(() => {});
       this._emitStatus(deviceId, name, port, "disconnected");
       console.log(`[devices] ${name} disconnected — scheduling reconnect in 5s`);
       this._scheduleReconnect(deviceId, port, name);
@@ -545,7 +576,8 @@ export class DeviceManager extends EventEmitter {
     const delayMs = Math.min(5000 * Math.pow(2, attempt - 1), 60_000);
     console.log(`[devices] reconnect attempt ${attempt} for ${name} in ${delayMs / 1000}s`);
 
-    setTimeout(async () => {
+    const timer = setTimeout(async () => {
+      this.reconnectTimers.delete(port);
       this.reconnectingPorts.delete(port);
       if (this.devices.has(deviceId)) {
         this.reconnectAttempts.delete(port);
@@ -558,10 +590,12 @@ export class DeviceManager extends EventEmitter {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`[devices] reconnect failed for ${port}:`, msg);
+        this._emitStatus(deviceId, name, port, "disconnected");
         // Schedule another attempt — keeps retrying until the device comes back
         this._scheduleReconnect(deviceId, port, name);
       }
     }, delayMs);
+    this.reconnectTimers.set(port, timer);
   }
 
   private async _saveTraceroute(
