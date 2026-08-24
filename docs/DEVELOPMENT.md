@@ -56,6 +56,13 @@ pnpm install
 frontend individually. In production, the daemon serves the built frontend —
 run `pnpm build` first, then start only the daemon.
 
+## Continuous integration
+
+The application CI workflow (`.github/workflows/ci.yml`) runs on pull requests
+targeting `main`. It installs the pinned pnpm version from the root
+`package.json`, then checks formatting, linting, the build, and tests as separate
+steps. Keep these checks passing before requesting review.
+
 ## Coding conventions
 
 Not yet formalized beyond what the codebase already does. Stage 1 of
