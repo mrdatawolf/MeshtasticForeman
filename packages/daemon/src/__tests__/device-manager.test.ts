@@ -485,7 +485,16 @@ describe("DeviceManager", () => {
 
     it("converts latitudeI / longitudeI to decimal degrees", async () => {
       await manager.connect("/dev/ttyUSB0", "Node");
-      getFakeEvents().onNodeInfoPacket.dispatch(makeNodeInfo());
+      const nodeInfo = makeNodeInfo();
+      getFakeEvents().onNodeInfoPacket.dispatch(nodeInfo);
+      getFakeEvents().onPositionPacket.dispatch({
+        from: nodeInfo.num,
+        data: {
+          latitudeI: nodeInfo.position.latitudeI,
+          longitudeI: nodeInfo.position.longitudeI,
+          altitude: nodeInfo.position.altitude,
+        },
+      });
       await new Promise((r) => setTimeout(r, 20));
 
       const { rows } = await db.query<{ latitude: number; longitude: number }>(
@@ -599,6 +608,7 @@ describe("DeviceManager", () => {
       emitted.length = 0;
 
       getFakeEvents().onDeviceStatus.dispatch(Types.DeviceStatusEnum.DeviceDisconnected);
+      await new Promise((r) => setTimeout(r, 20));
 
       const statusEvents = emitted.filter((e) => e.type === "device:status");
       expect(statusEvents).toHaveLength(1);
@@ -617,7 +627,7 @@ describe("DeviceManager", () => {
         // Before timer fires: 1 call (initial connect)
         expect(TransportNodeSerial.create as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
 
-        await vi.runAllTimersAsync();
+        await vi.advanceTimersByTimeAsync(5000);
 
         // After 5s timer: 1 more call for the reconnect
         expect(TransportNodeSerial.create as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(2);
@@ -639,7 +649,7 @@ describe("DeviceManager", () => {
         fakeEvents.onDeviceStatus.dispatch(Types.DeviceStatusEnum.DeviceDisconnected);
         fakeEvents.onDeviceStatus.dispatch(Types.DeviceStatusEnum.DeviceDisconnected);
 
-        await vi.runAllTimersAsync();
+        await vi.advanceTimersByTimeAsync(5000);
 
         // Only 1 initial + 1 reconnect (not 1 + 2)
         expect(TransportNodeSerial.create as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(2);
