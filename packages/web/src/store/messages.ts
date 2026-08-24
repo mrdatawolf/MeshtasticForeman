@@ -158,6 +158,10 @@ export function clearConversation(nodeId: number) {
   notify();
 }
 
+export function getConversation(nodeId: number): readonly Message[] {
+  return conversations.get(nodeId) ?? [];
+}
+
 export function loadRecentMessages(deviceId: string) {
   foremanClient.send({
     type: "messages:request-history",
