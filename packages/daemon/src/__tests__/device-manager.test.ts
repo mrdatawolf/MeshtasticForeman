@@ -67,12 +67,22 @@ vi.mock("@meshtastic/core", async (importOriginal) => {
     MeshDevice: class MockMeshDevice {
       configure = vi.fn().mockResolvedValue(0);
       sendText = vi.fn().mockResolvedValue(42);
+      setHeartbeatInterval = vi.fn();
       events = {
         onMessagePacket: makeDispatcher(),
         onMeshPacket: makeDispatcher(),
         onNodeInfoPacket: makeDispatcher(),
+        onPositionPacket: makeDispatcher(),
         onDeviceStatus: makeDispatcher(),
+        onFromRadio: makeDispatcher(),
+        onQueueStatus: makeDispatcher(),
+        onTraceRoutePacket: makeDispatcher(),
         onDeviceMetadataPacket: makeDispatcher(),
+        onConfigPacket: makeDispatcher(),
+        onModuleConfigPacket: makeDispatcher(),
+        onChannelPacket: makeDispatcher(),
+        onMyNodeInfo: makeDispatcher(),
+        onTelemetryPacket: makeDispatcher(),
       };
       constructor() {
         // Capture `this` so tests can fire events and inspect methods.
@@ -119,8 +129,17 @@ function _makeFakeEvents() {
     onMessagePacket: makeDispatcher(),
     onMeshPacket: makeDispatcher(),
     onNodeInfoPacket: makeDispatcher(),
+    onPositionPacket: makeDispatcher(),
     onDeviceStatus: makeDispatcher(),
+    onFromRadio: makeDispatcher(),
+    onQueueStatus: makeDispatcher(),
+    onTraceRoutePacket: makeDispatcher(),
     onDeviceMetadataPacket: makeDispatcher(),
+    onConfigPacket: makeDispatcher(),
+    onModuleConfigPacket: makeDispatcher(),
+    onChannelPacket: makeDispatcher(),
+    onMyNodeInfo: makeDispatcher(),
+    onTelemetryPacket: makeDispatcher(),
   };
 }
 
