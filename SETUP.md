@@ -9,7 +9,7 @@ start: pnpm --parallel -r dev
 
 ### Supported versions
 
-- Node.js 20.0.0 or newer
+- Node.js 22.13.0 or newer
 - pnpm 11.21.0, as pinned by the root `package.json` `packageManager` field
 
 ## Installation

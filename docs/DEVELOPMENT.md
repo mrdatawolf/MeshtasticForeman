@@ -10,7 +10,8 @@
 * `electron-app/` — Electron shell used to package installers via
   `electron-builder`.
 * `docs/` — VitePress documentation site (`@foreman/docs`).
-* Node.js >= 20, pnpm >= 9 (pinned to `pnpm@11.21.0` via `packageManager`).
+* Node.js >= 22.13 (required by the pinned `pnpm@11.21.0`, which uses
+  `node:sqlite`), pnpm pinned to `11.21.0` via `packageManager`.
 
 ### Version metadata
 
