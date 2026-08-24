@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+
 import type { LogEntry } from "@foreman/shared";
 
 const MAX_ENTRIES = 500;
@@ -27,14 +28,21 @@ export class ConsoleLog extends EventEmitter {
 
   /** Monkey-patch console.log/warn/error to also feed this buffer. */
   install(): void {
-    const origLog   = console.log.bind(console);
-    const origWarn  = console.warn.bind(console);
+    const origLog = console.log.bind(console);
+    const origWarn = console.warn.bind(console);
     const origError = console.error.bind(console);
-    const self = this;
-
-    console.log = (...args: unknown[]) => { origLog(...args);   self.add("log",   args); };
-    console.warn  = (...args: unknown[]) => { origWarn(...args);  self.add("warn",  args); };
-    console.error = (...args: unknown[]) => { origError(...args); self.add("error", args); };
+    console.log = (...args: unknown[]) => {
+      origLog(...args);
+      this.add("log", args);
+    };
+    console.warn = (...args: unknown[]) => {
+      origWarn(...args);
+      this.add("warn", args);
+    };
+    console.error = (...args: unknown[]) => {
+      origError(...args);
+      this.add("error", args);
+    };
   }
 }
 

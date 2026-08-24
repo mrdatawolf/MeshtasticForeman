@@ -1,60 +1,54 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-
-type MqttScope = "city" | "county" | "state" | "country" | "all";
-import { foremanClient } from "./ws/client.js";
-import type { DeviceInfo, NodeInfo, MqttNode, NodeOverride, ActivityEntry, LogEntry, DeviceConfig } from "@foreman/shared";
-import { IntroModal } from "./pages/IntroModal.js";
-import { NodesPage } from "./pages/NodesPage.js";
-import { MapPage } from "./pages/MapPage.js";
-import { NodeOverridesPage } from "./pages/NodeOverridesPage.js";
-import { ActivityPage } from "./pages/ActivityPage.js";
-import { LogsPage } from "./pages/LogsPage.js";
-import { DeviceConfigPage } from "./pages/DeviceConfigPage.js";
-import { MessagesPage } from "./pages/MessagesPage.js";
-import { AnalyticsPage } from "./pages/AnalyticsPage.js";
-import { initMessageStore, loadRecentMessages } from "./store/messages.js";
-import logo from "./assets/logo.png";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
 import apiPromisesRaw from "../../../API_PROMISES.md?raw";
+
+import logo from "./assets/logo.png";
+import { applyNodeOverrides } from "./lib/nodeOverrides.js";
+import { ActivityPage } from "./pages/ActivityPage.js";
+import { AnalyticsPage } from "./pages/AnalyticsPage.js";
+import { DeviceConfigPage } from "./pages/DeviceConfigPage.js";
+import { IntroModal } from "./pages/IntroModal.js";
+import { LogsPage } from "./pages/LogsPage.js";
+import { MapPage } from "./pages/MapPage.js";
+import { MessagesPage } from "./pages/MessagesPage.js";
+import { NodeOverridesPage } from "./pages/NodeOverridesPage.js";
+import { NodesPage } from "./pages/NodesPage.js";
+import { initMessageStore, loadRecentMessages } from "./store/messages.js";
+import { foremanClient } from "./ws/client.js";
+
+import type {
+  DeviceInfo,
+  NodeInfo,
+  MqttNode,
+  NodeOverride,
+  ActivityEntry,
+  LogEntry,
+  DeviceConfig,
+} from "@foreman/shared";
+
+type MqttScope = "city" | "county" | "state" | "country" | "all";
 
 // Initialize message store once at module load
 initMessageStore();
 
-type Tab = "nodes" | "map" | "messages" | "activity" | "logs" | "overrides" | "config" | "analytics";
+type Tab =
+  "nodes" | "map" | "messages" | "activity" | "logs" | "overrides" | "config" | "analytics";
 type ActivityWindow = "5m" | "15m" | "1h" | "all";
 type ActivitySource = "all" | "mesh" | "mqtt";
 type LogsLevel = "all" | "log" | "warn" | "error";
 
 const KNOWN_TAGS = ["devices", "mqtt", "ws", "db", "foreman"] as const;
-type TagFilter = "all" | typeof KNOWN_TAGS[number];
+type TagFilter = "all" | (typeof KNOWN_TAGS)[number];
 
 const TAG_COLORS: Record<string, string> = {
   devices: "#60a5fa",
-  mqtt:    "#34d399",
-  ws:      "#a78bfa",
-  db:      "#fb923c",
+  mqtt: "#34d399",
+  ws: "#a78bfa",
+  db: "#fb923c",
   foreman: "#94a3b8",
 };
-
-/** Apply fallback lat/lon/altitude from overrides when the node has no GPS data. */
-function applyNodeOverrides<T extends { nodeId: number; latitude: number | null; longitude: number | null; altitude: number | null; longName?: string | null; shortName?: string | null }>(
-  nodes: T[],
-  overrides: Map<number, NodeOverride>,
-): T[] {
-  return nodes.map((n) => {
-    const ov = overrides.get(n.nodeId);
-    if (!ov) return n;
-    return {
-      ...n,
-      latitude:  n.latitude  ?? ov.latitude,
-      longitude: n.longitude ?? ov.longitude,
-      altitude:  n.altitude  ?? ov.altitude,
-      longName:  ("longName" in n  ? n.longName  : null) ?? ov.aliasName ?? null,
-      shortName: ("shortName" in n ? n.shortName : null) ?? null,
-    };
-  });
-}
 
 function formatRelative(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -73,26 +67,32 @@ function batteryColor(level: number): string {
 function BatteryBar({ level }: { level: number }) {
   const color = batteryColor(level);
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", marginLeft: "auto" }}>
+    <span
+      style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", marginLeft: "auto" }}
+    >
       <span style={{ color, fontSize: "0.7rem" }}>{level}%</span>
-      <span style={{
-        display: "inline-flex",
-        alignItems: "center",
-        width: "2.5rem",
-        height: "0.65rem",
-        border: `1px solid ${color}`,
-        borderRadius: "0.15rem",
-        padding: "0.08rem",
-        position: "relative",
-      }}>
-        <span style={{
-          display: "block",
-          width: `${level}%`,
-          height: "100%",
-          background: color,
-          borderRadius: "0.08rem",
-          transition: "width 0.5s ease",
-        }} />
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          width: "2.5rem",
+          height: "0.65rem",
+          border: `1px solid ${color}`,
+          borderRadius: "0.15rem",
+          padding: "0.08rem",
+          position: "relative",
+        }}
+      >
+        <span
+          style={{
+            display: "block",
+            width: `${level}%`,
+            height: "100%",
+            background: color,
+            borderRadius: "0.08rem",
+            transition: "width 0.5s ease",
+          }}
+        />
       </span>
     </span>
   );
@@ -234,7 +234,11 @@ export function App() {
           return [...prev, event.payload];
         });
         if (event.payload.gpsDetail) {
-          setGpsPending((prev) => { const next = new Set(prev); next.delete(event.payload.id); return next; });
+          setGpsPending((prev) => {
+            const next = new Set(prev);
+            next.delete(event.payload.id);
+            return next;
+          });
         }
       }
       if (event.type === "node:list") {
@@ -309,7 +313,7 @@ export function App() {
   }, []);
 
   // Merge override fallbacks before passing to pages
-  const effectiveNodes     = applyNodeOverrides(nodes,     overrides);
+  const effectiveNodes = applyNodeOverrides(nodes, overrides);
   const effectiveMqttNodes = applyNodeOverrides(mqttNodes, overrides);
 
   // Derive gateway region from the connected device's own node in MQTT
@@ -330,23 +334,35 @@ export function App() {
   // Apply scope filter on top of overrides
   const scopedMqttNodes = useMemo(() => {
     if (mqttRegionPrefix === null) return effectiveMqttNodes;
-    return effectiveMqttNodes.filter((n) =>
-      n.regionPath != null && n.regionPath.startsWith(mqttRegionPrefix)
+    return effectiveMqttNodes.filter(
+      (n) => n.regionPath != null && n.regionPath.startsWith(mqttRegionPrefix),
     );
   }, [effectiveMqttNodes, mqttRegionPrefix]);
 
   // Counts for map filter buttons
-  const mappableMeshCount = effectiveNodes.filter((n) => n.latitude != null && n.longitude != null).length;
-  const mappableMqttCount = scopedMqttNodes.filter((n) => n.latitude != null && n.longitude != null).length;
+  const mappableMeshCount = effectiveNodes.filter(
+    (n) => n.latitude != null && n.longitude != null,
+  ).length;
+  const mappableMqttCount = scopedMqttNodes.filter(
+    (n) => n.latitude != null && n.longitude != null,
+  ).length;
 
   // Tag counts for log filter buttons
   const logTagCounts: Record<string, number> = {};
   for (const e of logs) logTagCounts[e.tag] = (logTagCounts[e.tag] ?? 0) + 1;
 
-  const noLocationNodes: Array<{ nodeId: number; longName: string | null; shortName: string | null }> = (() => {
-    const seen = new Map<number, { nodeId: number; longName: string | null; shortName: string | null }>();
+  const noLocationNodes: Array<{
+    nodeId: number;
+    longName: string | null;
+    shortName: string | null;
+  }> = (() => {
+    const seen = new Map<
+      number,
+      { nodeId: number; longName: string | null; shortName: string | null }
+    >();
     for (const n of nodes) {
-      if (n.latitude == null) seen.set(n.nodeId, { nodeId: n.nodeId, longName: n.longName, shortName: n.shortName });
+      if (n.latitude == null)
+        seen.set(n.nodeId, { nodeId: n.nodeId, longName: n.longName, shortName: n.shortName });
     }
     for (const [id, ov] of overrides) {
       if (ov.latitude != null) seen.delete(id);
@@ -363,10 +379,18 @@ export function App() {
         <h1 style={styles.title}>Meshtastic Foreman</h1>
 
         <nav style={styles.nav}>
-          <button style={tabStyle(tab === "nodes")} onClick={() => setTab("nodes")}>Nodes</button>
-          <button style={tabStyle(tab === "map")} onClick={() => setTab("map")}>Map</button>
-          <button style={tabStyle(tab === "messages")} onClick={() => setTab("messages")}>Messages</button>
-          <button style={tabStyle(tab === "analytics")} onClick={() => setTab("analytics")}>Analytics</button>
+          <button style={tabStyle(tab === "nodes")} onClick={() => setTab("nodes")}>
+            Nodes
+          </button>
+          <button style={tabStyle(tab === "map")} onClick={() => setTab("map")}>
+            Map
+          </button>
+          <button style={tabStyle(tab === "messages")} onClick={() => setTab("messages")}>
+            Messages
+          </button>
+          <button style={tabStyle(tab === "analytics")} onClick={() => setTab("analytics")}>
+            Analytics
+          </button>
         </nav>
 
         {/* ── GPS panel ─────────────────────────────────────────────────────── */}
@@ -375,98 +399,175 @@ export function App() {
           const gpsColor = hasAnyGps ? "#22c55e" : "#ef4444";
           return (
             <div ref={gpsRef} style={{ position: "relative", flexShrink: 0, marginLeft: "auto" }}>
-              <button onClick={() => setGpsOpen((v) => !v)} style={menuBtnStyle(gpsOpen, hasAnyGps)}>
+              <button
+                onClick={() => setGpsOpen((v) => !v)}
+                style={menuBtnStyle(gpsOpen, hasAnyGps)}
+              >
                 <span style={{ color: gpsColor, fontSize: "0.65rem" }}>●</span>
                 GPS
-                <span style={{ color: "#475569", marginLeft: "0.3rem", fontSize: "0.65rem" }}>▾</span>
+                <span style={{ color: "#475569", marginLeft: "0.3rem", fontSize: "0.65rem" }}>
+                  ▾
+                </span>
               </button>
 
               {gpsOpen && (
                 <div style={{ ...styles.menuPanel, minWidth: "300px" }}>
-                <style>{`@keyframes _spin { to { transform: rotate(360deg); } }`}</style>
+                  <style>{`@keyframes _spin { to { transform: rotate(360deg); } }`}</style>
                   {devices.filter((d) => d.status === "connected").length === 0 ? (
                     <div style={styles.menuSection}>
-                      <span style={{ color: "#475569", fontSize: "0.72rem" }}>No connected devices</span>
+                      <span style={{ color: "#475569", fontSize: "0.72rem" }}>
+                        No connected devices
+                      </span>
                     </div>
                   ) : (
-                    devices.filter((d) => d.status === "connected").map((d) => (
-                      <div key={d.id}>
-                        <div style={styles.menuSection}>
-                          <span style={styles.menuSectionLabel}>{d.port}</span>
-                          {d.gpsDetail ? (
-                            <table style={{ width: "100%", fontSize: "0.75rem", borderCollapse: "collapse" }}>
-                              <tbody>
-                                {[
-                                  ["Latitude",  d.gpsDetail.latitude.toFixed(6)],
-                                  ["Longitude", d.gpsDetail.longitude.toFixed(6)],
-                                  ["Altitude",  d.gpsDetail.altitude != null ? `${d.gpsDetail.altitude} m` : "—"],
-                                  ["Sats in view", d.gpsDetail.satsInView ?? "—"],
-                                  ["PDOP",      d.gpsDetail.pdop != null ? (d.gpsDetail.pdop / 100).toFixed(2) : "—"],
-                                  ["HDOP",      d.gpsDetail.hdop != null ? (d.gpsDetail.hdop / 100).toFixed(2) : "— (enable HVDOP flag)"],
-                                  ["Source",    d.gpsDetail.locationSource != null ? (["Unset","Manual","Internal","External"][d.gpsDetail.locationSource] ?? d.gpsDetail.locationSource) : "—"],
-                                  ["GPS time",  d.gpsDetail.gpsTimestamp ? new Date(d.gpsDetail.gpsTimestamp).toLocaleTimeString() : "—"],
-                                ].map(([label, value]) => (
-                                  <tr key={String(label)}>
-                                    <td style={{ color: "#475569", paddingRight: "0.75rem", paddingBottom: "0.15rem" }}>{label}</td>
-                                    <td style={{ color: "#e2e8f0", fontFamily: "monospace" }}>{String(value)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          ) : (
-                            <span style={{ color: "#475569", fontSize: "0.75rem" }}>Waiting for GPS fix…</span>
-                          )}
-                          {d.ownNodeId != null && (() => {
-                            const pending = gpsPending.has(d.id);
-                            return (
-                              <button
+                    devices
+                      .filter((d) => d.status === "connected")
+                      .map((d) => (
+                        <div key={d.id}>
+                          <div style={styles.menuSection}>
+                            <span style={styles.menuSectionLabel}>{d.port}</span>
+                            {d.gpsDetail ? (
+                              <table
                                 style={{
-                                  background: "#1e293b",
-                                  border: "1px solid #334155",
-                                  color: "#94a3b8",
-                                  padding: "0.2rem 0.6rem",
-                                  borderRadius: "0.25rem",
-                                  cursor: pending ? "default" : "pointer",
-                                  fontFamily: "monospace",
+                                  width: "100%",
                                   fontSize: "0.75rem",
-                                  marginTop: "0.5rem",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "0.35rem",
-                                  opacity: pending ? 0.7 : 1,
-                                }}
-                                disabled={pending}
-                                onClick={() => {
-                                  console.log(`[gps] requesting position for device ${d.id} nodeId=${d.ownNodeId}`);
-                                  setGpsPending((prev) => new Set(prev).add(d.id));
-                                  foremanClient.send({ type: "node:request-position", payload: { deviceId: d.id, nodeId: d.ownNodeId! } });
-                                  setTimeout(() => setGpsPending((prev) => { const next = new Set(prev); next.delete(d.id); return next; }), 15000);
+                                  borderCollapse: "collapse",
                                 }}
                               >
-                                {pending && (
-                                  <span style={{
-                                    display: "inline-block",
-                                    width: "0.7rem",
-                                    height: "0.7rem",
-                                    border: "2px solid #475569",
-                                    borderTopColor: "#94a3b8",
-                                    borderRadius: "50%",
-                                    animation: "_spin 0.7s linear infinite",
-                                  }} />
-                                )}
-                                {pending ? "Refreshing…" : "Refresh GPS"}
-                              </button>
-                            );
-                          })()}
-                          {d.ownNodeId == null && (
-                            <span style={{ color: "#475569", fontSize: "0.7rem", marginTop: "0.4rem", display: "block" }}>
-                              Node ID not yet known — reconnect to enable position request
-                            </span>
-                          )}
+                                <tbody>
+                                  {[
+                                    ["Latitude", d.gpsDetail.latitude.toFixed(6)],
+                                    ["Longitude", d.gpsDetail.longitude.toFixed(6)],
+                                    [
+                                      "Altitude",
+                                      d.gpsDetail.altitude != null
+                                        ? `${d.gpsDetail.altitude} m`
+                                        : "—",
+                                    ],
+                                    ["Sats in view", d.gpsDetail.satsInView ?? "—"],
+                                    [
+                                      "PDOP",
+                                      d.gpsDetail.pdop != null
+                                        ? (d.gpsDetail.pdop / 100).toFixed(2)
+                                        : "—",
+                                    ],
+                                    [
+                                      "HDOP",
+                                      d.gpsDetail.hdop != null
+                                        ? (d.gpsDetail.hdop / 100).toFixed(2)
+                                        : "— (enable HVDOP flag)",
+                                    ],
+                                    [
+                                      "Source",
+                                      d.gpsDetail.locationSource != null
+                                        ? (["Unset", "Manual", "Internal", "External"][
+                                            d.gpsDetail.locationSource
+                                          ] ?? d.gpsDetail.locationSource)
+                                        : "—",
+                                    ],
+                                    [
+                                      "GPS time",
+                                      d.gpsDetail.gpsTimestamp
+                                        ? new Date(d.gpsDetail.gpsTimestamp).toLocaleTimeString()
+                                        : "—",
+                                    ],
+                                  ].map(([label, value]) => (
+                                    <tr key={String(label)}>
+                                      <td
+                                        style={{
+                                          color: "#475569",
+                                          paddingRight: "0.75rem",
+                                          paddingBottom: "0.15rem",
+                                        }}
+                                      >
+                                        {label}
+                                      </td>
+                                      <td style={{ color: "#e2e8f0", fontFamily: "monospace" }}>
+                                        {String(value)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : (
+                              <span style={{ color: "#475569", fontSize: "0.75rem" }}>
+                                Waiting for GPS fix…
+                              </span>
+                            )}
+                            {d.ownNodeId != null &&
+                              (() => {
+                                const pending = gpsPending.has(d.id);
+                                return (
+                                  <button
+                                    style={{
+                                      background: "#1e293b",
+                                      border: "1px solid #334155",
+                                      color: "#94a3b8",
+                                      padding: "0.2rem 0.6rem",
+                                      borderRadius: "0.25rem",
+                                      cursor: pending ? "default" : "pointer",
+                                      fontFamily: "monospace",
+                                      fontSize: "0.75rem",
+                                      marginTop: "0.5rem",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "0.35rem",
+                                      opacity: pending ? 0.7 : 1,
+                                    }}
+                                    disabled={pending}
+                                    onClick={() => {
+                                      console.log(
+                                        `[gps] requesting position for device ${d.id} nodeId=${d.ownNodeId}`,
+                                      );
+                                      setGpsPending((prev) => new Set(prev).add(d.id));
+                                      foremanClient.send({
+                                        type: "node:request-position",
+                                        payload: { deviceId: d.id, nodeId: d.ownNodeId! },
+                                      });
+                                      setTimeout(
+                                        () =>
+                                          setGpsPending((prev) => {
+                                            const next = new Set(prev);
+                                            next.delete(d.id);
+                                            return next;
+                                          }),
+                                        15000,
+                                      );
+                                    }}
+                                  >
+                                    {pending && (
+                                      <span
+                                        style={{
+                                          display: "inline-block",
+                                          width: "0.7rem",
+                                          height: "0.7rem",
+                                          border: "2px solid #475569",
+                                          borderTopColor: "#94a3b8",
+                                          borderRadius: "50%",
+                                          animation: "_spin 0.7s linear infinite",
+                                        }}
+                                      />
+                                    )}
+                                    {pending ? "Refreshing…" : "Refresh GPS"}
+                                  </button>
+                                );
+                              })()}
+                            {d.ownNodeId == null && (
+                              <span
+                                style={{
+                                  color: "#475569",
+                                  fontSize: "0.7rem",
+                                  marginTop: "0.4rem",
+                                  display: "block",
+                                }}
+                              >
+                                Node ID not yet known — reconnect to enable position request
+                              </span>
+                            )}
+                          </div>
+                          <div style={styles.menuDivider} />
                         </div>
-                        <div style={styles.menuDivider} />
-                      </div>
-                    ))
+                      ))
                   )}
                 </div>
               )}
@@ -476,8 +577,13 @@ export function App() {
 
         {/* ── MQTT dropdown ─────────────────────────────────────────────────── */}
         <div ref={mqttRef} style={styles.menuContainer}>
-          <button onClick={() => setMqttOpen((v) => !v)} style={menuBtnStyle(mqttOpen, mqttEnabled)}>
-            <span style={{ color: mqttEnabled ? "#4ade80" : "#ef4444", fontSize: "0.65rem" }}>●</span>
+          <button
+            onClick={() => setMqttOpen((v) => !v)}
+            style={menuBtnStyle(mqttOpen, mqttEnabled)}
+          >
+            <span style={{ color: mqttEnabled ? "#4ade80" : "#ef4444", fontSize: "0.65rem" }}>
+              ●
+            </span>
             MQTT
             <span style={{ color: "#94a3b8", fontSize: "0.7rem" }}>
               {mqttScope !== "all" ? mqttScope : "all"}
@@ -514,7 +620,14 @@ export function App() {
                   )}
                 </span>
                 {gatewayRegion != null && (
-                  <span style={{ color: "#475569", fontSize: "0.65rem", fontFamily: "monospace", marginBottom: "0.25rem" }}>
+                  <span
+                    style={{
+                      color: "#475569",
+                      fontSize: "0.65rem",
+                      fontFamily: "monospace",
+                      marginBottom: "0.25rem",
+                    }}
+                  >
                     {gatewayRegion}
                   </span>
                 )}
@@ -523,7 +636,11 @@ export function App() {
                     key={s}
                     style={menuNavBtn(mqttScope === s)}
                     onClick={() => setMqttScope(s)}
-                    title={gatewayRegion == null && s !== "all" ? "Gateway region not yet known" : undefined}
+                    title={
+                      gatewayRegion == null && s !== "all"
+                        ? "Gateway region not yet known"
+                        : undefined
+                    }
                   >
                     {s.charAt(0).toUpperCase() + s.slice(1)}
                   </button>
@@ -548,21 +665,54 @@ export function App() {
 
           {menuOpen && (
             <div style={styles.menuPanel}>
-
               {/* COM port details */}
               <div style={styles.menuSection}>
                 <span style={styles.menuSectionLabel}>Devices</span>
                 {devices.length === 0 ? (
-                  <span style={{ color: "#475569", fontSize: "0.72rem" }}>No devices — POST /api/devices/connect</span>
+                  <span style={{ color: "#475569", fontSize: "0.72rem" }}>
+                    No devices — POST /api/devices/connect
+                  </span>
                 ) : (
                   devices.map((d) => (
-                    <div key={d.id} style={{ ...styles.menuDevice, flexDirection: "column", alignItems: "flex-start", gap: "0.25rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", width: "100%" }}>
-                        <span style={{ color: d.status === "connected" ? "#22c55e" : d.status === "connecting" ? "#f59e0b" : "#ef4444" }}>●</span>
+                    <div
+                      key={d.id}
+                      style={{
+                        ...styles.menuDevice,
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: "0.25rem",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.4rem",
+                          width: "100%",
+                        }}
+                      >
+                        <span
+                          style={{
+                            color:
+                              d.status === "connected"
+                                ? "#22c55e"
+                                : d.status === "connecting"
+                                  ? "#f59e0b"
+                                  : "#ef4444",
+                          }}
+                        >
+                          ●
+                        </span>
                         <span style={{ color: "#e2e8f0", fontWeight: "bold" }}>{d.port}</span>
-                        <span style={{ color: "#64748b", textTransform: "capitalize" }}>{d.status}</span>
-                        {d.firmwareVersion && <span style={{ color: "#475569" }}>fw {d.firmwareVersion}</span>}
-                        {d.lastSeenAt && <span style={{ color: "#475569" }}>{formatRelative(d.lastSeenAt)}</span>}
+                        <span style={{ color: "#64748b", textTransform: "capitalize" }}>
+                          {d.status}
+                        </span>
+                        {d.firmwareVersion && (
+                          <span style={{ color: "#475569" }}>fw {d.firmwareVersion}</span>
+                        )}
+                        {d.lastSeenAt && (
+                          <span style={{ color: "#475569" }}>{formatRelative(d.lastSeenAt)}</span>
+                        )}
                         {d.batteryLevel != null && <BatteryBar level={d.batteryLevel} />}
                       </div>
                       <div style={{ display: "flex", gap: "0.3rem" }}>
@@ -601,7 +751,13 @@ export function App() {
                   Logs
                   {logs.length > 0 && <span style={styles.menuCount}>{logs.length}</span>}
                 </button>
-                <button style={menuNavBtn(false)} onClick={() => { setApiDocsOpen(true); setMenuOpen(false); }}>
+                <button
+                  style={menuNavBtn(false)}
+                  onClick={() => {
+                    setApiDocsOpen(true);
+                    setMenuOpen(false);
+                  }}
+                >
                   API Docs
                 </button>
               </div>
@@ -613,14 +769,30 @@ export function App() {
                 <div style={styles.menuSection}>
                   <span style={styles.menuSectionLabel}>Map filters</span>
                   <button style={hdrFilterBtn(showMesh)} onClick={() => setShowMesh((v) => !v)}>
-                    <span style={{ ...styles.dotBase, border: "2px solid #94a3b8", background: "#0f172a" }} />
+                    <span
+                      style={{
+                        ...styles.dotBase,
+                        border: "2px solid #94a3b8",
+                        background: "#0f172a",
+                      }}
+                    />
                     Mesh
-                    {mappableMeshCount > 0 && <span style={styles.hdrCount}>{mappableMeshCount}</span>}
+                    {mappableMeshCount > 0 && (
+                      <span style={styles.hdrCount}>{mappableMeshCount}</span>
+                    )}
                   </button>
                   <button style={hdrFilterBtn(showMqtt)} onClick={() => setShowMqtt((v) => !v)}>
-                    <span style={{ ...styles.dotBase, border: "2px dashed #94a3b8", background: "#0f172a" }} />
+                    <span
+                      style={{
+                        ...styles.dotBase,
+                        border: "2px dashed #94a3b8",
+                        background: "#0f172a",
+                      }}
+                    />
                     MQTT
-                    {mappableMqttCount > 0 && <span style={styles.hdrCount}>{mappableMqttCount}</span>}
+                    {mappableMqttCount > 0 && (
+                      <span style={styles.hdrCount}>{mappableMqttCount}</span>
+                    )}
                   </button>
                 </div>
               )}
@@ -630,7 +802,13 @@ export function App() {
                   <span style={styles.menuSectionLabel}>Activity filters</span>
                   <span style={styles.filterLabel}>Window:</span>
                   {(["5m", "15m", "1h", "all"] as ActivityWindow[]).map((w) => (
-                    <button key={w} style={hdrFilterBtn(activityWindow === w)} onClick={() => setActivityWindow(w)}>{w}</button>
+                    <button
+                      key={w}
+                      style={hdrFilterBtn(activityWindow === w)}
+                      onClick={() => setActivityWindow(w)}
+                    >
+                      {w}
+                    </button>
                   ))}
                   <span style={{ ...styles.filterLabel, marginLeft: "0.4rem" }}>Source:</span>
                   {(["all", "mesh", "mqtt"] as ActivitySource[]).map((s) => (
@@ -638,10 +816,19 @@ export function App() {
                       key={s}
                       style={{
                         ...hdrFilterBtn(activitySource === s),
-                        color: activitySource === s ? "#fff" : s === "mesh" ? "#60a5fa" : s === "mqtt" ? "#34d399" : undefined,
+                        color:
+                          activitySource === s
+                            ? "#fff"
+                            : s === "mesh"
+                              ? "#60a5fa"
+                              : s === "mqtt"
+                                ? "#34d399"
+                                : undefined,
                       }}
                       onClick={() => setActivitySource(s)}
-                    >{s}</button>
+                    >
+                      {s}
+                    </button>
                   ))}
                   <button
                     style={{ ...hdrFilterBtn(activityPaused), marginLeft: "0.25rem" }}
@@ -661,21 +848,37 @@ export function App() {
                       key={l}
                       style={{
                         ...hdrFilterBtn(logsLevel === l),
-                        color: logsLevel === l ? "#fff" : l === "warn" ? "#fbbf24" : l === "error" ? "#f87171" : undefined,
+                        color:
+                          logsLevel === l
+                            ? "#fff"
+                            : l === "warn"
+                              ? "#fbbf24"
+                              : l === "error"
+                                ? "#f87171"
+                                : undefined,
                       }}
                       onClick={() => setLogsLevel(l)}
-                    >{l}</button>
+                    >
+                      {l}
+                    </button>
                   ))}
                   <span style={{ ...styles.filterLabel, marginLeft: "0.4rem" }}>Tag:</span>
-                  <button style={hdrFilterBtn(logsTag === "all")} onClick={() => setLogsTag("all")}>all</button>
+                  <button style={hdrFilterBtn(logsTag === "all")} onClick={() => setLogsTag("all")}>
+                    all
+                  </button>
                   {KNOWN_TAGS.map((t) => (
                     <button
                       key={t}
-                      style={{ ...hdrFilterBtn(logsTag === t), color: logsTag === t ? "#fff" : TAG_COLORS[t] }}
+                      style={{
+                        ...hdrFilterBtn(logsTag === t),
+                        color: logsTag === t ? "#fff" : TAG_COLORS[t],
+                      }}
                       onClick={() => setLogsTag(t)}
                     >
                       {t}
-                      {logTagCounts[t] ? <span style={styles.hdrCount}>{logTagCounts[t]}</span> : null}
+                      {logTagCounts[t] ? (
+                        <span style={styles.hdrCount}>{logTagCounts[t]}</span>
+                      ) : null}
                     </button>
                   ))}
                   <button
@@ -703,7 +906,6 @@ export function App() {
                   v{__APP_VERSION__}
                 </span>
               </div>
-
             </div>
           )}
         </div>
@@ -712,9 +914,15 @@ export function App() {
         <button
           onClick={() => setIntroOpen(true)}
           style={{
-            background: "#0f172a", border: "1px solid #1e293b", color: "#475569",
-            padding: "0.25rem 0.55rem", borderRadius: "0.375rem", cursor: "pointer",
-            fontFamily: "monospace", fontSize: "0.78rem", flexShrink: 0,
+            background: "#0f172a",
+            border: "1px solid #1e293b",
+            color: "#475569",
+            padding: "0.25rem 0.55rem",
+            borderRadius: "0.375rem",
+            cursor: "pointer",
+            fontFamily: "monospace",
+            fontSize: "0.78rem",
+            flexShrink: 0,
           }}
           title="Open introduction guide"
         >
@@ -723,7 +931,10 @@ export function App() {
 
         {/* ── Settings menu ─────────────────────────────────────────────────── */}
         <div ref={settingsRef} style={styles.menuContainer}>
-          <button onClick={() => setSettingsOpen((v) => !v)} style={menuBtnStyle(settingsOpen, true)}>
+          <button
+            onClick={() => setSettingsOpen((v) => !v)}
+            style={menuBtnStyle(settingsOpen, true)}
+          >
             Settings
             <span style={{ color: "#475569", marginLeft: "0.3rem", fontSize: "0.65rem" }}>▾</span>
           </button>
@@ -732,7 +943,10 @@ export function App() {
             <div style={styles.menuPanel}>
               <div style={styles.menuSection}>
                 <span style={styles.menuSectionLabel}>Configure</span>
-                <button style={menuNavBtn(tab === "overrides")} onClick={() => navigate("overrides")}>
+                <button
+                  style={menuNavBtn(tab === "overrides")}
+                  onClick={() => navigate("overrides")}
+                >
                   Overrides
                   {overrides.size > 0 && <span style={styles.menuCount}>{overrides.size}</span>}
                 </button>
@@ -751,8 +965,14 @@ export function App() {
             devices={devices}
             nodes={effectiveNodes}
             mqttNodes={scopedMqttNodes}
-            onMessage={(nodeId) => { setMessageTarget(nodeId); setTab("messages"); }}
-            onCoverageMap={(nodeId) => { setFocusedCoverageNodeId(nodeId); setTab("map"); }}
+            onMessage={(nodeId) => {
+              setMessageTarget(nodeId);
+              setTab("messages");
+            }}
+            onCoverageMap={(nodeId) => {
+              setFocusedCoverageNodeId(nodeId);
+              setTab("map");
+            }}
           />
         </div>
       )}
@@ -768,7 +988,10 @@ export function App() {
           deviceConfigs={deviceConfigs}
           focusedNodeId={focusedCoverageNodeId}
           onClearFocusedNode={() => setFocusedCoverageNodeId(null)}
-          onMessage={(nodeId) => { setMessageTarget(nodeId); setTab("messages"); }}
+          onMessage={(nodeId) => {
+            setMessageTarget(nodeId);
+            setTab("messages");
+          }}
           presetFilter={presetFilter}
           setPresetFilter={setPresetFilter}
         />
@@ -850,18 +1073,64 @@ export function App() {
       {/* ── API Docs modal ─────────────────────────────────────────────────── */}
       {apiDocsOpen && (
         <div
-          style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center" }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            background: "rgba(0,0,0,0.75)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
           onClick={() => setApiDocsOpen(false)}
         >
           <div
-            style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: "0.5rem", width: "90vw", maxWidth: "900px", height: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 16px 48px rgba(0,0,0,0.8)" }}
+            style={{
+              background: "#0f172a",
+              border: "1px solid #1e293b",
+              borderRadius: "0.5rem",
+              width: "90vw",
+              maxWidth: "900px",
+              height: "90vh",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 16px 48px rgba(0,0,0,0.8)",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.6rem 1rem", borderBottom: "1px solid #1e293b", flexShrink: 0 }}>
-              <span style={{ fontFamily: "monospace", color: "#94a3b8", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>API Reference</span>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "0.6rem 1rem",
+                borderBottom: "1px solid #1e293b",
+                flexShrink: 0,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "monospace",
+                  color: "#94a3b8",
+                  fontSize: "0.75rem",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                API Reference
+              </span>
               <button
                 onClick={() => setApiDocsOpen(false)}
-                style={{ background: "none", border: "1px solid #1e293b", color: "#64748b", cursor: "pointer", fontSize: "0.8rem", borderRadius: "0.25rem", padding: "0.15rem 0.5rem", fontFamily: "monospace" }}
+                style={{
+                  background: "none",
+                  border: "1px solid #1e293b",
+                  color: "#64748b",
+                  cursor: "pointer",
+                  fontSize: "0.8rem",
+                  borderRadius: "0.25rem",
+                  padding: "0.15rem 0.5rem",
+                  fontFamily: "monospace",
+                }}
               >
                 ✕ close
               </button>
@@ -896,33 +1165,166 @@ function sortNodes(nodes: NodeInfo[]): NodeInfo[] {
 
 // Markdown component overrides — dark-theme inline styles for react-markdown output
 const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
-  h1: ({ children }) => <h1 style={{ color: "#f8fafc", fontSize: "1.4rem", fontFamily: "monospace", borderBottom: "1px solid #1e293b", paddingBottom: "0.4rem", marginTop: "1.5rem" }}>{children}</h1>,
-  h2: ({ children }) => <h2 style={{ color: "#e2e8f0", fontSize: "1.1rem", fontFamily: "monospace", borderBottom: "1px solid #1e293b", paddingBottom: "0.25rem", marginTop: "1.5rem" }}>{children}</h2>,
-  h3: ({ children }) => <h3 style={{ color: "#cbd5e1", fontSize: "0.95rem", fontFamily: "monospace", marginTop: "1.25rem" }}>{children}</h3>,
-  h4: ({ children }) => <h4 style={{ color: "#94a3b8", fontSize: "0.875rem", fontFamily: "monospace", marginTop: "1rem" }}>{children}</h4>,
-  p:  ({ children }) => <p  style={{ color: "#94a3b8", fontSize: "0.85rem", lineHeight: 1.65, margin: "0.5rem 0" }}>{children}</p>,
-  a:  ({ href, children }) => <a href={href} style={{ color: "#3b82f6" }} target="_blank" rel="noreferrer">{children}</a>,
+  h1: ({ children }) => (
+    <h1
+      style={{
+        color: "#f8fafc",
+        fontSize: "1.4rem",
+        fontFamily: "monospace",
+        borderBottom: "1px solid #1e293b",
+        paddingBottom: "0.4rem",
+        marginTop: "1.5rem",
+      }}
+    >
+      {children}
+    </h1>
+  ),
+  h2: ({ children }) => (
+    <h2
+      style={{
+        color: "#e2e8f0",
+        fontSize: "1.1rem",
+        fontFamily: "monospace",
+        borderBottom: "1px solid #1e293b",
+        paddingBottom: "0.25rem",
+        marginTop: "1.5rem",
+      }}
+    >
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3
+      style={{
+        color: "#cbd5e1",
+        fontSize: "0.95rem",
+        fontFamily: "monospace",
+        marginTop: "1.25rem",
+      }}
+    >
+      {children}
+    </h3>
+  ),
+  h4: ({ children }) => (
+    <h4
+      style={{ color: "#94a3b8", fontSize: "0.875rem", fontFamily: "monospace", marginTop: "1rem" }}
+    >
+      {children}
+    </h4>
+  ),
+  p: ({ children }) => (
+    <p style={{ color: "#94a3b8", fontSize: "0.85rem", lineHeight: 1.65, margin: "0.5rem 0" }}>
+      {children}
+    </p>
+  ),
+  a: ({ href, children }) => (
+    <a href={href} style={{ color: "#3b82f6" }} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  ),
   strong: ({ children }) => <strong style={{ color: "#e2e8f0" }}>{children}</strong>,
   code: ({ children, className }) => {
     const isBlock = className?.startsWith("language-");
-    return isBlock
-      ? <code style={{ display: "block", background: "#0d1420", border: "1px solid #1e293b", borderRadius: "0.375rem", padding: "0.75rem 1rem", fontSize: "0.78rem", color: "#94a3b8", overflowX: "auto", whiteSpace: "pre" }}>{children}</code>
-      : <code style={{ background: "#1e293b", borderRadius: "0.2rem", padding: "0.1rem 0.35rem", fontSize: "0.8rem", color: "#7dd3fc" }}>{children}</code>;
+    return isBlock ? (
+      <code
+        style={{
+          display: "block",
+          background: "#0d1420",
+          border: "1px solid #1e293b",
+          borderRadius: "0.375rem",
+          padding: "0.75rem 1rem",
+          fontSize: "0.78rem",
+          color: "#94a3b8",
+          overflowX: "auto",
+          whiteSpace: "pre",
+        }}
+      >
+        {children}
+      </code>
+    ) : (
+      <code
+        style={{
+          background: "#1e293b",
+          borderRadius: "0.2rem",
+          padding: "0.1rem 0.35rem",
+          fontSize: "0.8rem",
+          color: "#7dd3fc",
+        }}
+      >
+        {children}
+      </code>
+    );
   },
   pre: ({ children }) => <pre style={{ margin: "0.6rem 0" }}>{children}</pre>,
-  blockquote: ({ children }) => <blockquote style={{ borderLeft: "3px solid #334155", paddingLeft: "1rem", margin: "0.5rem 0", color: "#64748b", fontSize: "0.85rem" }}>{children}</blockquote>,
+  blockquote: ({ children }) => (
+    <blockquote
+      style={{
+        borderLeft: "3px solid #334155",
+        paddingLeft: "1rem",
+        margin: "0.5rem 0",
+        color: "#64748b",
+        fontSize: "0.85rem",
+      }}
+    >
+      {children}
+    </blockquote>
+  ),
   hr: () => <hr style={{ border: "none", borderTop: "1px solid #1e293b", margin: "1.25rem 0" }} />,
-  ul: ({ children }) => <ul style={{ paddingLeft: "1.25rem", margin: "0.4rem 0", color: "#94a3b8", fontSize: "0.85rem" }}>{children}</ul>,
-  ol: ({ children }) => <ol style={{ paddingLeft: "1.25rem", margin: "0.4rem 0", color: "#94a3b8", fontSize: "0.85rem" }}>{children}</ol>,
+  ul: ({ children }) => (
+    <ul
+      style={{ paddingLeft: "1.25rem", margin: "0.4rem 0", color: "#94a3b8", fontSize: "0.85rem" }}
+    >
+      {children}
+    </ul>
+  ),
+  ol: ({ children }) => (
+    <ol
+      style={{ paddingLeft: "1.25rem", margin: "0.4rem 0", color: "#94a3b8", fontSize: "0.85rem" }}
+    >
+      {children}
+    </ol>
+  ),
   li: ({ children }) => <li style={{ margin: "0.15rem 0" }}>{children}</li>,
   table: ({ children }) => (
     <div style={{ overflowX: "auto", margin: "0.75rem 0" }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.8rem", fontFamily: "monospace" }}>{children}</table>
+      <table
+        style={{
+          borderCollapse: "collapse",
+          width: "100%",
+          fontSize: "0.8rem",
+          fontFamily: "monospace",
+        }}
+      >
+        {children}
+      </table>
     </div>
   ),
   thead: ({ children }) => <thead style={{ background: "#0d1420" }}>{children}</thead>,
-  th: ({ children }) => <th style={{ color: "#64748b", textAlign: "left", padding: "0.35rem 0.75rem", borderBottom: "1px solid #1e293b", whiteSpace: "nowrap" }}>{children}</th>,
-  td: ({ children }) => <td style={{ color: "#94a3b8", padding: "0.3rem 0.75rem", borderBottom: "1px solid #0f172a", verticalAlign: "top" }}>{children}</td>,
+  th: ({ children }) => (
+    <th
+      style={{
+        color: "#64748b",
+        textAlign: "left",
+        padding: "0.35rem 0.75rem",
+        borderBottom: "1px solid #1e293b",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td
+      style={{
+        color: "#94a3b8",
+        padding: "0.3rem 0.75rem",
+        borderBottom: "1px solid #0f172a",
+        verticalAlign: "top",
+      }}
+    >
+      {children}
+    </td>
+  ),
   tr: ({ children }) => <tr style={{ borderBottom: "1px solid #1e293b" }}>{children}</tr>,
 };
 

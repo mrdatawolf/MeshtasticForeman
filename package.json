@@ -1,6 +1,6 @@
 {
   "name": "meshtastic-foreman",
-  "version": "0.8.0",
+  "version": "0.8.3",
   "private": true,
   "description": "Persistent daemon + web UI for Meshtastic device management",
   "scripts": {
@@ -10,7 +10,8 @@
     "dev": "pnpm --parallel -r dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
-    "format": "pnpm -r format",
+    "format": "prettier --write eslint.config.mjs .prettierrc.json package.json && pnpm -r format",
+    "format:check": "prettier --check eslint.config.mjs .prettierrc.json package.json && pnpm -r format:check",
     "test": "pnpm -r test",
     "cache:export": "pnpm --filter @foreman/daemon cache:export",
     "cache:import": "pnpm --filter @foreman/daemon cache:import",
@@ -22,10 +23,17 @@
     "clean:dist": "node -e \"const fs=require('fs'); ['dist-electron','dist-daemon'].forEach(d=>{if(fs.existsSync(d)){fs.rmSync(d,{recursive:true,force:true});console.log('Cleaned: '+d)}})\""
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.7.2",
+    "@electron/rebuild": "^4.2.0",
     "electron": "^39.8.8",
     "electron-builder": "^26.8.1",
-    "esbuild": "^0.25.12"
+    "esbuild": "^0.25.12",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-unused-imports": "^4.3.0",
+    "prettier": "^3.6.2",
+    "typescript-eslint": "8.65.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -37,7 +45,7 @@
     ]
   },
   "engines": {
-    "node": ">=20.0.0",
+    "node": ">=22.13.0",
     "pnpm": ">=9.0.0"
   },
   "packageManager": "pnpm@11.21.0+sha512.521705bce689924eac72f5a3587122f362689ef6571e55ba80076fd637c11132ecffada26fad4ea79c485bfddbfd3d5a2a5b05805a77e893de71ec8a6cca3bb1"

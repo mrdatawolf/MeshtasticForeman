@@ -12,9 +12,12 @@
  *    `new MeshDevice()` works without "is not a constructor" errors.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
 import { runMigrations } from "../db/migrations.js";
+import { DeviceManager } from "../device/device-manager.js";
+
 import type { ServerEvent } from "@foreman/shared";
 
 // ---------------------------------------------------------------------------
@@ -64,12 +67,22 @@ vi.mock("@meshtastic/core", async (importOriginal) => {
     MeshDevice: class MockMeshDevice {
       configure = vi.fn().mockResolvedValue(0);
       sendText = vi.fn().mockResolvedValue(42);
+      setHeartbeatInterval = vi.fn();
       events = {
         onMessagePacket: makeDispatcher(),
         onMeshPacket: makeDispatcher(),
         onNodeInfoPacket: makeDispatcher(),
+        onPositionPacket: makeDispatcher(),
         onDeviceStatus: makeDispatcher(),
+        onFromRadio: makeDispatcher(),
+        onQueueStatus: makeDispatcher(),
+        onTraceRoutePacket: makeDispatcher(),
         onDeviceMetadataPacket: makeDispatcher(),
+        onConfigPacket: makeDispatcher(),
+        onModuleConfigPacket: makeDispatcher(),
+        onChannelPacket: makeDispatcher(),
+        onMyNodeInfo: makeDispatcher(),
+        onTelemetryPacket: makeDispatcher(),
       };
       constructor() {
         // Capture `this` so tests can fire events and inspect methods.
@@ -78,9 +91,6 @@ vi.mock("@meshtastic/core", async (importOriginal) => {
     },
   };
 });
-
-// Import DeviceManager AFTER the mocks so it gets the mocked deps.
-import { DeviceManager } from "../device/device-manager.js";
 
 // ---------------------------------------------------------------------------
 // Test utilities
@@ -94,7 +104,7 @@ async function createTestDb() {
 
 async function seedDevice(
   db: PGlite,
-  overrides: Partial<{ id: string; name: string; port: string }> = {}
+  overrides: Partial<{ id: string; name: string; port: string }> = {},
 ) {
   const id = overrides.id ?? "00000000-0000-0000-0000-000000000001";
   const name = overrides.name ?? "Seeded Node";
@@ -111,16 +121,25 @@ function collectEvents(manager: DeviceManager) {
 
 /** Convenience — get the events sub-object from the most-recently created fake device. */
 function getFakeEvents() {
-  return mockDevice.ref!.events as ReturnType<typeof makeFakeEvents>;
+  return mockDevice.ref!.events as ReturnType<typeof _makeFakeEvents>;
 }
 
-function makeFakeEvents() {
+function _makeFakeEvents() {
   return {
     onMessagePacket: makeDispatcher(),
     onMeshPacket: makeDispatcher(),
     onNodeInfoPacket: makeDispatcher(),
+    onPositionPacket: makeDispatcher(),
     onDeviceStatus: makeDispatcher(),
+    onFromRadio: makeDispatcher(),
+    onQueueStatus: makeDispatcher(),
+    onTraceRoutePacket: makeDispatcher(),
     onDeviceMetadataPacket: makeDispatcher(),
+    onConfigPacket: makeDispatcher(),
+    onModuleConfigPacket: makeDispatcher(),
+    onChannelPacket: makeDispatcher(),
+    onMyNodeInfo: makeDispatcher(),
+    onTelemetryPacket: makeDispatcher(),
   };
 }
 
@@ -147,7 +166,7 @@ describe("DeviceManager", () => {
       await manager.connect("/dev/ttyUSB0", "Field Node");
 
       const { rows } = await db.query<{ name: string; port: string }>(
-        "SELECT name, port FROM devices"
+        "SELECT name, port FROM devices",
       );
       expect(rows).toHaveLength(1);
       expect(rows[0].name).toBe("Field Node");
@@ -178,7 +197,7 @@ describe("DeviceManager", () => {
       expect(device.port).toBe("/dev/ttyUSB0");
       expect(device.name).toBe("Field Node");
       expect(device.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       );
       expect(device.connectedAt).toBeDefined();
     });
@@ -219,7 +238,7 @@ describe("DeviceManager", () => {
 
     it("is a no-op for an unknown id", async () => {
       await expect(
-        manager.disconnect("00000000-0000-0000-0000-000000000000")
+        manager.disconnect("00000000-0000-0000-0000-000000000000"),
       ).resolves.toBeUndefined();
     });
   });
@@ -259,7 +278,7 @@ describe("DeviceManager", () => {
     it("survives a failing port gracefully", async () => {
       const { TransportNodeSerial } = await import("@meshtastic/transport-node-serial");
       (TransportNodeSerial.create as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-        new Error("port not found")
+        new Error("port not found"),
       );
 
       await seedDevice(db, { port: "/dev/ghost" });
@@ -289,7 +308,7 @@ describe("DeviceManager", () => {
       await new Promise((r) => setTimeout(r, 20));
 
       const { rows } = await db.query<{ text: string; from_node_id: number }>(
-        "SELECT text, from_node_id FROM messages"
+        "SELECT text, from_node_id FROM messages",
       );
       expect(rows).toHaveLength(1);
       expect(rows[0].text).toBe("Hello mesh");
@@ -319,7 +338,7 @@ describe("DeviceManager", () => {
 
       const { rows } = await db.query<{ last_seen: string }>(
         "SELECT last_seen FROM devices WHERE id = $1",
-        [connected.id]
+        [connected.id],
       );
       expect(rows[0].last_seen).not.toBeNull();
     });
@@ -377,13 +396,11 @@ describe("DeviceManager", () => {
       getFakeEvents().onMeshPacket.dispatch(
         makeDecodedPacket({
           payloadVariant: { case: "decoded", value: { portnum: 1, payload } },
-        })
+        }),
       );
       await new Promise((r) => setTimeout(r, 20));
 
-      const { rows } = await db.query<{ payload_raw: string }>(
-        "SELECT payload_raw FROM packets"
-      );
+      const { rows } = await db.query<{ payload_raw: string }>("SELECT payload_raw FROM packets");
       expect(rows[0].payload_raw).toBe(Buffer.from(payload).toString("base64"));
     });
 
@@ -419,7 +436,7 @@ describe("DeviceManager", () => {
       await new Promise((r) => setTimeout(r, 20));
 
       const { rows } = await db.query<{ portnum: number; payload_raw: string }>(
-        "SELECT portnum, payload_raw FROM packets"
+        "SELECT portnum, payload_raw FROM packets",
       );
       expect(rows[0].portnum).toBe(0);
       expect(rows[0].payload_raw).toBe("3q2+7w=="); // base64 of 0xdeadbeef
@@ -442,7 +459,7 @@ describe("DeviceManager", () => {
           publicKey: new Uint8Array([0xab, 0xcd]),
         },
         position: {
-          latitudeI: 376766660,    // 37.6766660°
+          latitudeI: 376766660, // 37.6766660°
           longitudeI: -1220000000, // -122.0°
           altitude: 50,
         },
@@ -468,11 +485,20 @@ describe("DeviceManager", () => {
 
     it("converts latitudeI / longitudeI to decimal degrees", async () => {
       await manager.connect("/dev/ttyUSB0", "Node");
-      getFakeEvents().onNodeInfoPacket.dispatch(makeNodeInfo());
+      const nodeInfo = makeNodeInfo();
+      getFakeEvents().onNodeInfoPacket.dispatch(nodeInfo);
+      getFakeEvents().onPositionPacket.dispatch({
+        from: nodeInfo.num,
+        data: {
+          latitudeI: nodeInfo.position.latitudeI,
+          longitudeI: nodeInfo.position.longitudeI,
+          altitude: nodeInfo.position.altitude,
+        },
+      });
       await new Promise((r) => setTimeout(r, 20));
 
       const { rows } = await db.query<{ latitude: number; longitude: number }>(
-        "SELECT latitude, longitude FROM nodes"
+        "SELECT latitude, longitude FROM nodes",
       );
       expect(rows[0].latitude).toBeCloseTo(37.676666, 4);
       expect(rows[0].longitude).toBeCloseTo(-122.0, 4);
@@ -483,9 +509,7 @@ describe("DeviceManager", () => {
       getFakeEvents().onNodeInfoPacket.dispatch(makeNodeInfo());
       await new Promise((r) => setTimeout(r, 20));
 
-      const { rows } = await db.query<{ mac_address: string }>(
-        "SELECT mac_address FROM nodes"
-      );
+      const { rows } = await db.query<{ mac_address: string }>("SELECT mac_address FROM nodes");
       expect(rows[0].mac_address).toBe("01:02:03:04:05:06");
     });
 
@@ -516,7 +540,7 @@ describe("DeviceManager", () => {
       await new Promise((r) => setTimeout(r, 20));
 
       const { rows } = await db.query<{ long_name: string; snr: number }>(
-        "SELECT long_name, snr FROM nodes WHERE node_id = 12345"
+        "SELECT long_name, snr FROM nodes WHERE node_id = 12345",
       );
       expect(rows[0].long_name).toBe("Field Node Alpha"); // preserved by COALESCE
       expect(rows[0].snr).toBeCloseTo(8.0);
@@ -534,7 +558,7 @@ describe("DeviceManager", () => {
       await new Promise((r) => setTimeout(r, 20));
 
       const { rows } = await db.query<{ device_id: string }>(
-        "SELECT device_id FROM nodes WHERE node_id = 1"
+        "SELECT device_id FROM nodes WHERE node_id = 1",
       );
       expect(rows).toHaveLength(2);
       expect(rows.map((r) => r.device_id)).toContain(devA.id);
@@ -552,7 +576,7 @@ describe("DeviceManager", () => {
 
       const { rows } = await db.query<{ hw_model: string; firmware: string }>(
         "SELECT hw_model, firmware FROM devices WHERE id = $1",
-        [connected.id]
+        [connected.id],
       );
       expect(rows[0].hw_model).toBe("10");
       expect(rows[0].firmware).toBe("2.3.14");
@@ -584,6 +608,7 @@ describe("DeviceManager", () => {
       emitted.length = 0;
 
       getFakeEvents().onDeviceStatus.dispatch(Types.DeviceStatusEnum.DeviceDisconnected);
+      await new Promise((r) => setTimeout(r, 20));
 
       const statusEvents = emitted.filter((e) => e.type === "device:status");
       expect(statusEvents).toHaveLength(1);
@@ -602,7 +627,7 @@ describe("DeviceManager", () => {
         // Before timer fires: 1 call (initial connect)
         expect(TransportNodeSerial.create as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
 
-        await vi.runAllTimersAsync();
+        await vi.advanceTimersByTimeAsync(5000);
 
         // After 5s timer: 1 more call for the reconnect
         expect(TransportNodeSerial.create as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(2);
@@ -624,7 +649,7 @@ describe("DeviceManager", () => {
         fakeEvents.onDeviceStatus.dispatch(Types.DeviceStatusEnum.DeviceDisconnected);
         fakeEvents.onDeviceStatus.dispatch(Types.DeviceStatusEnum.DeviceDisconnected);
 
-        await vi.runAllTimersAsync();
+        await vi.advanceTimersByTimeAsync(5000);
 
         // Only 1 initial + 1 reconnect (not 1 + 2)
         expect(TransportNodeSerial.create as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(2);
@@ -643,7 +668,7 @@ describe("DeviceManager", () => {
         toNodeId?: number;
         rxTime?: string;
         text?: string;
-      } = {}
+      } = {},
     ) {
       const { randomUUID } = await import("node:crypto");
       const id = randomUUID();
@@ -660,7 +685,7 @@ describe("DeviceManager", () => {
           overrides.channelIndex ?? 0,
           overrides.text ?? "test",
           overrides.rxTime ?? "2025-01-01T00:00:00Z",
-        ]
+        ],
       );
       return id;
     }
@@ -679,7 +704,10 @@ describe("DeviceManager", () => {
       await seedMessage(connected.id, { channelIndex: 0, text: "ch0" });
       await seedMessage(connected.id, { channelIndex: 1, text: "ch1" });
 
-      const history = await manager.getMessageHistory(connected.id, { channelIndex: 1, limit: 100 });
+      const history = await manager.getMessageHistory(connected.id, {
+        channelIndex: 1,
+        limit: 100,
+      });
       expect(history).toHaveLength(1);
       expect(history[0].text).toBe("ch1");
     });

@@ -15,7 +15,7 @@ const REFRESH_MS = 72 * 60 * 60 * 1000; // 72 hours
 export async function syncHwModels(db: PGlite): Promise<void> {
   // Check age of last successful fetch
   const { rows } = await db.query<{ last_fetched: string | null }>(
-    "SELECT MAX(fetched_at) AS last_fetched FROM hw_models"
+    "SELECT MAX(fetched_at) AS last_fetched FROM hw_models",
   );
   const lastFetched = rows[0]?.last_fetched ? new Date(rows[0].last_fetched) : null;
   const ageMs = lastFetched ? Date.now() - lastFetched.getTime() : Infinity;
@@ -50,7 +50,7 @@ export async function syncHwModels(db: PGlite): Promise<void> {
            VALUES ($1, $2, $3)
            ON CONFLICT(model_num) DO UPDATE
              SET name = EXCLUDED.name, fetched_at = EXCLUDED.fetched_at`,
-          [num, name, now]
+          [num, name, now],
         );
       }
     });
@@ -59,7 +59,7 @@ export async function syncHwModels(db: PGlite): Promise<void> {
   } catch (err: unknown) {
     console.warn(
       "[hw-models] sync failed (will retry at next startup if still stale):",
-      err instanceof Error ? err.message : err
+      err instanceof Error ? err.message : err,
     );
   }
 }
@@ -67,7 +67,7 @@ export async function syncHwModels(db: PGlite): Promise<void> {
 /** Return the full hw_models table as a plain number→name map. */
 export async function getHwModels(db: PGlite): Promise<Record<number, string>> {
   const { rows } = await db.query<{ model_num: number; name: string }>(
-    "SELECT model_num, name FROM hw_models ORDER BY model_num"
+    "SELECT model_num, name FROM hw_models ORDER BY model_num",
   );
   const result: Record<number, string> = {};
   for (const r of rows) result[r.model_num] = r.name;

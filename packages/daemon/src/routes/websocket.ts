@@ -1,16 +1,26 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { FastifyInstance } from "fastify";
-import type { WebSocket, RawData } from "ws";
-import type { ServerEvent, ClientCommand, Message, MqttNode, ActivityEntry, LogEntry } from "@foreman/shared";
+
 import { clientCommandSchema } from "@foreman/shared";
 import { Types } from "@meshtastic/core";
+
+import { consoleLog } from "../activity/console-log.js";
+import { activityLog } from "../activity/log.js";
+
 import type { DeviceManager } from "../device/device-manager.js";
 import type { MqttGateway } from "../mqtt/gateway.js";
 import type { PGlite } from "@electric-sql/pglite";
-import { activityLog } from "../activity/log.js";
-import { consoleLog } from "../activity/console-log.js";
+import type {
+  ServerEvent,
+  ClientCommand,
+  Message,
+  MqttNode,
+  ActivityEntry,
+  LogEntry,
+} from "@foreman/shared";
+import type { FastifyInstance } from "fastify";
+import type { WebSocket, RawData } from "ws";
 
 /**
  * Updates a key=value pair in the root .env file.
@@ -89,7 +99,7 @@ export async function registerWsRoute(
             id: d.id,
             name: d.name,
             port: d.port,
-            status: live ? "connected" as const : "disconnected" as const,
+            status: live ? ("connected" as const) : ("disconnected" as const),
             connectedAt: live?.connectedAt ?? null,
             lastSeenAt: live?.connectedAt ?? d.last_seen ?? null,
             hardwareModel: d.hw_model ?? null,
@@ -111,7 +121,9 @@ export async function registerWsRoute(
         }
         const config = await deviceManager.getDeviceConfig(d.id);
         if (config) {
-          socket.send(JSON.stringify({ type: "device:config", payload: config } satisfies ServerEvent));
+          socket.send(
+            JSON.stringify({ type: "device:config", payload: config } satisfies ServerEvent),
+          );
         }
       }
 
@@ -127,20 +139,26 @@ export async function registerWsRoute(
       // Send recent activity log snapshot
       const snapshot = activityLog.snapshot();
       if (snapshot.length > 0) {
-        socket.send(JSON.stringify({ type: "activity:snapshot", payload: snapshot } satisfies ServerEvent));
+        socket.send(
+          JSON.stringify({ type: "activity:snapshot", payload: snapshot } satisfies ServerEvent),
+        );
       }
 
       // Send console log snapshot
       const logSnapshot = consoleLog.snapshot();
       if (logSnapshot.length > 0) {
-        socket.send(JSON.stringify({ type: "log:snapshot", payload: logSnapshot } satisfies ServerEvent));
+        socket.send(
+          JSON.stringify({ type: "log:snapshot", payload: logSnapshot } satisfies ServerEvent),
+        );
       }
 
       // Send current MQTT status
-      socket.send(JSON.stringify({
-        type: "mqtt:status",
-        payload: { enabled: mqttGateway?.isRunning ?? false },
-      } satisfies ServerEvent));
+      socket.send(
+        JSON.stringify({
+          type: "mqtt:status",
+          payload: { enabled: mqttGateway?.isRunning ?? false },
+        } satisfies ServerEvent),
+      );
     });
 
     socket.on("message", (raw: RawData) => {
@@ -152,18 +170,26 @@ export async function registerWsRoute(
           JSON.stringify({
             type: "error",
             payload: { code: "INVALID_COMMAND", message: "Unrecognized command" },
-          })
+          }),
         );
         return;
       }
 
-      handleClientCommand(parsed, socket, deviceManager, packetSubscriptions, mqttGateway, db, broadcast).catch((err) => {
+      handleClientCommand(
+        parsed,
+        socket,
+        deviceManager,
+        packetSubscriptions,
+        mqttGateway,
+        db,
+        broadcast,
+      ).catch((err) => {
         console.error("[ws] command error:", err);
         socket.send(
           JSON.stringify({
             type: "error",
             payload: { code: "COMMAND_ERROR", message: String(err.message) },
-          })
+          }),
         );
       });
     });
@@ -190,17 +216,19 @@ async function handleClientCommand(
       const { deviceId, text, toNodeId, channelIndex, wantAck } = command.payload;
       const device = deviceManager.getDevice(deviceId);
       if (!device) {
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
-        }));
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
+          }),
+        );
         return;
       }
       const packetId = await device.meshDevice.sendText(
         text,
         toNodeId,
         wantAck,
-        channelIndex as Types.ChannelNumber
+        channelIndex as Types.ChannelNumber,
       );
       const txTime = new Date().toISOString();
       const msgId = randomUUID();
@@ -211,7 +239,18 @@ async function handleClientCommand(
           `INSERT INTO messages(id, packet_id, device_id, from_node_id, to_node_id, channel_index,
              text, rx_time, want_ack, role, ack_status, reply_to_packet_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'sent', $10, 0)`,
-          [msgId, packetId, deviceId, myNodeId, toNodeId, channelIndex, text, txTime, wantAck, ackStatus]
+          [
+            msgId,
+            packetId,
+            deviceId,
+            myNodeId,
+            toNodeId,
+            channelIndex,
+            text,
+            txTime,
+            wantAck,
+            ackStatus,
+          ],
         );
       }
       const sentMsg: Message = {
@@ -241,10 +280,15 @@ async function handleClientCommand(
     case "packets:subscribe": {
       const device = deviceManager.getDevice(command.payload.deviceId);
       if (!device) {
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${command.payload.deviceId}` },
-        }));
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            payload: {
+              code: "DEVICE_NOT_FOUND",
+              message: `No device with id ${command.payload.deviceId}`,
+            },
+          }),
+        );
         return;
       }
       if (command.payload.enabled) {
@@ -260,10 +304,12 @@ async function handleClientCommand(
       const { deviceId } = command.payload;
       const device = deviceManager.getDevice(deviceId);
       if (!device) {
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
-        }));
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
+          }),
+        );
         return;
       }
       const nodes = await deviceManager.listNodes(deviceId);
@@ -285,21 +331,30 @@ async function handleClientCommand(
       const { deviceId, nodeId } = command.payload;
       const device = deviceManager.getDevice(deviceId);
       if (!device) {
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
-        }));
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
+          }),
+        );
         return;
       }
       // Re-emit cached GPS immediately so the frontend spinner clears with current data.
       // The requestPosition call below may or may not yield fresher data afterward.
       deviceManager.refreshGpsPosition(deviceId);
       // Fire-and-forget: ask the hardware for a fresh position in the background.
-      device.meshDevice.requestPosition(nodeId).then(() => {
-        console.log(`[ws] node:request-position → ${device.name} for node !${nodeId.toString(16).padStart(8,"0")}`);
-      }).catch((err: unknown) => {
-        console.log(`[ws] node:request-position failed for !${nodeId.toString(16).padStart(8,"0")}: ${err instanceof Error ? err.message : String(err)}`);
-      });
+      device.meshDevice
+        .requestPosition(nodeId)
+        .then(() => {
+          console.log(
+            `[ws] node:request-position → ${device.name} for node !${nodeId.toString(16).padStart(8, "0")}`,
+          );
+        })
+        .catch((err: unknown) => {
+          console.log(
+            `[ws] node:request-position failed for !${nodeId.toString(16).padStart(8, "0")}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
       break;
     }
 
@@ -307,22 +362,30 @@ async function handleClientCommand(
       const { deviceId, nodeId } = command.payload;
       const device = deviceManager.getDevice(deviceId);
       if (!device) {
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
-        }));
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
+          }),
+        );
         return;
       }
       try {
         await device.meshDevice.traceRoute(nodeId);
-        console.log(`[ws] node:traceroute → ${device.name} for node !${nodeId.toString(16).padStart(8,"0")}`);
+        console.log(
+          `[ws] node:traceroute → ${device.name} for node !${nodeId.toString(16).padStart(8, "0")}`,
+        );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.log(`[ws] node:traceroute failed for !${nodeId.toString(16).padStart(8,"0")}: ${msg}`);
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { code: "NODE_UNREACHABLE", message: `Traceroute failed (${msg})`, nodeId },
-        }));
+        console.log(
+          `[ws] node:traceroute failed for !${nodeId.toString(16).padStart(8, "0")}: ${msg}`,
+        );
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            payload: { code: "NODE_UNREACHABLE", message: `Traceroute failed (${msg})`, nodeId },
+          }),
+        );
       }
       break;
     }
@@ -331,30 +394,43 @@ async function handleClientCommand(
       const { deviceId, nodeId } = command.payload;
       const device = deviceManager.getDevice(deviceId);
       if (!device) {
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
-        }));
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
+          }),
+        );
         return;
       }
       try {
         // Tell the radio to wipe this node from its nodeDB via AdminMessage over serial
         await device.meshDevice.removeNodeByNum(nodeId);
-        console.log(`[ws] node:remove → ${device.name} removed !${nodeId.toString(16).padStart(8,"0")} from device nodeDB`);
+        console.log(
+          `[ws] node:remove → ${device.name} removed !${nodeId.toString(16).padStart(8, "0")} from device nodeDB`,
+        );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[ws] node:remove serial failed for !${nodeId.toString(16).padStart(8,"0")}: ${msg}`);
+        console.warn(
+          `[ws] node:remove serial failed for !${nodeId.toString(16).padStart(8, "0")}: ${msg}`,
+        );
         // Don't abort — still clear our local cache below so the UI refreshes
       }
       // Always clear from daemon's local DB so stale data doesn't linger
       if (db) {
-        await db.query("DELETE FROM nodes WHERE device_id = $1 AND node_id = $2", [deviceId, nodeId]);
-        console.log(`[ws] node:remove cleared !${nodeId.toString(16).padStart(8,"0")} from local DB`);
+        await db.query("DELETE FROM nodes WHERE device_id = $1 AND node_id = $2", [
+          deviceId,
+          nodeId,
+        ]);
+        console.log(
+          `[ws] node:remove cleared !${nodeId.toString(16).padStart(8, "0")} from local DB`,
+        );
       }
-      socket.send(JSON.stringify({
-        type: "node:removed",
-        payload: { nodeId },
-      } satisfies ServerEvent));
+      socket.send(
+        JSON.stringify({
+          type: "node:removed",
+          payload: { nodeId },
+        } satisfies ServerEvent),
+      );
       break;
     }
 
@@ -362,10 +438,12 @@ async function handleClientCommand(
       const { deviceId } = command.payload;
       const config = await deviceManager.getDeviceConfig(deviceId);
       if (!config) {
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { code: "DEVICE_NOT_FOUND", message: `No config for device ${deviceId}` },
-        }));
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            payload: { code: "DEVICE_NOT_FOUND", message: `No config for device ${deviceId}` },
+          }),
+        );
         return;
       }
       socket.send(JSON.stringify({ type: "device:config", payload: config } satisfies ServerEvent));
@@ -376,13 +454,20 @@ async function handleClientCommand(
     case "device:set-config": {
       const { deviceId, namespace, section, value } = command.payload;
       try {
-        await deviceManager.applyConfigSection(deviceId, namespace, section, value as Record<string, unknown>);
+        await deviceManager.applyConfigSection(
+          deviceId,
+          namespace,
+          section,
+          value as Record<string, unknown>,
+        );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { code: "SET_CONFIG_FAILED", message: msg },
-        } satisfies ServerEvent));
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            payload: { code: "SET_CONFIG_FAILED", message: msg },
+          } satisfies ServerEvent),
+        );
       }
       break;
     }
@@ -390,10 +475,12 @@ async function handleClientCommand(
     case "mqtt:toggle": {
       const { enabled } = command.payload;
       if (!mqttGateway) {
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { code: "NO_MQTT", message: "MQTT gateway not configured" },
-        } satisfies ServerEvent));
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            payload: { code: "NO_MQTT", message: "MQTT gateway not configured" },
+          } satisfies ServerEvent),
+        );
         return;
       }
       if (enabled && !mqttGateway.isRunning) {
@@ -414,10 +501,12 @@ async function handleClientCommand(
       const { deviceId, channelIndex, toNodeId, limit, before } = command.payload;
       const device = deviceManager.getDevice(deviceId);
       if (!device) {
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
-        }));
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            payload: { code: "DEVICE_NOT_FOUND", message: `No device with id ${deviceId}` },
+          }),
+        );
         return;
       }
       const messages = await deviceManager.getMessageHistory(deviceId, {
@@ -428,7 +517,9 @@ async function handleClientCommand(
       });
       const event: ServerEvent = { type: "message:history", payload: messages };
       socket.send(JSON.stringify(event));
-      console.log(`[ws] messages:request-history → ${device.name}, returned ${messages.length} messages`);
+      console.log(
+        `[ws] messages:request-history → ${device.name}, returned ${messages.length} messages`,
+      );
       break;
     }
   }

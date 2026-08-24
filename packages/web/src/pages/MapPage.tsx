@@ -1,23 +1,42 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import MapGL, { type MapRef, Marker, Popup, NavigationControl, Source, Layer } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { NodeInfo, MqttNode, DeviceConfig, CoverageProposal } from "@foreman/shared";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import MapGL, {
+  type MapRef,
+  Marker,
+  Popup,
+  NavigationControl,
+  Source,
+  Layer,
+} from "react-map-gl/maplibre";
+
+import { buildCoverageCircle, clipViewshedToRadius } from "../lib/coordinateHelpers.js";
+import { mergeCoveragePolygons } from "../lib/coverageMath.js";
 import { foremanClient } from "../ws/client.js";
-import { union } from "@turf/union";
-import { featureCollection } from "@turf/helpers";
+
+import type { NodeInfo, MqttNode, DeviceConfig, CoverageProposal } from "@foreman/shared";
 
 type PendingMapAction = { nodeId: number; action: "ping" | "traceroute" };
 
-const MAP_STYLE =
-  import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty";
+const MAP_STYLE = import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty";
 
 const TERRAIN_MAP_STYLE = "https://tiles.stadiamaps.com/styles/stamen_terrain.json";
 
 const HW_MODEL: Record<number, string> = {
-  0: "UNSET", 4: "TBEAM", 8: "T_ECHO", 10: "RAK4631", 13: "LILYGO_TBEAM_S3_CORE",
-  43: "HELTEC_V3", 48: "HELTEC_WIRELESS_TRACKER", 49: "HELTEC_WIRELESS_PAPER",
-  50: "T_DECK", 51: "T_WATCH_S3", 64: "TRACKER_T1000_E", 66: "WIO_E5",
-  95: "HELTEC_WIRELESS_PAPER_V3", 99: "SEEED_WIO_TRACKER_L1", 255: "PRIVATE_HW",
+  0: "UNSET",
+  4: "TBEAM",
+  8: "T_ECHO",
+  10: "RAK4631",
+  13: "LILYGO_TBEAM_S3_CORE",
+  43: "HELTEC_V3",
+  48: "HELTEC_WIRELESS_TRACKER",
+  49: "HELTEC_WIRELESS_PAPER",
+  50: "T_DECK",
+  51: "T_WATCH_S3",
+  64: "TRACKER_T1000_E",
+  66: "WIO_E5",
+  95: "HELTEC_WIRELESS_PAPER_V3",
+  99: "SEEED_WIO_TRACKER_L1",
+  255: "PRIVATE_HW",
 };
 
 function nodeHex(nodeId: number): string {
@@ -57,10 +76,10 @@ interface StoredTraceroute {
 // ---------------------------------------------------------------------------
 
 const AGE_OPTIONS: { label: string; hours: number }[] = [
-  { label: "1h",  hours: 1 },
-  { label: "6h",  hours: 6 },
+  { label: "1h", hours: 1 },
+  { label: "6h", hours: 6 },
   { label: "24h", hours: 24 },
-  { label: "7d",  hours: 168 },
+  { label: "7d", hours: 168 },
   { label: "All", hours: 0 },
 ];
 
@@ -80,20 +99,26 @@ const COVERAGE_RADII_KM = [1, 2, 3, 5, 7, 10, 12, 15, 20];
  *   4 MEDIUM_FAST · 5 SHORT_SLOW · 6 SHORT_FAST · 7 LONG_MODERATE · 8 SHORT_TURBO
  */
 const MODEM_PRESET_RADIUS_KM: Record<number, number> = {
-  0: 10,  // LONG_FAST
-  1: 15,  // LONG_SLOW
-  2: 20,  // VERY_LONG_SLOW
-  3: 7,   // MEDIUM_SLOW
-  4: 5,   // MEDIUM_FAST
-  5: 3,   // SHORT_SLOW
-  6: 2,   // SHORT_FAST
-  7: 12,  // LONG_MODERATE
-  8: 1,   // SHORT_TURBO
+  0: 10, // LONG_FAST
+  1: 15, // LONG_SLOW
+  2: 20, // VERY_LONG_SLOW
+  3: 7, // MEDIUM_SLOW
+  4: 5, // MEDIUM_FAST
+  5: 3, // SHORT_SLOW
+  6: 2, // SHORT_FAST
+  7: 12, // LONG_MODERATE
+  8: 1, // SHORT_TURBO
 };
 export const MODEM_PRESET_LABEL: Record<number, string> = {
-  0: "LONG_FAST", 1: "LONG_SLOW", 2: "VERY_LONG_SLOW",
-  3: "MEDIUM_SLOW", 4: "MEDIUM_FAST", 5: "SHORT_SLOW",
-  6: "SHORT_FAST", 7: "LONG_MODERATE", 8: "SHORT_TURBO",
+  0: "LONG_FAST",
+  1: "LONG_SLOW",
+  2: "VERY_LONG_SLOW",
+  3: "MEDIUM_SLOW",
+  4: "MEDIUM_FAST",
+  5: "SHORT_SLOW",
+  6: "SHORT_FAST",
+  7: "LONG_MODERATE",
+  8: "SHORT_TURBO",
 };
 const DEFAULT_RADIUS_KM = 10; // LONG_FAST fallback
 
@@ -104,9 +129,15 @@ export function channelNameToPreset(name: string | null | undefined): number | n
   if (!name) return null;
   const key = name.toLowerCase().replace(/[_\-\s]/g, "");
   const map: Record<string, number> = {
-    longfast: 0, longslow: 1, verylongslow: 2,
-    mediumslow: 3, mediumfast: 4, shortslow: 5,
-    shortfast: 6, longmoderate: 7, shortturbo: 8,
+    longfast: 0,
+    longslow: 1,
+    verylongslow: 2,
+    mediumslow: 3,
+    mediumfast: 4,
+    shortslow: 5,
+    shortfast: 6,
+    longmoderate: 7,
+    shortturbo: 8,
   };
   return map[key] ?? null;
 }
@@ -118,85 +149,16 @@ const TERRAIN_FETCH_RADIUS_KM = 20;
 // Viewshed clip helpers
 // ---------------------------------------------------------------------------
 
-/** Spherical destination point — mirrors the formula in coverage.ts */
-function destinationPoint(
-  lat: number, lon: number, bearingDeg: number, distKm: number,
-): { lat: number; lon: number } {
-  const R = 6371;
-  const δ = distKm / R;
-  const φ1 = (lat * Math.PI) / 180;
-  const λ1 = (lon * Math.PI) / 180;
-  const θ = (bearingDeg * Math.PI) / 180;
-  const φ2 = Math.asin(Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ));
-  const λ2 = λ1 + Math.atan2(Math.sin(θ) * Math.sin(δ) * Math.cos(φ1), Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2));
-  return { lat: (φ2 * 180) / Math.PI, lon: (((λ2 * 180) / Math.PI) + 540) % 360 - 180 };
-}
-
-/**
- * Trim a viewshed polygon (always fetched at TERRAIN_FETCH_RADIUS_KM) to a
- * smaller display radius.  Each vertex beyond maxRadiusKm is projected back
- * to that radius along the same bearing from the source, preserving the
- * terrain shape where it's closer than the limit.
- */
-function clipViewshedToRadius(
-  polygon: GeoJSON.Feature<GeoJSON.Polygon>,
-  sourceLat: number,
-  sourceLon: number,
-  maxRadiusKm: number,
-): GeoJSON.Feature<GeoJSON.Polygon> {
-  const R = 6371;
-  const ring = polygon.geometry.coordinates[0];
-  const clipped = ring.map(([lon, lat]): [number, number] => {
-    const dLat = ((lat - sourceLat) * Math.PI) / 180;
-    const dLon = ((lon - sourceLon) * Math.PI) / 180;
-    const a = Math.sin(dLat / 2) ** 2
-      + Math.cos((sourceLat * Math.PI) / 180) * Math.cos((lat * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-    const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    if (distKm <= maxRadiusKm) return [lon, lat];
-    // Bearing source → vertex, then project back to maxRadiusKm
-    const φ1 = (sourceLat * Math.PI) / 180;
-    const φ2 = (lat * Math.PI) / 180;
-    const Δλ = ((lon - sourceLon) * Math.PI) / 180;
-    const bearing = (Math.atan2(Math.sin(Δλ) * Math.cos(φ2), Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ)) * 180) / Math.PI;
-    const pt = destinationPoint(sourceLat, sourceLon, bearing, maxRadiusKm);
-    return [pt.lon, pt.lat];
-  });
-  return { ...polygon, geometry: { type: "Polygon", coordinates: [clipped] } };
-}
-
-function presetRadiusKm(deviceConfigs: Map<string, DeviceConfig>, deviceId: string | null | undefined): number {
+function presetRadiusKm(
+  deviceConfigs: Map<string, DeviceConfig>,
+  deviceId: string | null | undefined,
+): number {
   if (!deviceId) return DEFAULT_RADIUS_KM;
   const cfg = deviceConfigs.get(deviceId);
-  const preset = (cfg?.radioConfig as { lora?: { modemPreset?: number } } | undefined)?.lora?.modemPreset;
+  const preset = (cfg?.radioConfig as { lora?: { modemPreset?: number } } | undefined)?.lora
+    ?.modemPreset;
   if (preset == null) return DEFAULT_RADIUS_KM;
   return MODEM_PRESET_RADIUS_KM[preset] ?? DEFAULT_RADIUS_KM;
-}
-
-/**
- * Approximate a geodesic circle as a GeoJSON Polygon.
- * Uses equirectangular projection — accurate enough for LoRa ranges (≤20 km).
- */
-function buildCoverageCircle(
-  lon: number,
-  lat: number,
-  radiusKm: number,
-  color: string,
-  steps = 64,
-  focused = false,
-): GeoJSON.Feature<GeoJSON.Polygon> {
-  const latRad = (lat * Math.PI) / 180;
-  const dLat = radiusKm / 110.574;
-  const dLon = radiusKm / (111.32 * Math.cos(latRad));
-  const coords: [number, number][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const angle = (i / steps) * 2 * Math.PI;
-    coords.push([lon + dLon * Math.cos(angle), lat + dLat * Math.sin(angle)]);
-  }
-  return {
-    type: "Feature",
-    properties: { color, focused: focused ? 1 : 0 },
-    geometry: { type: "Polygon", coordinates: [coords] },
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -219,10 +181,7 @@ interface Segment {
  * Where one or more hops are missing GPS data, we "skip" to the next known
  * node and draw a dashed segment to indicate the gap.
  */
-function buildSegments(
-  traceroute: StoredTraceroute,
-  posMap: Map<number, Coord>,
-): Segment[] {
+function buildSegments(traceroute: StoredTraceroute, posMap: Map<number, Coord>): Segment[] {
   const path = [traceroute.fromNodeId, ...traceroute.route, traceroute.toNodeId];
   const color = nodeColor(traceroute.toNodeId);
   const segments: Segment[] = [];
@@ -251,9 +210,7 @@ function buildSegments(
 // Component
 // ---------------------------------------------------------------------------
 
-type SelectedNode =
-  | { source: "mesh"; node: NodeInfo }
-  | { source: "mqtt"; node: MqttNode };
+type SelectedNode = { source: "mesh"; node: NodeInfo } | { source: "mqtt"; node: MqttNode };
 
 interface Props {
   nodes: NodeInfo[];
@@ -272,7 +229,19 @@ interface Props {
   setPresetFilter?: (v: number | null) => void;
 }
 
-export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, setShowMqtt, deviceId, deviceConfigs, onMessage, focusedNodeId, onClearFocusedNode, presetFilter = null, setPresetFilter }: Props) {
+export function MapPage({
+  nodes,
+  mqttNodes,
+  showMesh,
+  showMqtt,
+  deviceId,
+  deviceConfigs,
+  onMessage,
+  focusedNodeId,
+  onClearFocusedNode,
+  presetFilter = null,
+  setPresetFilter,
+}: Props) {
   const [selected, setSelected] = useState<SelectedNode | null>(null);
   const [stackedNodes, setStackedNodes] = useState<SelectedNode[]>([]);
   const [mapSearch, setMapSearch] = useState("");
@@ -287,7 +256,7 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
   const [coverageExpanded, setCoverageExpanded] = useState(false);
   const [coverageMqtt, setCoverageMqtt] = useState(false);
   const [coverageRadiusKm, setCoverageRadiusKm] = useState(() =>
-    presetRadiusKm(deviceConfigs ?? new Map(), deviceId)
+    presetRadiusKm(deviceConfigs ?? new Map(), deviceId),
   );
   // Re-snap radius to preset when config first arrives (e.g. device connects after page load),
   // but only if the user hasn't manually picked a radius yet.
@@ -306,7 +275,8 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
   const availablePresets = useMemo(() => {
     const seen = new Set<number>();
     const cfg = deviceConfigs?.get(deviceId ?? "");
-    const meshPreset = (cfg?.radioConfig as { lora?: { modemPreset?: number } } | undefined)?.lora?.modemPreset;
+    const meshPreset = (cfg?.radioConfig as { lora?: { modemPreset?: number } } | undefined)?.lora
+      ?.modemPreset;
     if (meshPreset != null) seen.add(meshPreset);
     for (const n of mqttNodes) {
       const p = channelNameToPreset(n.channelName);
@@ -321,18 +291,22 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
   // Viewshed cache: nodeId → GeoJSON polygon always fetched at TERRAIN_FETCH_RADIUS_KM.
   // One entry per node; display radius is applied via clipViewshedToRadius at render time.
   const viewshedCache = useRef(new Map<string, GeoJSON.Feature<GeoJSON.Polygon>>());
-  const [viewshedStatus, setViewshedStatus] = useState<Map<number, "loading" | "ready" | "error">>(new Map());
+  const [viewshedStatus, setViewshedStatus] = useState<Map<number, "loading" | "ready" | "error">>(
+    new Map(),
+  );
   const mapRef = useRef<MapRef>(null);
 
   // ── Coverage proposal planning ──────────────────────────────────────────
   const [proposals, setProposals] = useState<CoverageProposal[]>([]);
   const [proposalPlanningMode, setProposalPlanningMode] = useState(false);
-  const [showProposals, setShowProposals] = useState(true);
+  const [showProposals] = useState(true);
   const [proposalsExpanded, setProposalsExpanded] = useState(false);
   const [selectedProposal, setSelectedProposal] = useState<CoverageProposal | null>(null);
   const mapStyle = terrainMode ? TERRAIN_MAP_STYLE : MAP_STYLE;
   const proposalViewshedCache = useRef(new Map<string, GeoJSON.Feature<GeoJSON.Polygon>>());
-  const [proposalViewshedStatus, setProposalViewshedStatus] = useState<Map<string, "loading" | "ready" | "error">>(new Map());
+  const [proposalViewshedStatus, setProposalViewshedStatus] = useState<
+    Map<string, "loading" | "ready" | "error">
+  >(new Map());
 
   // When a node is focused (from Nodes tab or map popup): enable terrain coverage and fly to it.
   useEffect(() => {
@@ -343,18 +317,26 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
 
   useEffect(() => {
     if (effectiveFocusedNodeId == null) return;
-    const node = [...mappableMesh, ...mappableMqtt].find((n) => n.nodeId === effectiveFocusedNodeId);
+    const node = [...mappableMesh, ...mappableMqtt].find(
+      (n) => n.nodeId === effectiveFocusedNodeId,
+    );
     if (!node?.longitude || !node?.latitude) return;
     mapRef.current?.flyTo({ center: [node.longitude, node.latitude], zoom: 12, duration: 1200 });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveFocusedNodeId]);
 
   // Clear popup when the relevant source is hidden
   useEffect(() => {
-    if (!showMesh && selected?.source === "mesh") { setSelected(null); setStackedNodes([]); }
+    if (!showMesh && selected?.source === "mesh") {
+      setSelected(null);
+      setStackedNodes([]);
+    }
   }, [showMesh]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!showMqtt && selected?.source === "mqtt") { setSelected(null); setStackedNodes([]); }
+    if (!showMqtt && selected?.source === "mqtt") {
+      setSelected(null);
+      setStackedNodes([]);
+    }
   }, [showMqtt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch stored traceroutes from the API
@@ -367,7 +349,7 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
       }
       const res = await fetch(url);
       if (!res.ok) return;
-      const data = await res.json() as StoredTraceroute[];
+      const data = (await res.json()) as StoredTraceroute[];
       setTraceroutes(data);
     } catch {
       // ignore fetch errors (daemon may be restarting)
@@ -393,11 +375,13 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
       if (event.type === "traceroute:result") {
         fetchTraceroutes();
         setPendingAction((p) =>
-          p?.action === "traceroute" && p.nodeId === event.payload.nodeId ? null : p
+          p?.action === "traceroute" && p.nodeId === event.payload.nodeId ? null : p,
         );
       }
     });
-    return () => { off(); };
+    return () => {
+      off();
+    };
   }, [fetchTraceroutes]);
 
   // Build nodeId → [lon, lat] lookup from all known nodes
@@ -421,7 +405,8 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
     const solidFeatures: GeoJSON.Feature[] = [];
     const dashedFeatures: GeoJSON.Feature[] = [];
 
-    if (!showTraceroutes) return { solidGeoJson: mkFeatureCollection([]), dashedGeoJson: mkFeatureCollection([]) };
+    if (!showTraceroutes)
+      return { solidGeoJson: mkFeatureCollection([]), dashedGeoJson: mkFeatureCollection([]) };
 
     for (const tr of traceroutes) {
       const segs = buildSegments(tr, posMap);
@@ -460,14 +445,19 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
 
   // Only produce new array references when GPS-relevant data actually changes,
   // preventing the viewshed effect from re-firing on every WebSocket update.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const mappableMesh = useMemo(() => nodes.filter((n) => n.latitude != null && n.longitude != null), [meshGpsKey]);
+
+  const mappableMesh = useMemo(
+    () => nodes.filter((n) => n.latitude != null && n.longitude != null),
+    [meshGpsKey],
+  );
   // Exclude any MQTT node whose nodeId is already present in the mesh list —
   // the mesh copy is authoritative and we don't want duplicate markers/coverage.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   const mappableMqtt = useMemo(() => {
     const meshIds = new Set(mappableMesh.map((n) => n.nodeId));
-    return mqttNodes.filter((n) => n.latitude != null && n.longitude != null && !meshIds.has(n.nodeId));
+    return mqttNodes.filter(
+      (n) => n.latitude != null && n.longitude != null && !meshIds.has(n.nodeId),
+    );
   }, [mqttGpsKey, meshGpsKey]);
   const allMappable = [...mappableMesh, ...mappableMqtt];
 
@@ -475,20 +465,22 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
   const filteredMesh = useMemo(() => {
     const q = mapSearch.trim().toLowerCase();
     if (!q) return mappableMesh;
-    return mappableMesh.filter((n) =>
-      (n.shortName ?? "").toLowerCase().includes(q) ||
-      (n.longName  ?? "").toLowerCase().includes(q) ||
-      nodeHex(n.nodeId).toLowerCase().includes(q)
+    return mappableMesh.filter(
+      (n) =>
+        (n.shortName ?? "").toLowerCase().includes(q) ||
+        (n.longName ?? "").toLowerCase().includes(q) ||
+        nodeHex(n.nodeId).toLowerCase().includes(q),
     );
   }, [mappableMesh, mapSearch]);
 
   const filteredMqtt = useMemo(() => {
     const q = mapSearch.trim().toLowerCase();
     if (!q) return mappableMqtt;
-    return mappableMqtt.filter((n) =>
-      (n.shortName ?? "").toLowerCase().includes(q) ||
-      (n.longName  ?? "").toLowerCase().includes(q) ||
-      nodeHex(n.nodeId).toLowerCase().includes(q)
+    return mappableMqtt.filter(
+      (n) =>
+        (n.shortName ?? "").toLowerCase().includes(q) ||
+        (n.longName ?? "").toLowerCase().includes(q) ||
+        nodeHex(n.nodeId).toLowerCase().includes(q),
     );
   }, [mappableMqtt, mapSearch]);
 
@@ -503,11 +495,14 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
   }, [filteredMesh, filteredMqtt]);
 
   // Name of the currently focused node (for display in coverage panel)
-  const effectiveFocusedNode = effectiveFocusedNodeId != null
-    ? allMappable.find((n) => n.nodeId === effectiveFocusedNodeId)
-    : undefined;
+  const effectiveFocusedNode =
+    effectiveFocusedNodeId != null
+      ? allMappable.find((n) => n.nodeId === effectiveFocusedNodeId)
+      : undefined;
   const effectiveFocusedNodeName = effectiveFocusedNode
-    ? (effectiveFocusedNode.longName ?? effectiveFocusedNode.shortName ?? nodeHex(effectiveFocusedNode.nodeId))
+    ? (effectiveFocusedNode.longName ??
+      effectiveFocusedNode.shortName ??
+      nodeHex(effectiveFocusedNode.nodeId))
     : null;
 
   // Fetch terrain viewsheds for all mappable nodes when terrain mode is active.
@@ -518,9 +513,10 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
       return;
     }
     // In single-node mode only fetch for that node; otherwise fetch all.
-    const allNodes = effectiveFocusedNodeId != null
-      ? [...mappableMesh, ...mappableMqtt].filter((n) => n.nodeId === effectiveFocusedNodeId)
-      : [...mappableMesh, ...mappableMqtt];
+    const allNodes =
+      effectiveFocusedNodeId != null
+        ? [...mappableMesh, ...mappableMqtt].filter((n) => n.nodeId === effectiveFocusedNodeId)
+        : [...mappableMesh, ...mappableMqtt];
     if (allNodes.length === 0) return;
 
     // Evict stale cache entries for nodes no longer in the visible set to prevent unbounded memory growth.
@@ -546,14 +542,14 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
     const queue = allNodes.filter((n) => !viewshedCache.current.has(`${n.nodeId}`));
     let qi = 0;
 
-    async function fetchOne(n: typeof allNodes[0]): Promise<void> {
+    async function fetchOne(n: (typeof allNodes)[0]): Promise<void> {
       const key = `${n.nodeId}`;
       const antennaM = n.altitude != null ? n.altitude + 2 : 2;
       const url = `/api/coverage/viewshed?lat=${n.latitude}&lon=${n.longitude}&radiusKm=${TERRAIN_FETCH_RADIUS_KM}&altitudeM=${antennaM}`;
       try {
         const r = await fetch(url);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const geojson = await r.json() as GeoJSON.Feature<GeoJSON.Polygon>;
+        const geojson = (await r.json()) as GeoJSON.Feature<GeoJSON.Polygon>;
         // Always write to cache — preserves work even if cancelled so a
         // subsequent toggle-on skips nodes already fetched.
         viewshedCache.current.set(key, geojson);
@@ -576,15 +572,18 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
     const CONCURRENCY = 3;
     Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
   }, [showCoverage, terrainMode, effectiveFocusedNodeId, mappableMesh, mappableMqtt]);
 
   // Fetch viewsheds for visible proposals whenever terrain mode is active.
   // Uses same concurrency-limited queue pattern as the live node viewshed fetch.
   useEffect(() => {
     if (!showProposals || !terrainMode) return;
-    const visibleProposals = proposals.filter((p) => p.visible && !proposalViewshedCache.current.has(p.id));
+    const visibleProposals = proposals.filter(
+      (p) => p.visible && !proposalViewshedCache.current.has(p.id),
+    );
     if (visibleProposals.length === 0) return;
 
     let cancelled = false;
@@ -598,7 +597,7 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
         const url = `/api/coverage/viewshed?lat=${p.lat}&lon=${p.lon}&radiusKm=${TERRAIN_FETCH_RADIUS_KM}&altitudeM=${p.altitudeM}`;
         const r = await fetch(url);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const geojson = await r.json() as GeoJSON.Feature<GeoJSON.Polygon>;
+        const geojson = (await r.json()) as GeoJSON.Feature<GeoJSON.Polygon>;
         if (!cancelled) {
           proposalViewshedCache.current.set(key, geojson);
           setProposalViewshedStatus((prev) => new Map(prev).set(key, "ready"));
@@ -620,8 +619,9 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
     const CONCURRENCY = 3;
     Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
   }, [showProposals, terrainMode, proposals]);
 
   // Build GeoJSON for proposal coverage — always separate from live node coverage.
@@ -635,16 +635,17 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
       if (terrainMode) {
         const cached = proposalViewshedCache.current.get(p.id);
         if (!cached) continue;
-        const poly = radius < TERRAIN_FETCH_RADIUS_KM
-          ? clipViewshedToRadius(cached, p.lat, p.lon, radius)
-          : cached;
+        const poly =
+          radius < TERRAIN_FETCH_RADIUS_KM
+            ? clipViewshedToRadius(cached, p.lat, p.lon, radius)
+            : cached;
         features.push({ ...poly, properties: { ...poly.properties, color: "#f59e0b" } });
       } else {
         features.push(buildCoverageCircle(p.lon, p.lat, radius, "#f59e0b", 64, false));
       }
     }
     return mkFeatureCollection(features);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showProposals, terrainMode, proposals, proposalViewshedStatus]);
 
   // Build GeoJSON coverage layer.
@@ -659,7 +660,10 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
 
     const meshPreset = (() => {
       const cfg = deviceConfigs?.get(deviceId ?? "");
-      return (cfg?.radioConfig as { lora?: { modemPreset?: number } } | undefined)?.lora?.modemPreset ?? null;
+      return (
+        (cfg?.radioConfig as { lora?: { modemPreset?: number } } | undefined)?.lora?.modemPreset ??
+        null
+      );
     })();
 
     const features: GeoJSON.Feature[] = [];
@@ -670,12 +674,15 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
     const radiusFor = (preset: number | null) =>
       presetFilter !== null
         ? coverageRadiusKm
-        : (preset != null ? (MODEM_PRESET_RADIUS_KM[preset] ?? DEFAULT_RADIUS_KM) : DEFAULT_RADIUS_KM);
+        : preset != null
+          ? (MODEM_PRESET_RADIUS_KM[preset] ?? DEFAULT_RADIUS_KM)
+          : DEFAULT_RADIUS_KM;
 
     // ── Mesh nodes ────────────────────────────────────────────────────────────
-    const meshToShow = effectiveFocusedNodeId != null
-      ? mappableMesh.filter((n) => n.nodeId === effectiveFocusedNodeId)
-      : mappableMesh;
+    const meshToShow =
+      effectiveFocusedNodeId != null
+        ? mappableMesh.filter((n) => n.nodeId === effectiveFocusedNodeId)
+        : mappableMesh;
     for (const n of meshToShow) {
       if (presetFilter != null && meshPreset !== presetFilter) continue;
       const color = nodeColor(n.nodeId);
@@ -684,10 +691,14 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
       const cached = viewshedCache.current.get(`${n.nodeId}`);
       if (terrainMode) {
         if (!cached) continue;
-        const poly = radius < TERRAIN_FETCH_RADIUS_KM
-          ? clipViewshedToRadius(cached, n.latitude!, n.longitude!, radius)
-          : cached;
-        features.push({ ...poly, properties: { ...poly.properties, color, focused: isFocused ? 1 : 0 } });
+        const poly =
+          radius < TERRAIN_FETCH_RADIUS_KM
+            ? clipViewshedToRadius(cached, n.latitude!, n.longitude!, radius)
+            : cached;
+        features.push({
+          ...poly,
+          properties: { ...poly.properties, color, focused: isFocused ? 1 : 0 },
+        });
       } else {
         features.push(buildCoverageCircle(n.longitude!, n.latitude!, radius, color, 64, isFocused));
       }
@@ -695,9 +706,10 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
 
     // ── MQTT nodes — only included when explicitly enabled in coverage settings ──
     if (showMqtt && coverageMqtt) {
-      const mqttToShow = effectiveFocusedNodeId != null
-        ? mappableMqtt.filter((n) => n.nodeId === effectiveFocusedNodeId)
-        : mappableMqtt;
+      const mqttToShow =
+        effectiveFocusedNodeId != null
+          ? mappableMqtt.filter((n) => n.nodeId === effectiveFocusedNodeId)
+          : mappableMqtt;
       for (const n of mqttToShow) {
         const nodePreset = channelNameToPreset(n.channelName);
         if (presetFilter != null && nodePreset !== presetFilter) continue;
@@ -707,12 +719,18 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
         const cached = viewshedCache.current.get(`${n.nodeId}`);
         if (terrainMode) {
           if (!cached) continue;
-          const poly = radius < TERRAIN_FETCH_RADIUS_KM
-            ? clipViewshedToRadius(cached, n.latitude!, n.longitude!, radius)
-            : cached;
-          features.push({ ...poly, properties: { ...poly.properties, color, focused: isFocused ? 1 : 0 } });
+          const poly =
+            radius < TERRAIN_FETCH_RADIUS_KM
+              ? clipViewshedToRadius(cached, n.latitude!, n.longitude!, radius)
+              : cached;
+          features.push({
+            ...poly,
+            properties: { ...poly.properties, color, focused: isFocused ? 1 : 0 },
+          });
         } else {
-          features.push(buildCoverageCircle(n.longitude!, n.latitude!, radius, color, 64, isFocused));
+          features.push(
+            buildCoverageCircle(n.longitude!, n.latitude!, radius, color, 64, isFocused),
+          );
         }
       }
     }
@@ -723,29 +741,24 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
     // ── Union mode: merge all polygons into one shape ─────────────────────────
     // The result is a single filled area whose outer boundary traces the combined
     // coverage footprint.  Overlapping regions disappear — no stacked outlines.
-    if (features.length === 0) return mkFeatureCollection([]);
-    if (features.length === 1) {
-      // Single polygon — set consistent fill properties and return as-is.
-      const f = features[0];
-      const isFocused = effectiveFocusedNodeId != null;
-      const color = isFocused ? nodeColor(effectiveFocusedNodeId!) : "#3b82f6";
-      return mkFeatureCollection([{ ...f, properties: { color, focused: isFocused ? 1 : 0 } }]);
-    }
-    try {
-      const unioned = union(
-        featureCollection(features as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[])
-      );
-      if (unioned) {
-        const isFocused = effectiveFocusedNodeId != null;
-        const color = isFocused ? nodeColor(effectiveFocusedNodeId!) : "#3b82f6";
-        unioned.properties = { color, focused: isFocused ? 1 : 0 };
-        return mkFeatureCollection([unioned]);
-      }
-    } catch {
-      // Union failed (e.g. invalid geometry) — fall back to individual polygons.
-    }
-    return mkFeatureCollection(features);
-  }, [showCoverage, terrainMode, coverageRadiusKm, coverageMqtt, coverageUnion, effectiveFocusedNodeId, mappableMesh, mappableMqtt, showMqtt, presetFilter, deviceId, deviceConfigs, viewshedStatus]);
+    const isFocused = effectiveFocusedNodeId != null;
+    const color = isFocused ? nodeColor(effectiveFocusedNodeId!) : "#3b82f6";
+    return mergeCoveragePolygons(features, color, isFocused);
+  }, [
+    showCoverage,
+    terrainMode,
+    coverageRadiusKm,
+    coverageMqtt,
+    coverageUnion,
+    effectiveFocusedNodeId,
+    mappableMesh,
+    mappableMqtt,
+    showMqtt,
+    presetFilter,
+    deviceId,
+    deviceConfigs,
+    viewshedStatus,
+  ]);
 
   const firstNode = allMappable[0];
   const initialView = {
@@ -754,52 +767,64 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
     zoom: firstNode ? 10 : 4,
   };
 
-  const handleMeshClick = useCallback((node: NodeInfo, e: { originalEvent: MouseEvent }) => {
-    e.originalEvent.stopPropagation();
-    setSelected((prev) => {
-      if (prev?.source === "mesh" && prev.node.nodeId === node.nodeId) {
-        setStackedNodes([]);
-        return null;
-      }
-      return { source: "mesh", node };
-    });
-    const colocated: SelectedNode[] = [
-      ...filteredMesh
-        .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
-        .map((n): SelectedNode => ({ source: "mesh", node: n })),
-      ...filteredMqtt
-        .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
-        .map((n): SelectedNode => ({ source: "mqtt", node: n })),
-    ];
-    setStackedNodes(colocated.length > 1 ? colocated : []);
-  }, [filteredMesh, filteredMqtt]);
+  const handleMeshClick = useCallback(
+    (node: NodeInfo, e: { originalEvent: MouseEvent }) => {
+      e.originalEvent.stopPropagation();
+      setSelected((prev) => {
+        if (prev?.source === "mesh" && prev.node.nodeId === node.nodeId) {
+          setStackedNodes([]);
+          return null;
+        }
+        return { source: "mesh", node };
+      });
+      const colocated: SelectedNode[] = [
+        ...filteredMesh
+          .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
+          .map((n): SelectedNode => ({ source: "mesh", node: n })),
+        ...filteredMqtt
+          .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
+          .map((n): SelectedNode => ({ source: "mqtt", node: n })),
+      ];
+      setStackedNodes(colocated.length > 1 ? colocated : []);
+    },
+    [filteredMesh, filteredMqtt],
+  );
 
-  const handleMqttClick = useCallback((node: MqttNode, e: { originalEvent: MouseEvent }) => {
-    e.originalEvent.stopPropagation();
-    setSelected((prev) => {
-      if (prev?.source === "mqtt" && prev.node.nodeId === node.nodeId) {
-        setStackedNodes([]);
-        return null;
-      }
-      return { source: "mqtt", node };
-    });
-    const colocated: SelectedNode[] = [
-      ...filteredMesh
-        .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
-        .map((n): SelectedNode => ({ source: "mesh", node: n })),
-      ...filteredMqtt
-        .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
-        .map((n): SelectedNode => ({ source: "mqtt", node: n })),
-    ];
-    setStackedNodes(colocated.length > 1 ? colocated : []);
-  }, [filteredMesh, filteredMqtt]);
+  const handleMqttClick = useCallback(
+    (node: MqttNode, e: { originalEvent: MouseEvent }) => {
+      e.originalEvent.stopPropagation();
+      setSelected((prev) => {
+        if (prev?.source === "mqtt" && prev.node.nodeId === node.nodeId) {
+          setStackedNodes([]);
+          return null;
+        }
+        return { source: "mqtt", node };
+      });
+      const colocated: SelectedNode[] = [
+        ...filteredMesh
+          .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
+          .map((n): SelectedNode => ({ source: "mesh", node: n })),
+        ...filteredMqtt
+          .filter((n) => n.latitude === node.latitude && n.longitude === node.longitude)
+          .map((n): SelectedNode => ({ source: "mqtt", node: n })),
+      ];
+      setStackedNodes(colocated.length > 1 ? colocated : []);
+    },
+    [filteredMesh, filteredMqtt],
+  );
 
   const selectedLon =
-    selected?.source === "mesh" ? selected.node.longitude :
-    selected?.source === "mqtt" ? selected.node.longitude : null;
+    selected?.source === "mesh"
+      ? selected.node.longitude
+      : selected?.source === "mqtt"
+        ? selected.node.longitude
+        : null;
   const selectedLat =
-    selected?.source === "mesh" ? selected.node.latitude :
-    selected?.source === "mqtt" ? selected.node.latitude : null;
+    selected?.source === "mesh"
+      ? selected.node.latitude
+      : selected?.source === "mqtt"
+        ? selected.node.latitude
+        : null;
 
   return (
     <div style={styles.wrap}>
@@ -824,7 +849,14 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
                 return fetch("/api/proposals", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name, lat, lon: lng, altitudeM, modemPreset: 0, notes: null }),
+                  body: JSON.stringify({
+                    name,
+                    lat,
+                    lon: lng,
+                    altitudeM,
+                    modemPreset: 0,
+                    notes: null,
+                  }),
                 }).then((r) => r.json());
               })
               .then((p: CoverageProposal) => setProposals((prev) => [...prev, p]))
@@ -905,132 +937,145 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
         </Source>
 
         {/* Mesh node markers */}
-        {showMesh && filteredMesh.map((node) => {
-          const isLocal = node.hopsAway === 0;
-          const color = nodeColor(node.nodeId);
-          const stackCount = colocatedCounts.get(`${node.latitude}:${node.longitude}`) ?? 1;
-          const hasStack = stackCount > 1;
-          const size = hasStack ? "2.4rem" : "2rem";
-          return (
-            <Marker
-              key={`mesh-${node.nodeId}`}
-              longitude={node.longitude!}
-              latitude={node.latitude!}
-              anchor="center"
-              onClick={(e) => handleMeshClick(node, e)}
-            >
-              <div
-                title={node.longName ?? nodeHex(node.nodeId)}
-                style={{ ...styles.markerOuter, borderColor: color, boxShadow: `0 0 0 2px ${color}33`, cursor: "pointer" }}
+        {showMesh &&
+          filteredMesh.map((node) => {
+            const isLocal = node.hopsAway === 0;
+            const color = nodeColor(node.nodeId);
+            const stackCount = colocatedCounts.get(`${node.latitude}:${node.longitude}`) ?? 1;
+            const hasStack = stackCount > 1;
+            const size = hasStack ? "2.4rem" : "2rem";
+            return (
+              <Marker
+                key={`mesh-${node.nodeId}`}
+                longitude={node.longitude!}
+                latitude={node.latitude!}
+                anchor="center"
+                onClick={(e) => handleMeshClick(node, e)}
               >
                 <div
+                  title={node.longName ?? nodeHex(node.nodeId)}
                   style={{
-                    ...styles.markerInner,
-                    width: size,
-                    height: size,
-                    background: isLocal ? color : "#0f172a",
-                    color: isLocal ? "#fff" : color,
-                    border: `2px solid ${color}`,
+                    ...styles.markerOuter,
+                    borderColor: color,
+                    boxShadow: `0 0 0 2px ${color}33`,
+                    cursor: "pointer",
                   }}
                 >
-                  {(node.shortName ?? nodeHex(node.nodeId).slice(-4)).slice(0, 4)}
+                  <div
+                    style={{
+                      ...styles.markerInner,
+                      width: size,
+                      height: size,
+                      background: isLocal ? color : "#0f172a",
+                      color: isLocal ? "#fff" : color,
+                      border: `2px solid ${color}`,
+                    }}
+                  >
+                    {(node.shortName ?? nodeHex(node.nodeId).slice(-4)).slice(0, 4)}
+                  </div>
+                  {isLocal && <div style={styles.localRing} />}
+                  {hasStack && <div style={styles.stackBadge}>+{stackCount}</div>}
                 </div>
-                {isLocal && <div style={styles.localRing} />}
-                {hasStack && (
-                  <div style={styles.stackBadge}>+{stackCount}</div>
-                )}
-              </div>
-            </Marker>
-          );
-        })}
+              </Marker>
+            );
+          })}
 
         {/* MQTT node markers — dashed border to distinguish from mesh */}
-        {showMqtt && filteredMqtt.map((node) => {
-          const color = nodeColor(node.nodeId);
-          const stackCount = colocatedCounts.get(`${node.latitude}:${node.longitude}`) ?? 1;
-          const hasStack = stackCount > 1;
-          const size = hasStack ? "2.4rem" : "2rem";
-          return (
-            <Marker
-              key={`mqtt-${node.nodeId}`}
-              longitude={node.longitude!}
-              latitude={node.latitude!}
-              anchor="center"
-              onClick={(e) => handleMqttClick(node, e)}
-            >
-              <div
-                title={`[MQTT] ${node.longName ?? nodeHex(node.nodeId)}`}
-                style={{ ...styles.markerOuter, cursor: "pointer" }}
+        {showMqtt &&
+          filteredMqtt.map((node) => {
+            const color = nodeColor(node.nodeId);
+            const stackCount = colocatedCounts.get(`${node.latitude}:${node.longitude}`) ?? 1;
+            const hasStack = stackCount > 1;
+            const size = hasStack ? "2.4rem" : "2rem";
+            return (
+              <Marker
+                key={`mqtt-${node.nodeId}`}
+                longitude={node.longitude!}
+                latitude={node.latitude!}
+                anchor="center"
+                onClick={(e) => handleMqttClick(node, e)}
               >
                 <div
-                  style={{
-                    ...styles.markerInner,
-                    width: size,
-                    height: size,
-                    background: "#0f172a",
-                    color,
-                    border: `2px dashed ${color}`,
-                    boxShadow: `0 0 0 2px ${color}22`,
-                  }}
+                  title={`[MQTT] ${node.longName ?? nodeHex(node.nodeId)}`}
+                  style={{ ...styles.markerOuter, cursor: "pointer" }}
                 >
-                  {(node.shortName ?? nodeHex(node.nodeId).slice(-4)).slice(0, 4)}
+                  <div
+                    style={{
+                      ...styles.markerInner,
+                      width: size,
+                      height: size,
+                      background: "#0f172a",
+                      color,
+                      border: `2px dashed ${color}`,
+                      boxShadow: `0 0 0 2px ${color}22`,
+                    }}
+                  >
+                    {(node.shortName ?? nodeHex(node.nodeId).slice(-4)).slice(0, 4)}
+                  </div>
+                  {hasStack && <div style={styles.stackBadge}>+{stackCount}</div>}
                 </div>
-                {hasStack && (
-                  <div style={styles.stackBadge}>+{stackCount}</div>
-                )}
-              </div>
-            </Marker>
-          );
-        })}
+              </Marker>
+            );
+          })}
 
         {/* Coverage proposal markers — amber pin with name label, draggable to reposition */}
-        {showProposals && proposals.filter((p) => p.visible).map((p) => (
-          <Marker
-            key={`proposal-${p.id}`}
-            longitude={p.lon}
-            latitude={p.lat}
-            anchor="bottom"
-            draggable
-            onClick={(e) => {
-              e.originalEvent.stopPropagation();
-              setSelectedProposal((prev) => prev?.id === p.id ? null : p);
-              setSelected(null);
-            }}
-            onDragStart={() => {
-              // Drop cached viewshed immediately so coverage clears while dragging
-              proposalViewshedCache.current.delete(p.id);
-              setProposalViewshedStatus((prev) => { const m = new Map(prev); m.delete(p.id); return m; });
-            }}
-            onDragEnd={(e) => {
-              const { lng, lat } = e.lngLat;
-              // Fetch terrain elevation at the new position, then PATCH lat/lon/altitude
-              fetch(`/api/elevation?lat=${lat}&lon=${lng}`)
-                .then((r) => r.json())
-                .then(({ elevationM }: { elevationM: number }) => {
-                  const altitudeM = Math.round((isFinite(elevationM) ? elevationM : 0) + 3);
-                  return fetch(`/api/proposals/${p.id}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ lat, lon: lng, altitudeM }),
-                  }).then((r) => r.json());
-                })
-                .then((updated: CoverageProposal) => {
-                  setProposals((prev) => prev.map((x) => x.id === updated.id ? updated : x));
-                  setSelectedProposal((prev) => prev?.id === updated.id ? updated : prev);
-                })
-                .catch(console.error);
-            }}
-          >
-            <div style={styles.proposalMarker} title={`Proposal: ${p.name} — drag to reposition`}>
-              {/* Label on top */}
-              <span style={styles.proposalLabel}>{p.name}</span>
-              {/* Diamond head */}
-              <div style={styles.proposalDiamond} />
-              {/* Pole — bottom is the anchor point */}
-              <div style={styles.proposalPole} />
-            </div>
-          </Marker>
-        ))}
+        {showProposals &&
+          proposals
+            .filter((p) => p.visible)
+            .map((p) => (
+              <Marker
+                key={`proposal-${p.id}`}
+                longitude={p.lon}
+                latitude={p.lat}
+                anchor="bottom"
+                draggable
+                onClick={(e) => {
+                  e.originalEvent.stopPropagation();
+                  setSelectedProposal((prev) => (prev?.id === p.id ? null : p));
+                  setSelected(null);
+                }}
+                onDragStart={() => {
+                  // Drop cached viewshed immediately so coverage clears while dragging
+                  proposalViewshedCache.current.delete(p.id);
+                  setProposalViewshedStatus((prev) => {
+                    const m = new Map(prev);
+                    m.delete(p.id);
+                    return m;
+                  });
+                }}
+                onDragEnd={(e) => {
+                  const { lng, lat } = e.lngLat;
+                  // Fetch terrain elevation at the new position, then PATCH lat/lon/altitude
+                  fetch(`/api/elevation?lat=${lat}&lon=${lng}`)
+                    .then((r) => r.json())
+                    .then(({ elevationM }: { elevationM: number }) => {
+                      const altitudeM = Math.round((isFinite(elevationM) ? elevationM : 0) + 3);
+                      return fetch(`/api/proposals/${p.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ lat, lon: lng, altitudeM }),
+                      }).then((r) => r.json());
+                    })
+                    .then((updated: CoverageProposal) => {
+                      setProposals((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+                      setSelectedProposal((prev) => (prev?.id === updated.id ? updated : prev));
+                    })
+                    .catch(console.error);
+                }}
+              >
+                <div
+                  style={styles.proposalMarker}
+                  title={`Proposal: ${p.name} — drag to reposition`}
+                >
+                  {/* Label on top */}
+                  <span style={styles.proposalLabel}>{p.name}</span>
+                  {/* Diamond head */}
+                  <div style={styles.proposalDiamond} />
+                  {/* Pole — bottom is the anchor point */}
+                  <div style={styles.proposalPole} />
+                </div>
+              </Marker>
+            ))}
 
         {/* Proposal popup — edit/delete/copy for a selected proposal */}
         {selectedProposal && (
@@ -1059,11 +1104,15 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
                 })
                   .then((r) => r.json())
                   .then((p: CoverageProposal) => {
-                    setProposals((prev) => prev.map((x) => x.id === p.id ? p : x));
+                    setProposals((prev) => prev.map((x) => (x.id === p.id ? p : x)));
                     setSelectedProposal(p);
                     // Invalidate cached viewshed for this proposal (preset/alt changed)
                     proposalViewshedCache.current.delete(p.id);
-                    setProposalViewshedStatus((prev) => { const m = new Map(prev); m.delete(p.id); return m; });
+                    setProposalViewshedStatus((prev) => {
+                      const m = new Map(prev);
+                      m.delete(p.id);
+                      return m;
+                    });
                   })
                   .catch(console.error);
               }}
@@ -1072,7 +1121,11 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
                   .then(() => {
                     setProposals((prev) => prev.filter((x) => x.id !== selectedProposal.id));
                     proposalViewshedCache.current.delete(selectedProposal.id);
-                    setProposalViewshedStatus((prev) => { const m = new Map(prev); m.delete(selectedProposal.id); return m; });
+                    setProposalViewshedStatus((prev) => {
+                      const m = new Map(prev);
+                      m.delete(selectedProposal.id);
+                      return m;
+                    });
                     setSelectedProposal(null);
                   })
                   .catch(console.error);
@@ -1081,131 +1134,204 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
           </Popup>
         )}
 
-        {selected && selectedLon != null && selectedLat != null && (() => {
-          // Focus this node's coverage from within the map popup.
-          const handleFocusCoverage = () => {
-            setLocalFocusedNodeId(selected.node.nodeId);
-            setShowCoverage(true);
-            setSelected(null);
-          };
+        {selected &&
+          selectedLon != null &&
+          selectedLat != null &&
+          (() => {
+            // Focus this node's coverage from within the map popup.
+            const handleFocusCoverage = () => {
+              setLocalFocusedNodeId(selected.node.nodeId);
+              setShowCoverage(true);
+              setSelected(null);
+            };
 
-          // Build a refresh callback only when terrain mode is on and the node
-          // has a known position (needed to key the viewshed_cache row).
-          const refreshTerrain = (terrainMode && selected.source === "mesh" && selected.node.latitude != null && selected.node.longitude != null)
-            ? async () => {
-                const n = selected.node;
-                const nodeId = n.nodeId;
-                setRefreshingTerrainNodes((prev) => new Set(prev).add(nodeId));
-                // 1. Evict the DB-cached viewshed polygon for this position
-                await fetch(
-                  `/api/coverage/viewshed?lat=${n.latitude}&lon=${n.longitude}&radiusKm=${TERRAIN_FETCH_RADIUS_KM}`,
-                  { method: "DELETE" },
-                ).catch(() => {/* ignore — we'll re-fetch regardless */});
-                // 2. Drop the in-memory polygon so the fetch loop doesn't skip it
-                viewshedCache.current.delete(`${nodeId}`);
-                // 3. Fetch the fresh viewshed directly (bypasses the loop queue)
-                const antennaM = n.altitude != null ? n.altitude + 2 : 2;
-                const url = `/api/coverage/viewshed?lat=${n.latitude}&lon=${n.longitude}&radiusKm=${TERRAIN_FETCH_RADIUS_KM}&altitudeM=${antennaM}`;
-                try {
-                  const r = await fetch(url);
-                  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                  const geojson = await r.json() as GeoJSON.Feature<GeoJSON.Polygon>;
-                  viewshedCache.current.set(`${nodeId}`, geojson);
-                  setViewshedStatus((prev) => new Map(prev).set(nodeId, "ready"));
-                } catch {
-                  setViewshedStatus((prev) => new Map(prev).set(nodeId, "error"));
-                } finally {
-                  setRefreshingTerrainNodes((prev) => { const s = new Set(prev); s.delete(nodeId); return s; });
-                }
-              }
-            : undefined;
+            // Build a refresh callback only when terrain mode is on and the node
+            // has a known position (needed to key the viewshed_cache row).
+            const refreshTerrain =
+              terrainMode &&
+              selected.source === "mesh" &&
+              selected.node.latitude != null &&
+              selected.node.longitude != null
+                ? async () => {
+                    const n = selected.node;
+                    const nodeId = n.nodeId;
+                    setRefreshingTerrainNodes((prev) => new Set(prev).add(nodeId));
+                    // 1. Evict the DB-cached viewshed polygon for this position
+                    await fetch(
+                      `/api/coverage/viewshed?lat=${n.latitude}&lon=${n.longitude}&radiusKm=${TERRAIN_FETCH_RADIUS_KM}`,
+                      { method: "DELETE" },
+                    ).catch(() => {
+                      /* ignore — we'll re-fetch regardless */
+                    });
+                    // 2. Drop the in-memory polygon so the fetch loop doesn't skip it
+                    viewshedCache.current.delete(`${nodeId}`);
+                    // 3. Fetch the fresh viewshed directly (bypasses the loop queue)
+                    const antennaM = n.altitude != null ? n.altitude + 2 : 2;
+                    const url = `/api/coverage/viewshed?lat=${n.latitude}&lon=${n.longitude}&radiusKm=${TERRAIN_FETCH_RADIUS_KM}&altitudeM=${antennaM}`;
+                    try {
+                      const r = await fetch(url);
+                      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                      const geojson = (await r.json()) as GeoJSON.Feature<GeoJSON.Polygon>;
+                      viewshedCache.current.set(`${nodeId}`, geojson);
+                      setViewshedStatus((prev) => new Map(prev).set(nodeId, "ready"));
+                    } catch {
+                      setViewshedStatus((prev) => new Map(prev).set(nodeId, "error"));
+                    } finally {
+                      setRefreshingTerrainNodes((prev) => {
+                        const s = new Set(prev);
+                        s.delete(nodeId);
+                        return s;
+                      });
+                    }
+                  }
+                : undefined;
 
-          return (
-          <Popup
-            longitude={selectedLon}
-            latitude={selectedLat}
-            anchor="bottom"
-            offset={20}
-            closeButton={true}
-            closeOnClick={false}
-            onClose={() => { setSelected(null); setStackedNodes([]); }}
-            style={{ fontFamily: "monospace" }}
-          >
-            {stackedNodes.length > 1 && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", padding: "0.35rem 0.5rem", borderBottom: "1px solid #1e293b", marginBottom: "0.35rem", maxWidth: "260px" }}>
-                <span style={{ fontSize: "0.65rem", color: "#64748b", width: "100%", marginBottom: "0.1rem" }}>
-                  {stackedNodes.length} nodes at this location:
-                </span>
-                {stackedNodes.map((sn) => {
-                  const isActive = selected.node.nodeId === sn.node.nodeId;
-                  const label = (sn.node.shortName ?? nodeHex(sn.node.nodeId).slice(-4)).slice(0, 6);
-                  return (
-                    <button
-                      key={`${sn.source}-${sn.node.nodeId}`}
-                      onClick={() => setSelected(sn)}
+            return (
+              <Popup
+                longitude={selectedLon}
+                latitude={selectedLat}
+                anchor="bottom"
+                offset={20}
+                closeButton={true}
+                closeOnClick={false}
+                onClose={() => {
+                  setSelected(null);
+                  setStackedNodes([]);
+                }}
+                style={{ fontFamily: "monospace" }}
+              >
+                {stackedNodes.length > 1 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "0.25rem",
+                      padding: "0.35rem 0.5rem",
+                      borderBottom: "1px solid #1e293b",
+                      marginBottom: "0.35rem",
+                      maxWidth: "260px",
+                    }}
+                  >
+                    <span
                       style={{
-                        padding: "0.15rem 0.4rem",
-                        fontSize: "0.7rem",
-                        fontFamily: "monospace",
-                        borderRadius: "0.25rem",
-                        border: `1px solid ${isActive ? nodeColor(sn.node.nodeId) : "#334155"}`,
-                        background: isActive ? `${nodeColor(sn.node.nodeId)}22` : "#0f172a",
-                        color: isActive ? nodeColor(sn.node.nodeId) : "#94a3b8",
-                        cursor: "pointer",
+                        fontSize: "0.65rem",
+                        color: "#64748b",
+                        width: "100%",
+                        marginBottom: "0.1rem",
                       }}
-                      title={sn.node.longName ?? nodeHex(sn.node.nodeId)}
                     >
-                      {label}{sn.source === "mqtt" ? "*" : ""}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {selected.source === "mesh" ? (
-              <MeshPopup
-                node={selected.node}
-                deviceId={deviceId ?? null}
-                pending={pendingAction?.nodeId === selected.node.nodeId ? pendingAction.action : null}
-                onRequestPosition={() => {
-                  if (!deviceId) return;
-                  setPendingAction({ nodeId: selected.node.nodeId, action: "ping" });
-                  foremanClient.send({ type: "node:request-position", payload: { deviceId, nodeId: selected.node.nodeId } });
-                  setTimeout(() => setPendingAction((p) => p?.nodeId === selected.node.nodeId ? null : p), 15000);
-                }}
-                onTraceroute={() => {
-                  if (!deviceId) return;
-                  setPendingAction({ nodeId: selected.node.nodeId, action: "traceroute" });
-                  foremanClient.send({ type: "node:traceroute", payload: { deviceId, nodeId: selected.node.nodeId } });
-                  setTimeout(() => setPendingAction((p) => p?.nodeId === selected.node.nodeId ? null : p), 30000);
-                }}
-                onMessage={onMessage ? () => { setSelected(null); onMessage(selected.node.nodeId); } : undefined}
-                onFocusCoverage={selected.node.latitude != null && selected.node.longitude != null ? handleFocusCoverage : undefined}
-                onRefreshTerrain={refreshTerrain}
-                terrainRefreshing={refreshingTerrainNodes.has(selected.node.nodeId)}
-              />
-            ) : (
-              <MqttPopup
-                node={selected.node}
-                onFocusCoverage={selected.node.latitude != null && selected.node.longitude != null ? handleFocusCoverage : undefined}
-                onRefreshTerrain={refreshTerrain}
-                terrainRefreshing={refreshingTerrainNodes.has(selected.node.nodeId)}
-              />
-            )}
-          </Popup>
-          );
-        })()}
+                      {stackedNodes.length} nodes at this location:
+                    </span>
+                    {stackedNodes.map((sn) => {
+                      const isActive = selected.node.nodeId === sn.node.nodeId;
+                      const label = (sn.node.shortName ?? nodeHex(sn.node.nodeId).slice(-4)).slice(
+                        0,
+                        6,
+                      );
+                      return (
+                        <button
+                          key={`${sn.source}-${sn.node.nodeId}`}
+                          onClick={() => setSelected(sn)}
+                          style={{
+                            padding: "0.15rem 0.4rem",
+                            fontSize: "0.7rem",
+                            fontFamily: "monospace",
+                            borderRadius: "0.25rem",
+                            border: `1px solid ${isActive ? nodeColor(sn.node.nodeId) : "#334155"}`,
+                            background: isActive ? `${nodeColor(sn.node.nodeId)}22` : "#0f172a",
+                            color: isActive ? nodeColor(sn.node.nodeId) : "#94a3b8",
+                            cursor: "pointer",
+                          }}
+                          title={sn.node.longName ?? nodeHex(sn.node.nodeId)}
+                        >
+                          {label}
+                          {sn.source === "mqtt" ? "*" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {selected.source === "mesh" ? (
+                  <MeshPopup
+                    node={selected.node}
+                    deviceId={deviceId ?? null}
+                    pending={
+                      pendingAction?.nodeId === selected.node.nodeId ? pendingAction.action : null
+                    }
+                    onRequestPosition={() => {
+                      if (!deviceId) return;
+                      setPendingAction({ nodeId: selected.node.nodeId, action: "ping" });
+                      foremanClient.send({
+                        type: "node:request-position",
+                        payload: { deviceId, nodeId: selected.node.nodeId },
+                      });
+                      setTimeout(
+                        () =>
+                          setPendingAction((p) => (p?.nodeId === selected.node.nodeId ? null : p)),
+                        15000,
+                      );
+                    }}
+                    onTraceroute={() => {
+                      if (!deviceId) return;
+                      setPendingAction({ nodeId: selected.node.nodeId, action: "traceroute" });
+                      foremanClient.send({
+                        type: "node:traceroute",
+                        payload: { deviceId, nodeId: selected.node.nodeId },
+                      });
+                      setTimeout(
+                        () =>
+                          setPendingAction((p) => (p?.nodeId === selected.node.nodeId ? null : p)),
+                        30000,
+                      );
+                    }}
+                    onMessage={
+                      onMessage
+                        ? () => {
+                            setSelected(null);
+                            onMessage(selected.node.nodeId);
+                          }
+                        : undefined
+                    }
+                    onFocusCoverage={
+                      selected.node.latitude != null && selected.node.longitude != null
+                        ? handleFocusCoverage
+                        : undefined
+                    }
+                    onRefreshTerrain={refreshTerrain}
+                    terrainRefreshing={refreshingTerrainNodes.has(selected.node.nodeId)}
+                  />
+                ) : (
+                  <MqttPopup
+                    node={selected.node}
+                    onFocusCoverage={
+                      selected.node.latitude != null && selected.node.longitude != null
+                        ? handleFocusCoverage
+                        : undefined
+                    }
+                    onRefreshTerrain={refreshTerrain}
+                    terrainRefreshing={refreshingTerrainNodes.has(selected.node.nodeId)}
+                  />
+                )}
+              </Popup>
+            );
+          })()}
       </MapGL>
 
       {/* Traceroute + Coverage controls — top left, side by side */}
-      <div style={{
-        position: "absolute", top: "1rem", left: "1rem",
-        display: "flex", flexDirection: "row", gap: "0.5rem", alignItems: "flex-start",
-        zIndex: 10,
-      }}>
-
+      <div
+        style={{
+          position: "absolute",
+          top: "1rem",
+          left: "1rem",
+          display: "flex",
+          flexDirection: "row",
+          gap: "0.5rem",
+          alignItems: "flex-start",
+          zIndex: 10,
+        }}
+      >
         {/* ── Traceroute panel ─────────────────────────────────────────── */}
         <div style={{ ...styles.controlPanel }}>
-
           {/* Simple row — always visible */}
           <div style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
             <span style={styles.controlLabel}>Traceroutes:</span>
@@ -1234,13 +1360,23 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
             </button>
 
             <span style={{ color: "#64748b", fontSize: "0.7rem" }}>
-              {showTraceroutes ? `${traceroutes.length} route${traceroutes.length !== 1 ? "s" : ""}` : "hidden"}
+              {showTraceroutes
+                ? `${traceroutes.length} route${traceroutes.length !== 1 ? "s" : ""}`
+                : "hidden"}
             </span>
           </div>
 
           {/* Age row — shown when expanded */}
           {tracerouteExpanded && (
-            <div style={{ display: "flex", gap: "0.3rem", alignItems: "center", paddingTop: "0.15rem", borderTop: "1px solid #1e293b" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: "0.3rem",
+                alignItems: "center",
+                paddingTop: "0.15rem",
+                borderTop: "1px solid #1e293b",
+              }}
+            >
               <span style={{ ...styles.controlLabel, marginRight: 0 }}>Age:</span>
               {AGE_OPTIONS.map((opt) => (
                 <button
@@ -1263,33 +1399,52 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
           const devicePreset = (() => {
             if (!deviceId || !deviceConfigs) return null;
             const cfg = deviceConfigs.get(deviceId);
-            return (cfg?.radioConfig as { lora?: { modemPreset?: number } } | undefined)?.lora?.modemPreset ?? null;
+            return (
+              (cfg?.radioConfig as { lora?: { modemPreset?: number } } | undefined)?.lora
+                ?.modemPreset ?? null
+            );
           })();
           const summaryPreset = presetFilter !== null ? presetFilter : devicePreset;
-          const summaryPresetLabel = summaryPreset != null
-            ? (MODEM_PRESET_LABEL[summaryPreset] ?? `#${summaryPreset}`)
-            : availablePresets.length > 1 ? "All presets" : "—";
-          const summaryRangeLabel = presetFilter !== null
-            ? `${coverageRadiusKm}km`
-            : summaryPreset != null
-              ? `${MODEM_PRESET_RADIUS_KM[summaryPreset] ?? DEFAULT_RADIUS_KM}km`
-              : "auto";
+          const summaryPresetLabel =
+            summaryPreset != null
+              ? (MODEM_PRESET_LABEL[summaryPreset] ?? `#${summaryPreset}`)
+              : availablePresets.length > 1
+                ? "All presets"
+                : "—";
+          const summaryRangeLabel =
+            presetFilter !== null
+              ? `${coverageRadiusKm}km`
+              : summaryPreset != null
+                ? `${MODEM_PRESET_RADIUS_KM[summaryPreset] ?? DEFAULT_RADIUS_KM}km`
+                : "auto";
 
           const terrainStatus = (() => {
             if (!showCoverage || !terrainMode) return null;
             const total = viewshedStatus.size;
             if (total === 0) return null;
-            const done   = [...viewshedStatus.values()].filter((s) => s !== "loading").length;
+            const done = [...viewshedStatus.values()].filter((s) => s !== "loading").length;
             const errors = [...viewshedStatus.values()].filter((s) => s === "error").length;
-            if (done < total) return { text: `⛰ ${done}/${total}`, color: "#fbbf24", title: "Computing terrain line-of-sight…" };
-            return { text: errors > 0 ? `⛰ ${errors} failed` : "⛰ ready", color: errors > 0 ? "#fca5a5" : "#86efac", title: undefined };
+            if (done < total)
+              return {
+                text: `⛰ ${done}/${total}`,
+                color: "#fbbf24",
+                title: "Computing terrain line-of-sight…",
+              };
+            return {
+              text: errors > 0 ? `⛰ ${errors} failed` : "⛰ ready",
+              color: errors > 0 ? "#fca5a5" : "#86efac",
+              title: undefined,
+            };
           })();
 
-          const rowStyle: React.CSSProperties = { display: "flex", gap: "0.3rem", alignItems: "center" };
+          const rowStyle: React.CSSProperties = {
+            display: "flex",
+            gap: "0.3rem",
+            alignItems: "center",
+          };
 
           return (
             <div style={{ ...styles.controlPanel }}>
-
               {/* Simple row — always visible */}
               <div style={rowStyle}>
                 <span style={styles.controlLabel}>Coverage:</span>
@@ -1301,10 +1456,16 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
                 <button
                   style={{
                     ...ageFilterBtnStyle(terrainMode),
-                    ...(terrainMode ? { borderColor: "#86efac", color: "#86efac", background: "#14532d" } : {}),
+                    ...(terrainMode
+                      ? { borderColor: "#86efac", color: "#86efac", background: "#14532d" }
+                      : {}),
                   }}
                   onClick={() => setTerrainMode((v) => !v)}
-                  title={terrainMode ? "Switch to simple circle coverage" : "Switch to terrain-aware coverage (fetches elevation data)"}
+                  title={
+                    terrainMode
+                      ? "Switch to simple circle coverage"
+                      : "Switch to terrain-aware coverage (fetches elevation data)"
+                  }
                 >
                   {terrainMode ? "Terrain" : "Simple"}
                 </button>
@@ -1312,10 +1473,16 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
                 <button
                   style={{
                     ...ageFilterBtnStyle(coverageUnion),
-                    ...(coverageUnion ? { borderColor: "#a78bfa", color: "#a78bfa", background: "#2e1065" } : {}),
+                    ...(coverageUnion
+                      ? { borderColor: "#a78bfa", color: "#a78bfa", background: "#2e1065" }
+                      : {}),
                   }}
                   onClick={() => setCoverageUnion((v) => !v)}
-                  title={coverageUnion ? "Switch to separate fills (each node draws its own circle)" : "Switch to union fill (overlapping areas merge into one shape)"}
+                  title={
+                    coverageUnion
+                      ? "Switch to separate fills (each node draws its own circle)"
+                      : "Switch to union fill (overlapping areas merge into one shape)"
+                  }
                 >
                   {coverageUnion ? "Union" : "Separate"}
                 </button>
@@ -1334,7 +1501,11 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
                 <button
                   style={{ ...ageFilterBtnStyle(coverageExpanded), padding: "0.2rem 0.35rem" }}
                   onClick={() => setCoverageExpanded((v) => !v)}
-                  title={coverageExpanded ? "Hide advanced coverage options" : "Show advanced coverage options"}
+                  title={
+                    coverageExpanded
+                      ? "Hide advanced coverage options"
+                      : "Show advanced coverage options"
+                  }
                 >
                   {coverageExpanded ? "▲" : "▼"}
                 </button>
@@ -1342,14 +1513,31 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
                 {effectiveFocusedNodeId != null && (
                   <>
                     <button
-                      style={{ ...ageFilterBtnStyle(false), borderColor: "#86efac", color: "#86efac" }}
-                      onClick={() => { setLocalFocusedNodeId(null); onClearFocusedNode?.(); }}
+                      style={{
+                        ...ageFilterBtnStyle(false),
+                        borderColor: "#86efac",
+                        color: "#86efac",
+                      }}
+                      onClick={() => {
+                        setLocalFocusedNodeId(null);
+                        onClearFocusedNode?.();
+                      }}
                       title="Return to all-nodes coverage view"
                     >
                       ← All nodes
                     </button>
                     {effectiveFocusedNodeName && (
-                      <span style={{ color: "#86efac", fontSize: "0.7rem", fontFamily: "monospace", maxWidth: "10rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span
+                        style={{
+                          color: "#86efac",
+                          fontSize: "0.7rem",
+                          fontFamily: "monospace",
+                          maxWidth: "10rem",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {effectiveFocusedNodeName}
                       </span>
                     )}
@@ -1357,7 +1545,14 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
                 )}
 
                 {terrainStatus && (
-                  <span style={{ color: terrainStatus.color, fontSize: "0.7rem", fontFamily: "monospace" }} title={terrainStatus.title}>
+                  <span
+                    style={{
+                      color: terrainStatus.color,
+                      fontSize: "0.7rem",
+                      fontFamily: "monospace",
+                    }}
+                    title={terrainStatus.title}
+                  >
                     {terrainStatus.text}
                   </span>
                 )}
@@ -1365,14 +1560,23 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
 
               {/* Advanced row — shown when expanded */}
               {coverageExpanded && (
-                <div style={{ ...rowStyle, flexWrap: "wrap", paddingTop: "0.15rem", borderTop: "1px solid #1e293b" }}>
+                <div
+                  style={{
+                    ...rowStyle,
+                    flexWrap: "wrap",
+                    paddingTop: "0.15rem",
+                    borderTop: "1px solid #1e293b",
+                  }}
+                >
                   <span style={{ ...styles.controlLabel, marginRight: 0 }}>Preset:</span>
 
                   <button
                     style={ageFilterBtnStyle(presetFilter === null)}
                     onClick={() => setPresetFilter?.(null)}
                     title="Show all presets at their own default range"
-                  >All</button>
+                  >
+                    All
+                  </button>
 
                   {availablePresets.map((p) => (
                     <button
@@ -1394,13 +1598,18 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
 
                   {presetFilter !== null && (
                     <>
-                      <span style={{ color: "#475569", margin: "0 0.1rem", fontSize: "0.8rem" }}>|</span>
+                      <span style={{ color: "#475569", margin: "0 0.1rem", fontSize: "0.8rem" }}>
+                        |
+                      </span>
                       <span style={{ ...styles.controlLabel, marginRight: 0 }}>Range:</span>
                       {COVERAGE_RADII_KM.map((km) => (
                         <button
                           key={km}
                           style={ageFilterBtnStyle(coverageRadiusKm === km)}
-                          onClick={() => { setCoverageRadiusKm(km); setUserPickedRadius(true); }}
+                          onClick={() => {
+                            setCoverageRadiusKm(km);
+                            setUserPickedRadius(true);
+                          }}
                           title={`Set coverage radius to ${km} km`}
                         >
                           {km}km
@@ -1411,14 +1620,22 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
 
                   {showMqtt && (
                     <>
-                      <span style={{ color: "#475569", margin: "0 0.1rem", fontSize: "0.8rem" }}>|</span>
+                      <span style={{ color: "#475569", margin: "0 0.1rem", fontSize: "0.8rem" }}>
+                        |
+                      </span>
                       <button
                         style={{
                           ...ageFilterBtnStyle(coverageMqtt),
-                          ...(coverageMqtt ? { borderColor: "#34d399", color: "#34d399", background: "#052e16" } : {}),
+                          ...(coverageMqtt
+                            ? { borderColor: "#34d399", color: "#34d399", background: "#052e16" }
+                            : {}),
                         }}
                         onClick={() => setCoverageMqtt((v) => !v)}
-                        title={coverageMqtt ? "Hide MQTT node coverage" : "Include MQTT nodes in coverage overlay"}
+                        title={
+                          coverageMqtt
+                            ? "Hide MQTT node coverage"
+                            : "Include MQTT nodes in coverage overlay"
+                        }
                       >
                         {coverageMqtt ? "−MQTT" : "+MQTT"}
                       </button>
@@ -1436,138 +1653,221 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
             if (!terrainMode || proposals.length === 0) return null;
             const visible = proposals.filter((p) => p.visible);
             if (visible.length === 0) return null;
-            const total  = visible.length;
-            const done   = visible.filter((p) => proposalViewshedStatus.get(p.id) !== "loading" && proposalViewshedCache.current.has(p.id)).length;
-            const errors = visible.filter((p) => proposalViewshedStatus.get(p.id) === "error").length;
-            if (done < total) return { text: `⛰ ${done}/${total}`, color: "#fbbf24", title: "Computing terrain line-of-sight for proposals…" };
-            return { text: errors > 0 ? `⛰ ${errors} failed` : "⛰ ready", color: errors > 0 ? "#fca5a5" : "#86efac", title: undefined };
+            const total = visible.length;
+            const done = visible.filter(
+              (p) =>
+                proposalViewshedStatus.get(p.id) !== "loading" &&
+                proposalViewshedCache.current.has(p.id),
+            ).length;
+            const errors = visible.filter(
+              (p) => proposalViewshedStatus.get(p.id) === "error",
+            ).length;
+            if (done < total)
+              return {
+                text: `⛰ ${done}/${total}`,
+                color: "#fbbf24",
+                title: "Computing terrain line-of-sight for proposals…",
+              };
+            return {
+              text: errors > 0 ? `⛰ ${errors} failed` : "⛰ ready",
+              color: errors > 0 ? "#fca5a5" : "#86efac",
+              title: undefined,
+            };
           })();
 
           return (
-        <div style={{ ...styles.controlPanel }}>
-          {/* Always-visible summary row */}
-          <div style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
-            <span style={styles.controlLabel}>Proposals:</span>
-            <span style={styles.summaryPill}>
-              {proposals.length === 0 ? "none" : `${proposals.filter((p) => p.visible).length}/${proposals.length}`}
-            </span>
-            <button
-              style={{
-                ...ageFilterBtnStyle(proposalPlanningMode),
-                ...(proposalPlanningMode ? { borderColor: "#f59e0b", color: "#f59e0b", background: "#422006" } : {}),
-              }}
-              onClick={() => setProposalPlanningMode((v) => !v)}
-              title={proposalPlanningMode ? "Click map to drop proposal pins. Click again to exit." : "Enter planning mode to add proposal pins"}
-            >
-              {proposalPlanningMode ? "✦ Placing…" : "+ Place"}
-            </button>
-            {proposalTerrainStatus && (
-              <span style={{ color: proposalTerrainStatus.color, fontSize: "0.7rem", fontFamily: "monospace" }} title={proposalTerrainStatus.title}>
-                {proposalTerrainStatus.text}
-              </span>
-            )}
-            {proposals.length > 0 && (
-              <button
-                style={ageFilterBtnStyle(proposalsExpanded)}
-                onClick={() => setProposalsExpanded((v) => !v)}
-                title="Show/hide proposal list"
-              >
-                {proposalsExpanded ? "▲" : "▼"}
-              </button>
-            )}
-          </div>
+            <div style={{ ...styles.controlPanel }}>
+              {/* Always-visible summary row */}
+              <div style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
+                <span style={styles.controlLabel}>Proposals:</span>
+                <span style={styles.summaryPill}>
+                  {proposals.length === 0
+                    ? "none"
+                    : `${proposals.filter((p) => p.visible).length}/${proposals.length}`}
+                </span>
+                <button
+                  style={{
+                    ...ageFilterBtnStyle(proposalPlanningMode),
+                    ...(proposalPlanningMode
+                      ? { borderColor: "#f59e0b", color: "#f59e0b", background: "#422006" }
+                      : {}),
+                  }}
+                  onClick={() => setProposalPlanningMode((v) => !v)}
+                  title={
+                    proposalPlanningMode
+                      ? "Click map to drop proposal pins. Click again to exit."
+                      : "Enter planning mode to add proposal pins"
+                  }
+                >
+                  {proposalPlanningMode ? "✦ Placing…" : "+ Place"}
+                </button>
+                {proposalTerrainStatus && (
+                  <span
+                    style={{
+                      color: proposalTerrainStatus.color,
+                      fontSize: "0.7rem",
+                      fontFamily: "monospace",
+                    }}
+                    title={proposalTerrainStatus.title}
+                  >
+                    {proposalTerrainStatus.text}
+                  </span>
+                )}
+                {proposals.length > 0 && (
+                  <button
+                    style={ageFilterBtnStyle(proposalsExpanded)}
+                    onClick={() => setProposalsExpanded((v) => !v)}
+                    title="Show/hide proposal list"
+                  >
+                    {proposalsExpanded ? "▲" : "▼"}
+                  </button>
+                )}
+              </div>
 
-          {/* Expanded proposal list */}
-          {proposalsExpanded && proposals.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", paddingTop: "0.15rem", borderTop: "1px solid #1e293b", width: "100%" }}>
-              {proposals.map((p) => (
-                <div key={p.id} style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
+              {/* Expanded proposal list */}
+              {proposalsExpanded && proposals.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.25rem",
+                    paddingTop: "0.15rem",
+                    borderTop: "1px solid #1e293b",
+                    width: "100%",
+                  }}
+                >
+                  {proposals.map((p) => (
+                    <div
+                      key={p.id}
+                      style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}
+                    >
+                      <button
+                        style={{
+                          ...ageFilterBtnStyle(p.visible),
+                          padding: "0.15rem 0.4rem",
+                          minWidth: "2.5rem",
+                          ...(p.visible
+                            ? { borderColor: "#f59e0b", color: "#f59e0b", background: "#422006" }
+                            : {}),
+                        }}
+                        onClick={() => {
+                          fetch(`/api/proposals/${p.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ visible: !p.visible }),
+                          })
+                            .then((r) => r.json())
+                            .then((updated: CoverageProposal) =>
+                              setProposals((prev) =>
+                                prev.map((x) => (x.id === updated.id ? updated : x)),
+                              ),
+                            )
+                            .catch(console.error);
+                        }}
+                        title={p.visible ? "Hide this proposal" : "Show this proposal"}
+                      >
+                        {p.visible ? "●" : "○"}
+                      </button>
+                      <span
+                        style={{
+                          flex: 1,
+                          color: "#cbd5e1",
+                          fontSize: "0.7rem",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        {p.name}
+                      </span>
+                      <span
+                        style={{ color: "#64748b", fontSize: "0.65rem", fontFamily: "monospace" }}
+                      >
+                        {MODEM_PRESET_LABEL[p.modemPreset]?.replace(/_/g, " ") ??
+                          `#${p.modemPreset}`}
+                      </span>
+                      <button
+                        style={{
+                          ...ageFilterBtnStyle(false),
+                          padding: "0.15rem 0.4rem",
+                          color: "#ef4444",
+                        }}
+                        onClick={() => {
+                          fetch(`/api/proposals/${p.id}`, { method: "DELETE" })
+                            .then(() => {
+                              setProposals((prev) => prev.filter((x) => x.id !== p.id));
+                              proposalViewshedCache.current.delete(p.id);
+                              setProposalViewshedStatus((prev) => {
+                                const m = new Map(prev);
+                                m.delete(p.id);
+                                return m;
+                              });
+                              if (selectedProposal?.id === p.id) setSelectedProposal(null);
+                            })
+                            .catch(console.error);
+                        }}
+                        title="Delete this proposal"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {/* Copy all proposals as GeoJSON FeatureCollection */}
                   <button
                     style={{
-                      ...ageFilterBtnStyle(p.visible),
-                      padding: "0.15rem 0.4rem",
-                      minWidth: "2.5rem",
-                      ...(p.visible ? { borderColor: "#f59e0b", color: "#f59e0b", background: "#422006" } : {}),
+                      ...ageFilterBtnStyle(false),
+                      marginTop: "0.1rem",
+                      textAlign: "center",
+                      width: "100%",
                     }}
                     onClick={() => {
-                      fetch(`/api/proposals/${p.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ visible: !p.visible }),
-                      })
-                        .then((r) => r.json())
-                        .then((updated: CoverageProposal) =>
-                          setProposals((prev) => prev.map((x) => x.id === updated.id ? updated : x))
-                        )
+                      const fc: GeoJSON.FeatureCollection = {
+                        type: "FeatureCollection",
+                        features: proposals.map((p) => ({
+                          type: "Feature",
+                          geometry: { type: "Point", coordinates: [p.lon, p.lat, p.altitudeM] },
+                          properties: {
+                            name: p.name,
+                            altitudeM: p.altitudeM,
+                            modemPreset: p.modemPreset,
+                            modemPresetLabel:
+                              MODEM_PRESET_LABEL[p.modemPreset] ?? `#${p.modemPreset}`,
+                            coverageRadiusKm: MODEM_PRESET_RADIUS_KM[p.modemPreset] ?? 10,
+                            notes: p.notes,
+                          },
+                        })),
+                      };
+                      navigator.clipboard
+                        .writeText(JSON.stringify(fc, null, 2))
                         .catch(console.error);
                     }}
-                    title={p.visible ? "Hide this proposal" : "Show this proposal"}
+                    title="Copy all proposals as GeoJSON FeatureCollection to clipboard"
                   >
-                    {p.visible ? "●" : "○"}
-                  </button>
-                  <span style={{ flex: 1, color: "#cbd5e1", fontSize: "0.7rem", fontFamily: "monospace" }}>
-                    {p.name}
-                  </span>
-                  <span style={{ color: "#64748b", fontSize: "0.65rem", fontFamily: "monospace" }}>
-                    {MODEM_PRESET_LABEL[p.modemPreset]?.replace(/_/g, " ") ?? `#${p.modemPreset}`}
-                  </span>
-                  <button
-                    style={{ ...ageFilterBtnStyle(false), padding: "0.15rem 0.4rem", color: "#ef4444" }}
-                    onClick={() => {
-                      fetch(`/api/proposals/${p.id}`, { method: "DELETE" })
-                        .then(() => {
-                          setProposals((prev) => prev.filter((x) => x.id !== p.id));
-                          proposalViewshedCache.current.delete(p.id);
-                          setProposalViewshedStatus((prev) => { const m = new Map(prev); m.delete(p.id); return m; });
-                          if (selectedProposal?.id === p.id) setSelectedProposal(null);
-                        })
-                        .catch(console.error);
-                    }}
-                    title="Delete this proposal"
-                  >
-                    ✕
+                    Copy All GeoJSON
                   </button>
                 </div>
-              ))}
-              {/* Copy all proposals as GeoJSON FeatureCollection */}
-              <button
-                style={{ ...ageFilterBtnStyle(false), marginTop: "0.1rem", textAlign: "center", width: "100%" }}
-                onClick={() => {
-                  const fc: GeoJSON.FeatureCollection = {
-                    type: "FeatureCollection",
-                    features: proposals.map((p) => ({
-                      type: "Feature",
-                      geometry: { type: "Point", coordinates: [p.lon, p.lat, p.altitudeM] },
-                      properties: {
-                        name: p.name,
-                        altitudeM: p.altitudeM,
-                        modemPreset: p.modemPreset,
-                        modemPresetLabel: MODEM_PRESET_LABEL[p.modemPreset] ?? `#${p.modemPreset}`,
-                        coverageRadiusKm: MODEM_PRESET_RADIUS_KM[p.modemPreset] ?? 10,
-                        notes: p.notes,
-                      },
-                    })),
-                  };
-                  navigator.clipboard.writeText(JSON.stringify(fc, null, 2)).catch(console.error);
-                }}
-                title="Copy all proposals as GeoJSON FeatureCollection to clipboard"
-              >
-                Copy All GeoJSON
-              </button>
+              )}
             </div>
-          )}
-        </div>
           );
         })()}
       </div>
 
       {/* Search filter — top center */}
-      <div style={{
-        position: "absolute", top: "0.75rem", left: "50%", transform: "translateX(-50%)",
-        display: "flex", alignItems: "center", gap: "0.35rem",
-        background: "#0f172a", border: "1px solid #334155", borderRadius: "0.5rem",
-        padding: "0.25rem 0.5rem", zIndex: 10, boxShadow: "0 2px 8px #0008",
-      }}>
+      <div
+        style={{
+          position: "absolute",
+          top: "0.75rem",
+          left: "50%",
+          transform: "translateX(-50%)",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.35rem",
+          background: "#0f172a",
+          border: "1px solid #334155",
+          borderRadius: "0.5rem",
+          padding: "0.25rem 0.5rem",
+          zIndex: 10,
+          boxShadow: "0 2px 8px #0008",
+        }}
+      >
         <span style={{ color: "#64748b", fontSize: "0.75rem", userSelect: "none" }}>🔍</span>
         <input
           type="text"
@@ -1575,24 +1875,42 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
           value={mapSearch}
           onChange={(e) => setMapSearch(e.target.value)}
           style={{
-            background: "transparent", border: "none", outline: "none",
-            color: "#e2e8f0", fontSize: "0.75rem", fontFamily: "monospace",
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            color: "#e2e8f0",
+            fontSize: "0.75rem",
+            fontFamily: "monospace",
             width: "14rem",
           }}
         />
         {mapSearch && (
           <>
-            <span style={{ color: "#94a3b8", fontSize: "0.7rem", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+            <span
+              style={{
+                color: "#94a3b8",
+                fontSize: "0.7rem",
+                fontFamily: "monospace",
+                whiteSpace: "nowrap",
+              }}
+            >
               {filteredMesh.length + filteredMqtt.length} shown
             </span>
             <button
               onClick={() => setMapSearch("")}
               style={{
-                background: "none", border: "none", cursor: "pointer",
-                color: "#64748b", fontSize: "0.85rem", lineHeight: 1, padding: "0 0.1rem",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#64748b",
+                fontSize: "0.85rem",
+                lineHeight: 1,
+                padding: "0 0.1rem",
               }}
               title="Clear search"
-            >✕</button>
+            >
+              ✕
+            </button>
           </>
         )}
       </div>
@@ -1600,18 +1918,38 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
       {/* Legend — bottom left */}
       <div style={styles.legend}>
         <span style={styles.legendItem}>
-          <span style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ ...styles.legendDot, background: "#3b82f6", border: "2px solid #3b82f6" }} />
-            <span style={{ position: "absolute", inset: "-3px", borderRadius: "50%", border: "2px dashed #22c55e" }} />
+          <span
+            style={{
+              position: "relative",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <span
+              style={{ ...styles.legendDot, background: "#3b82f6", border: "2px solid #3b82f6" }}
+            />
+            <span
+              style={{
+                position: "absolute",
+                inset: "-3px",
+                borderRadius: "50%",
+                border: "2px dashed #22c55e",
+              }}
+            />
           </span>
           Direct (0 hops)
         </span>
         <span style={styles.legendItem}>
-          <span style={{ ...styles.legendDot, background: "#0f172a", border: "2px solid #94a3b8" }} />
+          <span
+            style={{ ...styles.legendDot, background: "#0f172a", border: "2px solid #94a3b8" }}
+          />
           Mesh
         </span>
         <span style={styles.legendItem}>
-          <span style={{ ...styles.legendDot, background: "#0f172a", border: "2px dashed #94a3b8" }} />
+          <span
+            style={{ ...styles.legendDot, background: "#0f172a", border: "2px dashed #94a3b8" }}
+          />
           MQTT
         </span>
         <span style={styles.legendItem}>
@@ -1624,23 +1962,35 @@ export function MapPage({ nodes, mqttNodes, showMesh, setShowMesh, showMqtt, set
         </span>
         {showCoverage && (
           <span style={styles.legendItem}>
-            <span style={{
-              display: "inline-block", width: "1rem", height: "1rem",
-              borderRadius: terrainMode ? "2px" : coverageUnion ? "2px" : "50%",
-              background: coverageUnion ? "#3b82f633" : "#94a3b833",
-              border: `1px solid ${coverageUnion ? "#3b82f6" : "#94a3b8"}`,
-            }} />
-            {terrainMode ? "Terrain LOS" : coverageUnion ? "Coverage (union)" : `${coverageRadiusKm}km range`}
+            <span
+              style={{
+                display: "inline-block",
+                width: "1rem",
+                height: "1rem",
+                borderRadius: terrainMode ? "2px" : coverageUnion ? "2px" : "50%",
+                background: coverageUnion ? "#3b82f633" : "#94a3b833",
+                border: `1px solid ${coverageUnion ? "#3b82f6" : "#94a3b8"}`,
+              }}
+            />
+            {terrainMode
+              ? "Terrain LOS"
+              : coverageUnion
+                ? "Coverage (union)"
+                : `${coverageRadiusKm}km range`}
           </span>
         )}
         {showProposals && proposals.some((p) => p.visible) && (
           <span style={styles.legendItem}>
-            <span style={{
-              display: "inline-block", width: "1rem", height: "1rem",
-              borderRadius: "2px",
-              background: "#f59e0b33",
-              border: "1px dashed #f59e0b",
-            }} />
+            <span
+              style={{
+                display: "inline-block",
+                width: "1rem",
+                height: "1rem",
+                borderRadius: "2px",
+                background: "#f59e0b33",
+                border: "1px dashed #f59e0b",
+              }}
+            />
             Proposed site
           </span>
         )}
@@ -1690,7 +2040,17 @@ interface MeshPopupProps {
   terrainRefreshing?: boolean;
 }
 
-function MeshPopup({ node, deviceId, pending, onRequestPosition, onTraceroute, onMessage, onFocusCoverage, onRefreshTerrain, terrainRefreshing }: MeshPopupProps) {
+function MeshPopup({
+  node,
+  deviceId,
+  pending,
+  onRequestPosition,
+  onTraceroute,
+  onMessage,
+  onFocusCoverage,
+  onRefreshTerrain,
+  terrainRefreshing,
+}: MeshPopupProps) {
   return (
     <div style={popupStyles.popup}>
       <div style={popupStyles.name}>{node.longName ?? nodeHex(node.nodeId)}</div>
@@ -1775,7 +2135,12 @@ function MeshPopup({ node, deviceId, pending, onRequestPosition, onTraceroute, o
   );
 }
 
-function MqttPopup({ node, onFocusCoverage, onRefreshTerrain, terrainRefreshing }: {
+function MqttPopup({
+  node,
+  onFocusCoverage,
+  onRefreshTerrain,
+  terrainRefreshing,
+}: {
   node: MqttNode;
   onFocusCoverage?: () => void;
   onRefreshTerrain?: () => void;
@@ -1862,7 +2227,13 @@ function ProposalPopup({
   const [dirty, setDirty] = useState(false);
 
   const handleSave = () => {
-    onUpdate({ ...proposal, name: name.trim() || proposal.name, altitudeM, modemPreset, notes: notes.trim() || null });
+    onUpdate({
+      ...proposal,
+      name: name.trim() || proposal.name,
+      altitudeM,
+      modemPreset,
+      notes: notes.trim() || null,
+    });
     setDirty(false);
   };
 
@@ -1903,7 +2274,10 @@ function ProposalPopup({
           <input
             style={inputStyle}
             value={name}
-            onChange={(e) => { setName(e.target.value); setDirty(true); }}
+            onChange={(e) => {
+              setName(e.target.value);
+              setDirty(true);
+            }}
           />
         </div>
         <div style={{ display: "flex", gap: "0.4rem" }}>
@@ -1915,7 +2289,10 @@ function ProposalPopup({
               min={0}
               max={9000}
               value={altitudeM}
-              onChange={(e) => { setAltitudeM(Number(e.target.value)); setDirty(true); }}
+              onChange={(e) => {
+                setAltitudeM(Number(e.target.value));
+                setDirty(true);
+              }}
             />
           </div>
           <div style={{ flex: 2 }}>
@@ -1923,10 +2300,15 @@ function ProposalPopup({
             <select
               style={inputStyle}
               value={modemPreset}
-              onChange={(e) => { setModemPreset(Number(e.target.value)); setDirty(true); }}
+              onChange={(e) => {
+                setModemPreset(Number(e.target.value));
+                setDirty(true);
+              }}
             >
               {Object.entries(MODEM_PRESET_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>{v.replace(/_/g, " ")}</option>
+                <option key={k} value={k}>
+                  {v.replace(/_/g, " ")}
+                </option>
               ))}
             </select>
           </div>
@@ -1936,7 +2318,10 @@ function ProposalPopup({
           <textarea
             style={{ ...inputStyle, resize: "vertical", minHeight: "2.5rem" }}
             value={notes}
-            onChange={(e) => { setNotes(e.target.value); setDirty(true); }}
+            onChange={(e) => {
+              setNotes(e.target.value);
+              setDirty(true);
+            }}
           />
         </div>
         <div style={{ color: "#64748b", fontSize: "0.65rem", fontFamily: "monospace" }}>

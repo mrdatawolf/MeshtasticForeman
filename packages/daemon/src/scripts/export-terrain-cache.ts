@@ -17,6 +17,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { openDb, clearDbLock } from "../db/open.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -42,7 +43,12 @@ async function main(): Promise<void> {
 
   let rows: Array<{ lat_key: string; lon_key: string; elevation: number; cached_at: string }>;
   try {
-    const result = await db.query<{ lat_key: string; lon_key: string; elevation: number; cached_at: string }>(
+    const result = await db.query<{
+      lat_key: string;
+      lon_key: string;
+      elevation: number;
+      cached_at: string;
+    }>(
       "SELECT lat_key, lon_key, elevation, cached_at FROM elevation_cache ORDER BY lat_key, lon_key",
     );
     rows = result.rows;
@@ -66,8 +72,8 @@ async function main(): Promise<void> {
   // ── Build SQL file ──────────────────────────────────────────────────────────
 
   const exportedAt = new Date().toISOString();
-  const filename   = `elevation_cache_${fileTimestamp()}.sql`;
-  const filePath   = join(CACHE_DIR, filename);
+  const filename = `elevation_cache_${fileTimestamp()}.sql`;
+  const filePath = join(CACHE_DIR, filename);
 
   const lines: string[] = [
     `-- Meshtastic Foreman — elevation cache export`,
@@ -86,7 +92,10 @@ async function main(): Promise<void> {
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const chunk = rows.slice(i, i + BATCH_SIZE);
     const values = chunk
-      .map((r) => `  (${sqlStr(r.lat_key)}, ${sqlStr(r.lon_key)}, ${r.elevation}, ${sqlStr(r.cached_at)})`)
+      .map(
+        (r) =>
+          `  (${sqlStr(r.lat_key)}, ${sqlStr(r.lon_key)}, ${r.elevation}, ${sqlStr(r.cached_at)})`,
+      )
       .join(",\n");
 
     lines.push(

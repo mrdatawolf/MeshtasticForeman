@@ -1,160 +1,48 @@
+import "maplibre-gl/dist/maplibre-gl.css";
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import MapGL, { Source, Layer, NavigationControl } from "react-map-gl/maplibre";
-import "maplibre-gl/dist/maplibre-gl.css";
-import type { NodeInfo, MqttNode, DeviceInfo } from "@foreman/shared";
 import {
-  LineChart, Line, BarChart, Bar, AreaChart, Area,
-  PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
   ResponsiveContainer,
 } from "recharts";
 
+import * as analyticsApi from "../api/analytics.js";
+
+import type {
+  BusiestNode,
+  ChannelBucket,
+  HardwareBucket,
+  HopBucket,
+  LatencyHistogram,
+  LinkQualityEntry,
+  MessageDeliveryStats,
+  MessageVolumePoint,
+  NeighborLink,
+  NodeActivityPoint,
+  PacketLogEntry,
+  PacketTimelinePoint,
+  PortnumCount,
+  PositionRecord,
+  SnrHistoryPoint,
+  TelemetryPoint,
+  TracerouteRecord,
+} from "../api/analytics.js";
+import type { NodeInfo, MqttNode, DeviceInfo } from "@foreman/shared";
+
 const ForceGraph2D = lazy(() => import("react-force-graph-2d"));
-
-// ---------------------------------------------------------------------------
-// API response types (match packages/daemon/src/routes/analytics.ts)
-// ---------------------------------------------------------------------------
-
-interface SnrHistoryPoint {
-  ts: string;
-  nodeId: number;
-  snr: number | null;
-  rssi: number | null;
-  count: number;
-}
-
-interface MessageVolumePoint {
-  ts: string;
-  received: number;
-  sent: number;
-  relayed: number;
-  total: number;
-}
-
-interface MessageDeliveryStats {
-  acked: number;
-  pending: number;
-  error: number;
-  total: number;
-  errorTypes: { type: string; count: number }[];
-}
-
-interface BusiestNode {
-  nodeId: number;
-  received: number;
-  sent: number;
-  relayed: number;
-  total: number;
-}
-
-interface PortnumCount {
-  portnumName: string;
-  count: number;
-}
-
-interface PacketTimelinePoint {
-  ts: string;
-  counts: Record<string, number>;
-  total: number;
-}
-
-interface HopBucket {
-  hopsAway: number;
-  count: number;
-}
-
-interface HardwareBucket {
-  hwModel: number;
-  hwModelName: string;
-  count: number;
-}
-
-interface ChannelBucket {
-  channelIndex: number;
-  channelName: string | null;
-  received: number;
-  sent: number;
-  relayed: number;
-  total: number;
-}
-
-interface LatencyHistogram {
-  buckets: { label: string; maxMs: number; count: number }[];
-  medianMs: number | null;
-  p95Ms: number | null;
-  totalSamples: number;
-}
-
-interface TracerouteRecord {
-  id: string;
-  deviceId: string;
-  fromNodeId: number;
-  toNodeId: number;
-  route: number[];
-  routeBack: number[];
-  recordedAt: string;
-}
-
-interface NeighborLink {
-  fromNodeId: number;
-  toNodeId: number;
-  snr: number | null;
-  lastSeen: string;
-}
-
-interface PacketLogEntry {
-  id:          string;
-  packetId:    number;
-  deviceId:    string;
-  fromNodeId:  number;
-  toNodeId:    number;
-  portnumName: string;
-  rxTime:      string;
-  rxSnr:       number | null;
-  rxRssi:      number | null;
-  hopLimit:    number | null;
-  hopStart:    number | null;
-  viaMqtt:     boolean;
-}
-
-interface LinkQualityEntry {
-  fromNodeId:   number;
-  toNodeId:     number;
-  avgSnr:       number | null;
-  messageCount: number;
-}
-
-interface NodeActivityPoint {
-  ts:     string;
-  nodeId: number;
-  count:  number;
-}
-
-interface PositionRecord {
-  id:          string;
-  nodeId:      number;
-  latitude:    number;
-  longitude:   number;
-  altitude:    number | null;
-  speed:       number | null;
-  groundTrack: number | null;
-  satsInView:  number | null;
-  recordedAt:  string;
-}
-
-interface TelemetryPoint {
-  ts: string;
-  nodeId: number;
-  variantCase: string | null;
-  batteryLevel:       number | null;
-  voltage:            number | null;
-  channelUtilization: number | null;
-  airUtilTx:          number | null;
-  uptimeSeconds:      number | null;
-  temperature:        number | null;
-  relativeHumidity:   number | null;
-  barometricPressure: number | null;
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -179,8 +67,8 @@ function nodeColor(id: number): string {
 /** SNR → link colour for the neighbor graph. */
 function snrLinkColor(snr: number | null): string {
   if (snr === null) return "#475569";
-  if (snr > 0)   return "#22c55e";
-  if (snr > -5)  return "#84cc16";
+  if (snr > 0) return "#22c55e";
+  if (snr > -5) return "#84cc16";
   if (snr > -10) return "#f59e0b";
   if (snr > -15) return "#f97316";
   return "#ef4444";
@@ -204,14 +92,7 @@ function formatMs(ms: number | null): string {
   return `${(ms / 1000).toFixed(1)} s`;
 }
 
-async function apiFetch<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json() as Promise<T>;
-}
-
-const MAP_STYLE =
-  import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty";
+const MAP_STYLE = import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty";
 
 // Inject a single keyframe rule for the loading spinner (once per page load).
 if (typeof document !== "undefined" && !document.getElementById("analytics-spinner-kf")) {
@@ -229,25 +110,43 @@ if (typeof document !== "undefined" && !document.getElementById("analytics-spinn
 // Recharts dark-theme constants
 // ---------------------------------------------------------------------------
 
-const GRID_COLOR  = "#1e293b";
-const TICK_STYLE  = { fill: "#64748b", fontSize: 11, fontFamily: "monospace" };
+const GRID_COLOR = "#1e293b";
+const TICK_STYLE = { fill: "#64748b", fontSize: 11, fontFamily: "monospace" };
 const TOOLTIP_STYLE = {
   contentStyle: {
-    background: "#0f172a", border: "1px solid #334155",
-    borderRadius: "0.375rem", fontFamily: "monospace", fontSize: "0.75rem",
+    background: "#0f172a",
+    border: "1px solid #334155",
+    borderRadius: "0.375rem",
+    fontFamily: "monospace",
+    fontSize: "0.75rem",
   },
   labelStyle: { color: "#94a3b8" },
-  itemStyle:  { color: "#e2e8f0" },
+  itemStyle: { color: "#e2e8f0" },
 };
 
-const ROLE_COLORS  = { received: "#60a5fa", sent: "#34d399", relayed: "#a78bfa" };
-const PIE_PALETTE  = ["#60a5fa","#34d399","#a78bfa","#fb923c","#fbbf24","#f87171","#94a3b8","#22d3ee","#e879f9","#4ade80"];
+const ROLE_COLORS = { received: "#60a5fa", sent: "#34d399", relayed: "#a78bfa" };
+const PIE_PALETTE = [
+  "#60a5fa",
+  "#34d399",
+  "#a78bfa",
+  "#fb923c",
+  "#fbbf24",
+  "#f87171",
+  "#94a3b8",
+  "#22d3ee",
+  "#e879f9",
+  "#4ade80",
+];
 
 // ---------------------------------------------------------------------------
 // Shared UI primitives
 // ---------------------------------------------------------------------------
 
-function ChartCard({ title, children, fullWidth }: {
+function ChartCard({
+  title,
+  children,
+  fullWidth,
+}: {
   title: string;
   children: React.ReactNode;
   fullWidth?: boolean;
@@ -261,9 +160,7 @@ function ChartCard({ title, children, fullWidth }: {
 }
 
 function Empty({ message = "No data" }: { message?: string }) {
-  return (
-    <div style={styles.empty}>{message}</div>
-  );
+  return <div style={styles.empty}>{message}</div>;
 }
 
 function Loading({ height }: { height?: number } = {}) {
@@ -274,7 +171,11 @@ function Loading({ height }: { height?: number } = {}) {
   );
 }
 
-function RangeBtn({ options, value, onChange }: {
+function RangeBtn({
+  options,
+  value,
+  onChange,
+}: {
   options: string[];
   value: string;
   onChange: (v: string) => void;
@@ -282,7 +183,9 @@ function RangeBtn({ options, value, onChange }: {
   return (
     <div style={{ display: "flex", gap: "0.25rem", marginBottom: "0.6rem" }}>
       {options.map((o) => (
-        <button key={o} style={rangeStyle(value === o)} onClick={() => onChange(o)}>{o}</button>
+        <button key={o} style={rangeStyle(value === o)} onClick={() => onChange(o)}>
+          {o}
+        </button>
       ))}
     </div>
   );
@@ -293,12 +196,13 @@ function RangeBtn({ options, value, onChange }: {
 // ---------------------------------------------------------------------------
 
 function SignalTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNode[] }) {
-  const [since, setSince]     = useState("24h");
+  const [since, setSince] = useState("24h");
   const [snrData, setSnrData] = useState<SnrHistoryPoint[] | null>(null);
 
   useEffect(() => {
     setSnrData(null);
-    apiFetch<SnrHistoryPoint[]>(`/api/analytics/snr-history?since=${since}`)
+    analyticsApi
+      .snrHistory({ since })
       .then(setSnrData)
       .catch(() => setSnrData([]));
   }, [since]);
@@ -308,7 +212,10 @@ function SignalTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNod
     if (!snrData) return [];
     const totals = new Map<number, number>();
     for (const p of snrData) totals.set(p.nodeId, (totals.get(p.nodeId) ?? 0) + p.count);
-    return [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([id]) => id);
+    return [...totals.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([id]) => id);
   }, [snrData]);
 
   // Pivot: one row per timestamp bucket, one key per nodeId
@@ -343,14 +250,21 @@ function SignalTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNod
   return (
     <div style={styles.grid}>
       <ChartCard title="SNR over Time (dB)" fullWidth>
-        <RangeBtn options={["1h","6h","24h","7d"]} value={since} onChange={setSince} />
-        {snrData === null ? <Loading /> : !hasData ? <Empty message={snrEmptyMsg} /> : (
+        <RangeBtn options={["1h", "6h", "24h", "7d"]} value={since} onChange={setSince} />
+        {snrData === null ? (
+          <Loading />
+        ) : !hasData ? (
+          <Empty message={snrEmptyMsg} />
+        ) : (
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={pivotedSnr}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
               <XAxis dataKey="ts" tickFormatter={(v) => formatTs(v)} tick={TICK_STYLE} />
               <YAxis tick={TICK_STYLE} unit=" dB" />
-              <Tooltip {...TOOLTIP_STYLE} labelFormatter={(v) => new Date(v as string).toLocaleString()} />
+              <Tooltip
+                {...TOOLTIP_STYLE}
+                labelFormatter={(v) => new Date(v as string).toLocaleString()}
+              />
               <Legend wrapperStyle={styles.legendWrap} />
               {topNodes.map((id) => (
                 <Line
@@ -368,13 +282,20 @@ function SignalTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNod
       </ChartCard>
 
       <ChartCard title="RSSI over Time (dBm)" fullWidth>
-        {snrData === null ? <Loading /> : !hasData ? <Empty message={snrEmptyMsg} /> : (
+        {snrData === null ? (
+          <Loading />
+        ) : !hasData ? (
+          <Empty message={snrEmptyMsg} />
+        ) : (
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={pivotedRssi}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
               <XAxis dataKey="ts" tickFormatter={(v) => formatTs(v)} tick={TICK_STYLE} />
               <YAxis tick={TICK_STYLE} unit=" dBm" />
-              <Tooltip {...TOOLTIP_STYLE} labelFormatter={(v) => new Date(v as string).toLocaleString()} />
+              <Tooltip
+                {...TOOLTIP_STYLE}
+                labelFormatter={(v) => new Date(v as string).toLocaleString()}
+              />
               <Legend wrapperStyle={styles.legendWrap} />
               {topNodes.map((id) => (
                 <Line
@@ -402,81 +323,129 @@ function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttN
   const [since, setSince] = useState("7d");
   const bucket = since === "30d" ? "day" : "hour";
 
-  const [volume,   setVolume]   = useState<MessageVolumePoint[] | null>(null);
+  const [volume, setVolume] = useState<MessageVolumePoint[] | null>(null);
   const [delivery, setDelivery] = useState<MessageDeliveryStats | null>(null);
-  const [busiest,  setBusiest]  = useState<BusiestNode[] | null>(null);
+  const [busiest, setBusiest] = useState<BusiestNode[] | null>(null);
   const [channels, setChannels] = useState<ChannelBucket[] | null>(null);
-  const [latency,  setLatency]  = useState<LatencyHistogram | null>(null);
+  const [latency, setLatency] = useState<LatencyHistogram | null>(null);
 
   useEffect(() => {
     setVolume(null);
-    apiFetch<MessageVolumePoint[]>(`/api/analytics/message-volume?since=${since}&bucket=${bucket}`)
-      .then(setVolume).catch(() => setVolume([]));
+    analyticsApi
+      .messageVolume({ since, bucket })
+      .then(setVolume)
+      .catch(() => setVolume([]));
   }, [since, bucket]);
 
   useEffect(() => {
     setDelivery(null);
-    apiFetch<MessageDeliveryStats>(`/api/analytics/message-delivery?since=${since}`)
-      .then(setDelivery).catch(() => setDelivery({ acked: 0, pending: 0, error: 0, total: 0, errorTypes: [] }));
+    analyticsApi
+      .messageDelivery({ since })
+      .then(setDelivery)
+      .catch(() => setDelivery({ acked: 0, pending: 0, error: 0, total: 0, errorTypes: [] }));
   }, [since]);
 
   useEffect(() => {
     setBusiest(null);
-    apiFetch<BusiestNode[]>(`/api/analytics/busiest-nodes?since=${since}`)
-      .then(setBusiest).catch(() => setBusiest([]));
+    analyticsApi
+      .busiestNodes({ since })
+      .then(setBusiest)
+      .catch(() => setBusiest([]));
   }, [since]);
 
   useEffect(() => {
     setChannels(null);
-    apiFetch<ChannelBucket[]>(`/api/analytics/channel-utilization?since=${since}`)
-      .then(setChannels).catch(() => setChannels([]));
+    analyticsApi
+      .channelUtilization({ since })
+      .then(setChannels)
+      .catch(() => setChannels([]));
   }, [since]);
 
   useEffect(() => {
     setLatency(null);
-    apiFetch<LatencyHistogram>(`/api/analytics/message-latency?since=${since}`)
-      .then(setLatency).catch(() => setLatency(null));
+    analyticsApi
+      .messageLatency({ since })
+      .then(setLatency)
+      .catch(() => setLatency(null));
   }, [since]);
 
   // Delivery donut data
-  const deliverySlices = delivery ? [
-    { name: "Acked",   value: delivery.acked,   fill: "#34d399" },
-    { name: "Pending", value: delivery.pending,  fill: "#f59e0b" },
-    { name: "Error",   value: delivery.error,    fill: "#ef4444" },
-  ].filter((s) => s.value > 0) : [];
+  const deliverySlices = delivery
+    ? [
+        { name: "Acked", value: delivery.acked, fill: "#34d399" },
+        { name: "Pending", value: delivery.pending, fill: "#f59e0b" },
+        { name: "Error", value: delivery.error, fill: "#ef4444" },
+      ].filter((s) => s.value > 0)
+    : [];
 
   // Busiest nodes with resolved names
-  const busiestRows = useMemo(() => (busiest ?? []).map((b) => ({
-    ...b,
-    name: nodeName(b.nodeId, nodes, mqttNodes),
-  })), [busiest, nodes, mqttNodes]);
+  const busiestRows = useMemo(
+    () =>
+      (busiest ?? []).map((b) => ({
+        ...b,
+        name: nodeName(b.nodeId, nodes, mqttNodes),
+      })),
+    [busiest, nodes, mqttNodes],
+  );
 
   // Channel utilization with display names
-  const channelRows = useMemo(() => (channels ?? []).map((c) => ({
-    ...c,
-    label: c.channelName ? `${c.channelName} (${c.channelIndex})` : `Ch ${c.channelIndex}`,
-  })), [channels]);
+  const channelRows = useMemo(
+    () =>
+      (channels ?? []).map((c) => ({
+        ...c,
+        label: c.channelName ? `${c.channelName} (${c.channelIndex})` : `Ch ${c.channelIndex}`,
+      })),
+    [channels],
+  );
 
   return (
     <div style={styles.grid}>
       {/* Range selector spanning full width */}
       <div style={{ gridColumn: "1 / -1" }}>
-        <RangeBtn options={["6h","24h","7d","30d"]} value={since} onChange={setSince} />
+        <RangeBtn options={["6h", "24h", "7d", "30d"]} value={since} onChange={setSince} />
       </div>
 
       {/* Message Volume — full width */}
       <ChartCard title="Message Volume" fullWidth>
-        {volume === null ? <Loading /> : volume.length === 0 ? <Empty /> : (
+        {volume === null ? (
+          <Loading />
+        ) : volume.length === 0 ? (
+          <Empty />
+        ) : (
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={volume}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
               <XAxis dataKey="ts" tickFormatter={(v) => formatTs(v, bucket)} tick={TICK_STYLE} />
               <YAxis tick={TICK_STYLE} allowDecimals={false} />
-              <Tooltip {...TOOLTIP_STYLE} labelFormatter={(v) => new Date(v as string).toLocaleString()} />
+              <Tooltip
+                {...TOOLTIP_STYLE}
+                labelFormatter={(v) => new Date(v as string).toLocaleString()}
+              />
               <Legend wrapperStyle={styles.legendWrap} />
-              <Area type="monotone" dataKey="received" name="Received" stackId="a" fill={ROLE_COLORS.received + "80"} stroke={ROLE_COLORS.received} />
-              <Area type="monotone" dataKey="sent"     name="Sent"     stackId="a" fill={ROLE_COLORS.sent     + "80"} stroke={ROLE_COLORS.sent} />
-              <Area type="monotone" dataKey="relayed"  name="Relayed"  stackId="a" fill={ROLE_COLORS.relayed  + "80"} stroke={ROLE_COLORS.relayed} />
+              <Area
+                type="monotone"
+                dataKey="received"
+                name="Received"
+                stackId="a"
+                fill={ROLE_COLORS.received + "80"}
+                stroke={ROLE_COLORS.received}
+              />
+              <Area
+                type="monotone"
+                dataKey="sent"
+                name="Sent"
+                stackId="a"
+                fill={ROLE_COLORS.sent + "80"}
+                stroke={ROLE_COLORS.sent}
+              />
+              <Area
+                type="monotone"
+                dataKey="relayed"
+                name="Relayed"
+                stackId="a"
+                fill={ROLE_COLORS.relayed + "80"}
+                stroke={ROLE_COLORS.relayed}
+              />
             </AreaChart>
           </ResponsiveContainer>
         )}
@@ -484,20 +453,35 @@ function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttN
 
       {/* Delivery Rate */}
       <ChartCard title="Delivery Rate">
-        {delivery === null ? <Loading /> : delivery.total === 0 ? <Empty message="No sent messages with ACK requested" /> : (
+        {delivery === null ? (
+          <Loading />
+        ) : delivery.total === 0 ? (
+          <Empty message="No sent messages with ACK requested" />
+        ) : (
           <>
             <div style={styles.deliverySummary}>
               {delivery.total > 0 && (
                 <span style={{ color: "#94a3b8" }}>
                   {delivery.acked} / {delivery.total} delivered
-                  <span style={{ color: "#64748b" }}> ({Math.round((delivery.acked / delivery.total) * 100)}%)</span>
+                  <span style={{ color: "#64748b" }}>
+                    {" "}
+                    ({Math.round((delivery.acked / delivery.total) * 100)}%)
+                  </span>
                 </span>
               )}
             </div>
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
-                <Pie dataKey="value" data={deliverySlices} innerRadius={55} outerRadius={80} paddingAngle={3}>
-                  {deliverySlices.map((s, i) => <Cell key={i} fill={s.fill} />)}
+                <Pie
+                  dataKey="value"
+                  data={deliverySlices}
+                  innerRadius={55}
+                  outerRadius={80}
+                  paddingAngle={3}
+                >
+                  {deliverySlices.map((s, i) => (
+                    <Cell key={i} fill={s.fill} />
+                  ))}
                 </Pie>
                 <Tooltip {...TOOLTIP_STYLE} />
                 <Legend wrapperStyle={styles.legendWrap} />
@@ -520,7 +504,11 @@ function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttN
 
       {/* Channel Utilization */}
       <ChartCard title="Channel Utilization">
-        {channels === null ? <Loading /> : channels.length === 0 ? <Empty /> : (
+        {channels === null ? (
+          <Loading />
+        ) : channels.length === 0 ? (
+          <Empty />
+        ) : (
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={channelRows}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
@@ -529,8 +517,8 @@ function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttN
               <Tooltip {...TOOLTIP_STYLE} />
               <Legend wrapperStyle={styles.legendWrap} />
               <Bar dataKey="received" name="Received" stackId="a" fill={ROLE_COLORS.received} />
-              <Bar dataKey="sent"     name="Sent"     stackId="a" fill={ROLE_COLORS.sent} />
-              <Bar dataKey="relayed"  name="Relayed"  stackId="a" fill={ROLE_COLORS.relayed} />
+              <Bar dataKey="sent" name="Sent" stackId="a" fill={ROLE_COLORS.sent} />
+              <Bar dataKey="relayed" name="Relayed" stackId="a" fill={ROLE_COLORS.relayed} />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -538,17 +526,26 @@ function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttN
 
       {/* Busiest Nodes — full width */}
       <ChartCard title="Busiest Nodes" fullWidth>
-        {busiest === null ? <Loading /> : busiest.length === 0 ? <Empty /> : (
+        {busiest === null ? (
+          <Loading />
+        ) : busiest.length === 0 ? (
+          <Empty />
+        ) : (
           <ResponsiveContainer width="100%" height={Math.max(200, busiestRows.length * 28)}>
             <BarChart layout="vertical" data={busiestRows}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} horizontal={false} />
               <XAxis type="number" tick={TICK_STYLE} allowDecimals={false} />
-              <YAxis type="category" dataKey="name" width={160} tick={{ ...TICK_STYLE, fontSize: 10 }} />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={160}
+                tick={{ ...TICK_STYLE, fontSize: 10 }}
+              />
               <Tooltip {...TOOLTIP_STYLE} />
               <Legend wrapperStyle={styles.legendWrap} />
               <Bar dataKey="received" name="Received" stackId="a" fill={ROLE_COLORS.received} />
-              <Bar dataKey="sent"     name="Sent"     stackId="a" fill={ROLE_COLORS.sent} />
-              <Bar dataKey="relayed"  name="Relayed"  stackId="a" fill={ROLE_COLORS.relayed} />
+              <Bar dataKey="sent" name="Sent" stackId="a" fill={ROLE_COLORS.sent} />
+              <Bar dataKey="relayed" name="Relayed" stackId="a" fill={ROLE_COLORS.relayed} />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -556,11 +553,19 @@ function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttN
 
       {/* Message Latency */}
       <ChartCard title="Message Latency (ACK round-trip)" fullWidth>
-        {latency === null ? <Loading /> : latency.totalSamples === 0 ? <Empty message="No ACKed messages in this window" /> : (
+        {latency === null ? (
+          <Loading />
+        ) : latency.totalSamples === 0 ? (
+          <Empty message="No ACKed messages in this window" />
+        ) : (
           <>
             <div style={styles.latencySummary}>
-              <span>Median: <strong style={{ color: "#e2e8f0" }}>{formatMs(latency.medianMs)}</strong></span>
-              <span>p95: <strong style={{ color: "#e2e8f0" }}>{formatMs(latency.p95Ms)}</strong></span>
+              <span>
+                Median: <strong style={{ color: "#e2e8f0" }}>{formatMs(latency.medianMs)}</strong>
+              </span>
+              <span>
+                p95: <strong style={{ color: "#e2e8f0" }}>{formatMs(latency.p95Ms)}</strong>
+              </span>
               <span style={{ color: "#64748b" }}>{latency.totalSamples} samples</span>
             </div>
             <ResponsiveContainer width="100%" height={200}>
@@ -584,7 +589,10 @@ function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttN
 // ---------------------------------------------------------------------------
 
 function MeshGraph({
-  graphData, graphWidth, height = 420, emptyMessage = "No data in this window",
+  graphData,
+  graphWidth,
+  height = 420,
+  emptyMessage = "No data in this window",
 }: {
   graphData: { nodes: unknown[]; links: unknown[] };
   graphWidth: number;
@@ -592,10 +600,38 @@ function MeshGraph({
   emptyMessage?: string;
 }) {
   if (graphData.nodes.length === 0) {
-    return <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center", color: "#475569", fontSize: "0.75rem" }}>{emptyMessage}</div>;
+    return (
+      <div
+        style={{
+          height,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#475569",
+          fontSize: "0.75rem",
+        }}
+      >
+        {emptyMessage}
+      </div>
+    );
   }
   return (
-    <Suspense fallback={<div style={{ height, display: "flex", alignItems: "center", justifyContent: "center", color: "#475569", fontSize: "0.75rem" }}>Loading graph…</div>}>
+    <Suspense
+      fallback={
+        <div
+          style={{
+            height,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#475569",
+            fontSize: "0.75rem",
+          }}
+        >
+          Loading graph…
+        </div>
+      }
+    >
       <ForceGraph2D
         graphData={graphData as Parameters<typeof ForceGraph2D>[0]["graphData"]}
         width={graphWidth}
@@ -606,7 +642,11 @@ function MeshGraph({
         linkColor={(l: Record<string, unknown>) => (l.color as string | undefined) ?? "#334155"}
         linkWidth={(l: Record<string, unknown>) => (l.width as number | undefined) ?? 1}
         nodeCanvasObjectMode={() => "after"}
-        nodeCanvasObject={(node: { x?: number; y?: number; name?: string }, ctx: CanvasRenderingContext2D, globalScale: number) => {
+        nodeCanvasObject={(
+          node: { x?: number; y?: number; name?: string },
+          ctx: CanvasRenderingContext2D,
+          globalScale: number,
+        ) => {
           if (!node.name || node.x == null || node.y == null) return;
           const fontSize = Math.max(10, 12 / globalScale);
           ctx.font = `${fontSize}px monospace`;
@@ -624,28 +664,40 @@ function MeshGraph({
 // ---------------------------------------------------------------------------
 
 function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNode[] }) {
-  const [hops,      setHops]      = useState<HopBucket[] | null>(null);
-  const [hardware,  setHardware]  = useState<HardwareBucket[] | null>(null);
+  const [hops, setHops] = useState<HopBucket[] | null>(null);
+  const [hardware, setHardware] = useState<HardwareBucket[] | null>(null);
   const [neighbors, setNeighbors] = useState<NeighborLink[] | null>(null);
-  const [routes,    setRoutes]    = useState<TracerouteRecord[] | null>(null);
+  const [routes, setRoutes] = useState<TracerouteRecord[] | null>(null);
   const [graphSince, setGraphSince] = useState("24h");
 
-  const neighborRef  = useRef<HTMLDivElement>(null);
+  const neighborRef = useRef<HTMLDivElement>(null);
   const tracerouteRef = useRef<HTMLDivElement>(null);
-  const [neighborWidth,   setNeighborWidth]   = useState(600);
+  const [neighborWidth, setNeighborWidth] = useState(600);
   const [tracerouteWidth, setTracerouteWidth] = useState(600);
 
   useEffect(() => {
-    apiFetch<HopBucket[]>("/api/analytics/hop-distribution").then(setHops).catch(() => setHops([]));
-    apiFetch<HardwareBucket[]>("/api/analytics/hardware-breakdown").then(setHardware).catch(() => setHardware([]));
+    analyticsApi
+      .hopDistribution()
+      .then(setHops)
+      .catch(() => setHops([]));
+    analyticsApi
+      .hardwareBreakdown()
+      .then(setHardware)
+      .catch(() => setHardware([]));
   }, []);
 
   useEffect(() => {
     setNeighbors(null);
     setRoutes(null);
-    const q = graphSince !== "all" ? `?since=${graphSince}` : "";
-    apiFetch<NeighborLink[]>(`/api/analytics/neighbor-graph${q}`).then(setNeighbors).catch(() => setNeighbors([]));
-    apiFetch<TracerouteRecord[]>(`/api/traceroutes${q}`).then(setRoutes).catch(() => setRoutes([]));
+    const since = graphSince !== "all" ? graphSince : undefined;
+    analyticsApi
+      .neighborGraph({ since })
+      .then(setNeighbors)
+      .catch(() => setNeighbors([]));
+    analyticsApi
+      .traceroutes({ since })
+      .then(setRoutes)
+      .catch(() => setRoutes([]));
   }, [graphSince]);
 
   // Measure containers for graph widths
@@ -656,16 +708,22 @@ function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNo
       ro.observe(el);
       return () => ro.disconnect();
     };
-    const off1 = observe(neighborRef.current,   setNeighborWidth);
+    const off1 = observe(neighborRef.current, setNeighborWidth);
     const off2 = observe(tracerouteRef.current, setTracerouteWidth);
-    return () => { off1(); off2(); };
+    return () => {
+      off1();
+      off2();
+    };
   }, []);
 
   // Build neighbor graph data — deduplicate bidirectional edges, keep best SNR
   const neighborGraphData = useMemo(() => {
     if (!neighbors) return { nodes: [], links: [] };
     const nodeIds = new Set<number>();
-    const edgeMap = new Map<string, { source: number; target: number; snr: number | null; color: string; width: number }>();
+    const edgeMap = new Map<
+      string,
+      { source: number; target: number; snr: number | null; color: string; width: number }
+    >();
 
     for (const lk of neighbors) {
       nodeIds.add(lk.fromNodeId);
@@ -677,15 +735,19 @@ function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNo
         edgeMap.set(key, {
           source: lk.fromNodeId,
           target: lk.toNodeId,
-          snr:    lk.snr,
-          color:  snrLinkColor(lk.snr),
-          width:  snrLinkWidth(lk.snr),
+          snr: lk.snr,
+          color: snrLinkColor(lk.snr),
+          width: snrLinkWidth(lk.snr),
         });
       }
     }
 
     return {
-      nodes: [...nodeIds].map((id) => ({ id, name: nodeName(id, nodes, mqttNodes), color: nodeColor(id) })),
+      nodes: [...nodeIds].map((id) => ({
+        id,
+        name: nodeName(id, nodes, mqttNodes),
+        color: nodeColor(id),
+      })),
       links: [...edgeMap.values()],
     };
   }, [neighbors, nodes, mqttNodes]);
@@ -710,36 +772,56 @@ function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNo
     }
 
     return {
-      nodes: [...nodeIds].map((id) => ({ id, name: nodeName(id, nodes, mqttNodes), color: nodeColor(id) })),
+      nodes: [...nodeIds].map((id) => ({
+        id,
+        name: nodeName(id, nodes, mqttNodes),
+        color: nodeColor(id),
+      })),
       links,
     };
   }, [routes, nodes, mqttNodes]);
 
-  const hopRows = useMemo(() => (hops ?? []).map((h) => ({
-    label: h.hopsAway === 0 ? "Direct" : `${h.hopsAway} hop${h.hopsAway > 1 ? "s" : ""}`,
-    count: h.count,
-  })), [hops]);
+  const hopRows = useMemo(
+    () =>
+      (hops ?? []).map((h) => ({
+        label: h.hopsAway === 0 ? "Direct" : `${h.hopsAway} hop${h.hopsAway > 1 ? "s" : ""}`,
+        count: h.count,
+      })),
+    [hops],
+  );
 
   // SNR legend items for the neighbor graph
   const snrLegend = [
-    { label: "> 0 dB",    color: "#22c55e" },
-    { label: "0 to -5",   color: "#84cc16" },
+    { label: "> 0 dB", color: "#22c55e" },
+    { label: "0 to -5", color: "#84cc16" },
     { label: "-5 to -10", color: "#f59e0b" },
-    { label: "-10 to -15",color: "#f97316" },
-    { label: "< -15 dB",  color: "#ef4444" },
-    { label: "Unknown",   color: "#475569" },
+    { label: "-10 to -15", color: "#f97316" },
+    { label: "< -15 dB", color: "#ef4444" },
+    { label: "Unknown", color: "#475569" },
   ];
 
   return (
     <div style={styles.grid}>
       {/* Range selector */}
       <div style={{ gridColumn: "1 / -1" }}>
-        <RangeBtn options={["1h","6h","24h","7d","all"]} value={graphSince} onChange={setGraphSince} />
+        <RangeBtn
+          options={["1h", "6h", "24h", "7d", "all"]}
+          value={graphSince}
+          onChange={setGraphSince}
+        />
       </div>
 
       {/* Neighbor Info Graph — full width, primary topology view */}
       <ChartCard title="Neighbor Topology (SNR-coloured links)" fullWidth>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem", marginBottom: "0.6rem", flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "1rem",
+            marginBottom: "0.6rem",
+            flexWrap: "wrap",
+          }}
+        >
           {neighbors && (
             <span style={{ color: "#64748b", fontSize: "0.7rem", fontFamily: "monospace" }}>
               {neighborGraphData.nodes.length} nodes · {neighborGraphData.links.length} links
@@ -749,24 +831,63 @@ function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNo
           {/* SNR colour legend */}
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginLeft: "auto" }}>
             {snrLegend.map((s) => (
-              <span key={s.label} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.68rem", fontFamily: "monospace", color: "#64748b" }}>
-                <span style={{ display: "inline-block", width: "1.5rem", height: "3px", background: s.color, borderRadius: "2px" }} />
+              <span
+                key={s.label}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                  fontSize: "0.68rem",
+                  fontFamily: "monospace",
+                  color: "#64748b",
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: "1.5rem",
+                    height: "3px",
+                    background: s.color,
+                    borderRadius: "2px",
+                  }}
+                />
                 {s.label}
               </span>
             ))}
           </div>
         </div>
-        <div ref={neighborRef} style={{ background: "#020617", borderRadius: "0.375rem", overflow: "hidden" }}>
-          {neighbors === null
-            ? <div style={{ height: 420, display: "flex", alignItems: "center", justifyContent: "center" }}><div className="analytics-spinner" /></div>
-            : <MeshGraph graphData={neighborGraphData} graphWidth={neighborWidth} emptyMessage="No NEIGHBORINFO_APP packets recorded — nodes must have neighbor broadcast enabled and be received directly over radio." />
-          }
+        <div
+          ref={neighborRef}
+          style={{ background: "#020617", borderRadius: "0.375rem", overflow: "hidden" }}
+        >
+          {neighbors === null ? (
+            <div
+              style={{
+                height: 420,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <div className="analytics-spinner" />
+            </div>
+          ) : (
+            <MeshGraph
+              graphData={neighborGraphData}
+              graphWidth={neighborWidth}
+              emptyMessage="No NEIGHBORINFO_APP packets recorded — nodes must have neighbor broadcast enabled and be received directly over radio."
+            />
+          )}
         </div>
       </ChartCard>
 
       {/* Hop Distribution */}
       <ChartCard title="Hop Distance Distribution">
-        {hops === null ? <Loading /> : hops.length === 0 ? <Empty message="No nodes with hop data" /> : (
+        {hops === null ? (
+          <Loading />
+        ) : hops.length === 0 ? (
+          <Empty message="No nodes with hop data" />
+        ) : (
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={hopRows}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
@@ -781,14 +902,34 @@ function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNo
 
       {/* Hardware Breakdown */}
       <ChartCard title="Hardware Breakdown">
-        {hardware === null ? <Loading /> : hardware.length === 0 ? <Empty /> : (
+        {hardware === null ? (
+          <Loading />
+        ) : hardware.length === 0 ? (
+          <Empty />
+        ) : (
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
-              <Pie dataKey="count" data={hardware} nameKey="hwModelName" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                {hardware.map((_, i) => <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} />)}
+              <Pie
+                dataKey="count"
+                data={hardware}
+                nameKey="hwModelName"
+                innerRadius={50}
+                outerRadius={80}
+                paddingAngle={2}
+              >
+                {hardware.map((_, i) => (
+                  <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} />
+                ))}
               </Pie>
               <Tooltip {...TOOLTIP_STYLE} />
-              <Legend wrapperStyle={styles.legendWrap} formatter={(value) => <span style={{ color: "#94a3b8", fontSize: "0.7rem", fontFamily: "monospace" }}>{value}</span>} />
+              <Legend
+                wrapperStyle={styles.legendWrap}
+                formatter={(value) => (
+                  <span style={{ color: "#94a3b8", fontSize: "0.7rem", fontFamily: "monospace" }}>
+                    {value}
+                  </span>
+                )}
+              />
             </PieChart>
           </ResponsiveContainer>
         )}
@@ -797,15 +938,40 @@ function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNo
       {/* Traceroute Topology — secondary graph */}
       <ChartCard title="Traceroute Topology" fullWidth>
         {routes && (
-          <div style={{ color: "#64748b", fontSize: "0.7rem", fontFamily: "monospace", marginBottom: "0.6rem" }}>
+          <div
+            style={{
+              color: "#64748b",
+              fontSize: "0.7rem",
+              fontFamily: "monospace",
+              marginBottom: "0.6rem",
+            }}
+          >
             {tracerouteGraphData.nodes.length} nodes · {tracerouteGraphData.links.length} links
           </div>
         )}
-        <div ref={tracerouteRef} style={{ background: "#020617", borderRadius: "0.375rem", overflow: "hidden" }}>
-          {routes === null
-            ? <div style={{ height: 360, display: "flex", alignItems: "center", justifyContent: "center" }}><div className="analytics-spinner" /></div>
-            : <MeshGraph graphData={tracerouteGraphData} graphWidth={tracerouteWidth} height={360} emptyMessage="No traceroute data in this window" />
-          }
+        <div
+          ref={tracerouteRef}
+          style={{ background: "#020617", borderRadius: "0.375rem", overflow: "hidden" }}
+        >
+          {routes === null ? (
+            <div
+              style={{
+                height: 360,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <div className="analytics-spinner" />
+            </div>
+          ) : (
+            <MeshGraph
+              graphData={tracerouteGraphData}
+              graphWidth={tracerouteWidth}
+              height={360}
+              emptyMessage="No traceroute data in this window"
+            />
+          )}
         </div>
       </ChartCard>
     </div>
@@ -818,12 +984,14 @@ function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNo
 
 function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNode[] }) {
   const [since, setSince] = useState("24h");
-  const [data, setData]   = useState<TelemetryPoint[] | null>(null);
+  const [data, setData] = useState<TelemetryPoint[] | null>(null);
 
   useEffect(() => {
     setData(null);
-    apiFetch<TelemetryPoint[]>(`/api/analytics/telemetry-history?since=${since}`)
-      .then(setData).catch(() => setData([]));
+    analyticsApi
+      .telemetryHistory({ since })
+      .then(setData)
+      .catch(() => setData([]));
   }, [since]);
 
   // Unique node IDs present in the dataset
@@ -831,7 +999,10 @@ function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
     if (!data) return [];
     const seen = new Map<number, number>();
     for (const p of data) seen.set(p.nodeId, (seen.get(p.nodeId) ?? 0) + 1);
-    return [...seen.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([id]) => id);
+    return [...seen.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([id]) => id);
   }, [data]);
 
   // Pivot helper: one row per ts, keyed by nodeId string
@@ -848,37 +1019,57 @@ function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
   }
 
   const hasDevice = data !== null && data.some((p) => p.variantCase === "deviceMetrics");
-  const hasEnv    = data !== null && data.some((p) => p.variantCase === "environmentMetrics");
+  const hasEnv = data !== null && data.some((p) => p.variantCase === "environmentMetrics");
 
   const noData = data !== null && data.length === 0;
 
   const commonLine = (id: number) => (
-    <Line key={id} dataKey={String(id)} name={nodeName(id, nodes, mqttNodes)}
-      stroke={nodeColor(id)} dot={false} connectNulls />
+    <Line
+      key={id}
+      dataKey={String(id)}
+      name={nodeName(id, nodes, mqttNodes)}
+      stroke={nodeColor(id)}
+      dot={false}
+      connectNulls
+    />
   );
 
-  const commonAxes = (unit: string) => (<>
-    <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-    <XAxis dataKey="ts" tickFormatter={(v) => formatTs(v)} tick={TICK_STYLE} />
-    <YAxis tick={TICK_STYLE} unit={` ${unit}`} />
-    <Tooltip {...TOOLTIP_STYLE} labelFormatter={(v) => new Date(v as string).toLocaleString()} />
-    <Legend wrapperStyle={styles.legendWrap} />
-  </>);
+  const commonAxes = (unit: string) => (
+    <>
+      <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+      <XAxis dataKey="ts" tickFormatter={(v) => formatTs(v)} tick={TICK_STYLE} />
+      <YAxis tick={TICK_STYLE} unit={` ${unit}`} />
+      <Tooltip {...TOOLTIP_STYLE} labelFormatter={(v) => new Date(v as string).toLocaleString()} />
+      <Legend wrapperStyle={styles.legendWrap} />
+    </>
+  );
 
   return (
     <div style={styles.grid}>
       <div style={{ gridColumn: "1 / -1" }}>
-        <RangeBtn options={["1h","6h","24h","7d"]} value={since} onChange={setSince} />
+        <RangeBtn options={["1h", "6h", "24h", "7d"]} value={since} onChange={setSince} />
         {noData && (
-          <div style={{ color: "#64748b", fontSize: "0.75rem", fontFamily: "monospace", marginTop: "0.5rem" }}>
-            No telemetry data yet. TELEMETRY_APP packets will be decoded and stored as they arrive from connected devices.
+          <div
+            style={{
+              color: "#64748b",
+              fontSize: "0.75rem",
+              fontFamily: "monospace",
+              marginTop: "0.5rem",
+            }}
+          >
+            No telemetry data yet. TELEMETRY_APP packets will be decoded and stored as they arrive
+            from connected devices.
           </div>
         )}
       </div>
 
       {/* Device Metrics */}
-      <ChartCard title="Battery Level (%)" >
-        {data === null ? <Loading /> : !hasDevice ? <Empty message="No device metrics" /> : (
+      <ChartCard title="Battery Level (%)">
+        {data === null ? (
+          <Loading />
+        ) : !hasDevice ? (
+          <Empty message="No device metrics" />
+        ) : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={pivotField("batteryLevel")}>
               {commonAxes("%")}
@@ -889,7 +1080,11 @@ function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
       </ChartCard>
 
       <ChartCard title="Voltage (V)">
-        {data === null ? <Loading /> : !hasDevice ? <Empty message="No device metrics" /> : (
+        {data === null ? (
+          <Loading />
+        ) : !hasDevice ? (
+          <Empty message="No device metrics" />
+        ) : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={pivotField("voltage")}>
               {commonAxes("V")}
@@ -900,7 +1095,11 @@ function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
       </ChartCard>
 
       <ChartCard title="Channel Utilization (%)">
-        {data === null ? <Loading /> : !hasDevice ? <Empty message="No device metrics" /> : (
+        {data === null ? (
+          <Loading />
+        ) : !hasDevice ? (
+          <Empty message="No device metrics" />
+        ) : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={pivotField("channelUtilization")}>
               {commonAxes("%")}
@@ -911,7 +1110,11 @@ function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
       </ChartCard>
 
       <ChartCard title="Air TX Utilization (%)">
-        {data === null ? <Loading /> : !hasDevice ? <Empty message="No device metrics" /> : (
+        {data === null ? (
+          <Loading />
+        ) : !hasDevice ? (
+          <Empty message="No device metrics" />
+        ) : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={pivotField("airUtilTx")}>
               {commonAxes("%")}
@@ -923,7 +1126,11 @@ function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
 
       {/* Environment Metrics */}
       <ChartCard title="Temperature (°C)">
-        {data === null ? <Loading /> : !hasEnv ? <Empty message="No environment sensor data" /> : (
+        {data === null ? (
+          <Loading />
+        ) : !hasEnv ? (
+          <Empty message="No environment sensor data" />
+        ) : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={pivotField("temperature")}>
               {commonAxes("°C")}
@@ -934,7 +1141,11 @@ function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
       </ChartCard>
 
       <ChartCard title="Humidity (%)">
-        {data === null ? <Loading /> : !hasEnv ? <Empty message="No environment sensor data" /> : (
+        {data === null ? (
+          <Loading />
+        ) : !hasEnv ? (
+          <Empty message="No environment sensor data" />
+        ) : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={pivotField("relativeHumidity")}>
               {commonAxes("%")}
@@ -945,7 +1156,11 @@ function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
       </ChartCard>
 
       <ChartCard title="Barometric Pressure (hPa)" fullWidth>
-        {data === null ? <Loading /> : !hasEnv ? <Empty message="No environment sensor data" /> : (
+        {data === null ? (
+          <Loading />
+        ) : !hasEnv ? (
+          <Empty message="No environment sensor data" />
+        ) : (
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={pivotField("barometricPressure")}>
               {commonAxes("hPa")}
@@ -963,35 +1178,41 @@ function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
 // ---------------------------------------------------------------------------
 
 function PacketsTab() {
-  const [since,      setSince]      = useState("24h");
-  const [portnum,    setPortnum]    = useState<PortnumCount[] | null>(null);
-  const [timeline,   setTimeline]   = useState<PacketTimelinePoint[] | null>(null);
-  const [logFilter,  setLogFilter]  = useState("");
-  const [packetLog,  setPacketLog]  = useState<PacketLogEntry[] | null>(null);
+  const [since, setSince] = useState("24h");
+  const [portnum, setPortnum] = useState<PortnumCount[] | null>(null);
+  const [timeline, setTimeline] = useState<PacketTimelinePoint[] | null>(null);
+  const [logFilter, setLogFilter] = useState("");
+  const [packetLog, setPacketLog] = useState<PacketLogEntry[] | null>(null);
 
   const bucket = since === "7d" ? "hour" : "hour";
 
   useEffect(() => {
     setPortnum(null);
-    apiFetch<PortnumCount[]>(`/api/analytics/portnum-breakdown?since=${since}`)
-      .then(setPortnum).catch(() => setPortnum([]));
+    analyticsApi
+      .portnumBreakdown({ since })
+      .then(setPortnum)
+      .catch(() => setPortnum([]));
   }, [since]);
 
   useEffect(() => {
     setTimeline(null);
-    apiFetch<PacketTimelinePoint[]>(`/api/analytics/packet-timeline?since=${since}&bucket=${bucket}`)
-      .then(setTimeline).catch(() => setTimeline([]));
+    analyticsApi
+      .packetTimeline({ since, bucket })
+      .then(setTimeline)
+      .catch(() => setTimeline([]));
   }, [since, bucket]);
 
   useEffect(() => {
     setPacketLog(null);
-    const params = new URLSearchParams({ since, limit: "200" });
-    if (logFilter) params.set("portnum", logFilter);
-    apiFetch<PacketLogEntry[]>(`/api/analytics/packet-log?${params}`)
-      .then(setPacketLog).catch(() => setPacketLog([]));
+    analyticsApi
+      .packetLog({ since, limit: 200, portnum: logFilter || undefined })
+      .then(setPacketLog)
+      .catch(() => setPacketLog([]));
   }, [since, logFilter]);
 
-  function nodeHex(id: number) { return `!${id.toString(16).padStart(8, "0")}`; }
+  function nodeHex(id: number) {
+    return `!${id.toString(16).padStart(8, "0")}`;
+  }
 
   function handleCsvExport() {
     const params = new URLSearchParams({ since });
@@ -1020,32 +1241,60 @@ function PacketsTab() {
     });
   }, [timeline, topPortnums]);
 
-  const areaKeys = topPortnums.length > 0
-    ? [...topPortnums, ...(timeline?.some((pt) => {
-        let hasOther = false;
-        for (const k of Object.keys(pt.counts)) { if (!topPortnums.includes(k)) { hasOther = true; break; } }
-        return hasOther;
-      }) ? ["Other"] : [])]
-    : [];
+  const areaKeys =
+    topPortnums.length > 0
+      ? [
+          ...topPortnums,
+          ...(timeline?.some((pt) => {
+            let hasOther = false;
+            for (const k of Object.keys(pt.counts)) {
+              if (!topPortnums.includes(k)) {
+                hasOther = true;
+                break;
+              }
+            }
+            return hasOther;
+          })
+            ? ["Other"]
+            : []),
+        ]
+      : [];
 
   return (
     <div style={styles.grid}>
       <div style={{ gridColumn: "1 / -1" }}>
-        <RangeBtn options={["1h","6h","24h","7d"]} value={since} onChange={setSince} />
+        <RangeBtn options={["1h", "6h", "24h", "7d"]} value={since} onChange={setSince} />
       </div>
 
       {/* Portnum Breakdown */}
       <ChartCard title="Packet Type Breakdown">
-        {portnum === null ? <Loading /> : portnum.length === 0 ? <Empty /> : (
+        {portnum === null ? (
+          <Loading />
+        ) : portnum.length === 0 ? (
+          <Empty />
+        ) : (
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
-              <Pie dataKey="count" data={portnum} nameKey="portnumName" innerRadius={60} outerRadius={100} paddingAngle={2}>
-                {portnum.map((_, i) => <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} />)}
+              <Pie
+                dataKey="count"
+                data={portnum}
+                nameKey="portnumName"
+                innerRadius={60}
+                outerRadius={100}
+                paddingAngle={2}
+              >
+                {portnum.map((_, i) => (
+                  <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} />
+                ))}
               </Pie>
               <Tooltip {...TOOLTIP_STYLE} />
               <Legend
                 wrapperStyle={styles.legendWrap}
-                formatter={(value) => <span style={{ color: "#94a3b8", fontSize: "0.68rem", fontFamily: "monospace" }}>{value}</span>}
+                formatter={(value) => (
+                  <span style={{ color: "#94a3b8", fontSize: "0.68rem", fontFamily: "monospace" }}>
+                    {value}
+                  </span>
+                )}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -1054,13 +1303,20 @@ function PacketsTab() {
 
       {/* Packet Timeline */}
       <ChartCard title="Packet Volume over Time" fullWidth>
-        {timeline === null ? <Loading /> : timeline.length === 0 ? <Empty /> : (
+        {timeline === null ? (
+          <Loading />
+        ) : timeline.length === 0 ? (
+          <Empty />
+        ) : (
           <ResponsiveContainer width="100%" height={240}>
             <AreaChart data={timelineFlat}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
               <XAxis dataKey="ts" tickFormatter={(v) => formatTs(v)} tick={TICK_STYLE} />
               <YAxis tick={TICK_STYLE} allowDecimals={false} />
-              <Tooltip {...TOOLTIP_STYLE} labelFormatter={(v) => new Date(v as string).toLocaleString()} />
+              <Tooltip
+                {...TOOLTIP_STYLE}
+                labelFormatter={(v) => new Date(v as string).toLocaleString()}
+              />
               <Legend wrapperStyle={styles.legendWrap} />
               {areaKeys.map((key, i) => (
                 <Area
@@ -1079,15 +1335,33 @@ function PacketsTab() {
 
       {/* Raw Packet Log */}
       <ChartCard title="Packet Log" fullWidth>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.6rem", flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "0.5rem",
+            alignItems: "center",
+            marginBottom: "0.6rem",
+            flexWrap: "wrap",
+          }}
+        >
           <select
             value={logFilter}
             onChange={(e) => setLogFilter(e.target.value)}
-            style={{ background: "#1e293b", color: "#94a3b8", border: "1px solid #334155", borderRadius: "0.3rem", padding: "0.2rem 0.4rem", fontSize: "0.7rem", fontFamily: "monospace" }}
+            style={{
+              background: "#1e293b",
+              color: "#94a3b8",
+              border: "1px solid #334155",
+              borderRadius: "0.3rem",
+              padding: "0.2rem 0.4rem",
+              fontSize: "0.7rem",
+              fontFamily: "monospace",
+            }}
           >
             <option value="">All types</option>
             {(portnum ?? []).map((p) => (
-              <option key={p.portnumName} value={p.portnumName}>{p.portnumName}</option>
+              <option key={p.portnumName} value={p.portnumName}>
+                {p.portnumName}
+              </option>
             ))}
           </select>
           <span style={{ color: "#64748b", fontSize: "0.7rem", fontFamily: "monospace", flex: 1 }}>
@@ -1095,18 +1369,49 @@ function PacketsTab() {
           </span>
           <button
             onClick={handleCsvExport}
-            style={{ background: "#1e3a5f", color: "#93c5fd", border: "1px solid #3b82f6", borderRadius: "0.3rem", padding: "0.2rem 0.6rem", fontSize: "0.7rem", fontFamily: "monospace", cursor: "pointer" }}
+            style={{
+              background: "#1e3a5f",
+              color: "#93c5fd",
+              border: "1px solid #3b82f6",
+              borderRadius: "0.3rem",
+              padding: "0.2rem 0.6rem",
+              fontSize: "0.7rem",
+              fontFamily: "monospace",
+              cursor: "pointer",
+            }}
           >
             Export CSV
           </button>
         </div>
-        {packetLog === null ? <Loading /> : packetLog.length === 0 ? <Empty message="No packets in this time window." /> : (
+        {packetLog === null ? (
+          <Loading />
+        ) : packetLog.length === 0 ? (
+          <Empty message="No packets in this time window." />
+        ) : (
           <div style={{ overflowX: "auto", maxHeight: "400px", overflowY: "auto" }}>
-            <table style={{ borderCollapse: "collapse", fontFamily: "monospace", fontSize: "0.65rem", width: "100%" }}>
+            <table
+              style={{
+                borderCollapse: "collapse",
+                fontFamily: "monospace",
+                fontSize: "0.65rem",
+                width: "100%",
+              }}
+            >
               <thead>
                 <tr style={{ background: "#1e293b", position: "sticky", top: 0 }}>
                   {["Time", "From", "To", "Type", "SNR", "RSSI", "Hops", "MQTT"].map((h) => (
-                    <th key={h} style={{ padding: "0.3rem 0.5rem", color: "#94a3b8", textAlign: "left", borderBottom: "1px solid #334155", whiteSpace: "nowrap" }}>{h}</th>
+                    <th
+                      key={h}
+                      style={{
+                        padding: "0.3rem 0.5rem",
+                        color: "#94a3b8",
+                        textAlign: "left",
+                        borderBottom: "1px solid #334155",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -1116,15 +1421,35 @@ function PacketsTab() {
                     <td style={styles.logCell}>{new Date(p.rxTime).toLocaleTimeString()}</td>
                     <td style={styles.logCell}>{nodeHex(p.fromNodeId)}</td>
                     <td style={styles.logCell}>{nodeHex(p.toNodeId)}</td>
-                    <td style={{ ...styles.logCell, color: "#7dd3fc" }}>{p.portnumName.replace(/_APP$/, "")}</td>
-                    <td style={{ ...styles.logCell, color: p.rxSnr != null ? (p.rxSnr > 0 ? "#4ade80" : p.rxSnr > -10 ? "#fbbf24" : "#f87171") : "#475569" }}>
+                    <td style={{ ...styles.logCell, color: "#7dd3fc" }}>
+                      {p.portnumName.replace(/_APP$/, "")}
+                    </td>
+                    <td
+                      style={{
+                        ...styles.logCell,
+                        color:
+                          p.rxSnr != null
+                            ? p.rxSnr > 0
+                              ? "#4ade80"
+                              : p.rxSnr > -10
+                                ? "#fbbf24"
+                                : "#f87171"
+                            : "#475569",
+                      }}
+                    >
                       {p.rxSnr != null ? `${p.rxSnr.toFixed(1)}` : "—"}
                     </td>
-                    <td style={{ ...styles.logCell, color: "#94a3b8" }}>{p.rxRssi != null ? p.rxRssi : "—"}</td>
                     <td style={{ ...styles.logCell, color: "#94a3b8" }}>
-                      {p.hopLimit != null && p.hopStart != null ? `${p.hopStart - p.hopLimit}/${p.hopStart}` : p.hopLimit ?? "—"}
+                      {p.rxRssi != null ? p.rxRssi : "—"}
                     </td>
-                    <td style={{ ...styles.logCell, color: p.viaMqtt ? "#818cf8" : "#334155" }}>{p.viaMqtt ? "yes" : "—"}</td>
+                    <td style={{ ...styles.logCell, color: "#94a3b8" }}>
+                      {p.hopLimit != null && p.hopStart != null
+                        ? `${p.hopStart - p.hopLimit}/${p.hopStart}`
+                        : (p.hopLimit ?? "—")}
+                    </td>
+                    <td style={{ ...styles.logCell, color: p.viaMqtt ? "#818cf8" : "#334155" }}>
+                      {p.viaMqtt ? "yes" : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1142,12 +1467,14 @@ function PacketsTab() {
 
 function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNode[] }) {
   const [since, setSince] = useState("7d");
-  const [data,  setData]  = useState<LinkQualityEntry[] | null>(null);
+  const [data, setData] = useState<LinkQualityEntry[] | null>(null);
 
   useEffect(() => {
     setData(null);
-    apiFetch<LinkQualityEntry[]>(`/api/analytics/link-quality?since=${since}`)
-      .then(setData).catch(() => setData([]));
+    analyticsApi
+      .linkQuality({ since })
+      .then(setData)
+      .catch(() => setData([]));
   }, [since]);
 
   // Collect unique node IDs, sorted by total message count
@@ -1156,9 +1483,12 @@ function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mq
     const totals = new Map<number, number>();
     for (const e of data) {
       totals.set(e.fromNodeId, (totals.get(e.fromNodeId) ?? 0) + e.messageCount);
-      totals.set(e.toNodeId,   (totals.get(e.toNodeId)   ?? 0) + e.messageCount);
+      totals.set(e.toNodeId, (totals.get(e.toNodeId) ?? 0) + e.messageCount);
     }
-    return [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([id]) => id);
+    return [...totals.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([id]) => id);
   }, [data]);
 
   // Build a lookup: `${from}_${to}` → avgSnr
@@ -1176,8 +1506,8 @@ function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mq
 
   function cellColor(snr: number | null): string {
     if (snr === null) return "#0f172a";
-    if (snr > 0)   return "#14532d";
-    if (snr > -5)  return "#166534";
+    if (snr > 0) return "#14532d";
+    if (snr > -5) return "#166534";
     if (snr > -10) return "#854d0e";
     if (snr > -15) return "#7c2d12";
     return "#450a0a";
@@ -1195,18 +1525,29 @@ function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mq
   return (
     <div style={styles.grid}>
       <div style={{ gridColumn: "1 / -1" }}>
-        <RangeBtn options={["24h","7d","30d","all"]} value={since} onChange={setSince} />
-        <div style={{ color: "#64748b", fontSize: "0.7rem", fontFamily: "monospace", marginTop: "0.25rem" }}>
+        <RangeBtn options={["24h", "7d", "30d", "all"]} value={since} onChange={setSince} />
+        <div
+          style={{
+            color: "#64748b",
+            fontSize: "0.7rem",
+            fontFamily: "monospace",
+            marginTop: "0.25rem",
+          }}
+        >
           Average SNR (dB) per node pair · top 20 most active nodes shown
         </div>
       </div>
 
       <ChartCard title="Link Quality Matrix (SNR dB)" fullWidth>
-        {data === null ? <Loading /> : data.length === 0 ? (
+        {data === null ? (
+          <Loading />
+        ) : data.length === 0 ? (
           <Empty message="No SNR data in this time window. Link quality requires packets received directly over radio — MQTT-relayed packets do not carry rx_snr." />
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", fontFamily: "monospace", fontSize: "0.65rem" }}>
+            <table
+              style={{ borderCollapse: "collapse", fontFamily: "monospace", fontSize: "0.65rem" }}
+            >
               <thead>
                 <tr>
                   <th style={styles.matrixCorner} />
@@ -1225,12 +1566,21 @@ function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mq
                     </td>
                     {nodeIds.map((toId) => {
                       if (fromId === toId) {
-                        return <td key={toId} style={{ ...styles.matrixCell, background: "#1e293b" }} />;
+                        return (
+                          <td key={toId} style={{ ...styles.matrixCell, background: "#1e293b" }} />
+                        );
                       }
                       const snr = snrMap.get(`${fromId}_${toId}`) ?? null;
                       return (
-                        <td key={toId} style={{ ...styles.matrixCell, background: cellColor(snr), color: snr !== null ? "#e2e8f0" : undefined }}
-                            title={`${shortName(fromId)} → ${shortName(toId)}: ${snr !== null ? `${snr.toFixed(1)} dB` : "no data"}`}>
+                        <td
+                          key={toId}
+                          style={{
+                            ...styles.matrixCell,
+                            background: cellColor(snr),
+                            color: snr !== null ? "#e2e8f0" : undefined,
+                          }}
+                          title={`${shortName(fromId)} → ${shortName(toId)}: ${snr !== null ? `${snr.toFixed(1)} dB` : "no data"}`}
+                        >
                           {cellText(snr)}
                         </td>
                       );
@@ -1242,15 +1592,34 @@ function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mq
             {/* Legend */}
             <div style={{ display: "flex", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
               {[
-                { label: "> 0 dB",      bg: "#14532d" },
-                { label: "0 to -5",     bg: "#166534" },
-                { label: "-5 to -10",   bg: "#854d0e" },
-                { label: "-10 to -15",  bg: "#7c2d12" },
-                { label: "< -15 dB",   bg: "#450a0a" },
-                { label: "No data",     bg: "#0f172a" },
+                { label: "> 0 dB", bg: "#14532d" },
+                { label: "0 to -5", bg: "#166534" },
+                { label: "-5 to -10", bg: "#854d0e" },
+                { label: "-10 to -15", bg: "#7c2d12" },
+                { label: "< -15 dB", bg: "#450a0a" },
+                { label: "No data", bg: "#0f172a" },
               ].map((s) => (
-                <span key={s.label} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.68rem", fontFamily: "monospace", color: "#64748b" }}>
-                  <span style={{ display: "inline-block", width: "0.9rem", height: "0.9rem", background: s.bg, border: "1px solid #334155", borderRadius: "2px" }} />
+                <span
+                  key={s.label}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    fontSize: "0.68rem",
+                    fontFamily: "monospace",
+                    color: "#64748b",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: "0.9rem",
+                      height: "0.9rem",
+                      background: s.bg,
+                      border: "1px solid #334155",
+                      borderRadius: "2px",
+                    }}
+                  />
                   {s.label}
                 </span>
               ))}
@@ -1266,9 +1635,17 @@ function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mq
 // Tab 7 — Node Activity Timeline
 // ---------------------------------------------------------------------------
 
-function ActivityTimelineTab({ nodes, mqttNodes, devices }: { nodes: NodeInfo[]; mqttNodes: MqttNode[]; devices: DeviceInfo[] }) {
+function ActivityTimelineTab({
+  nodes,
+  mqttNodes,
+  devices,
+}: {
+  nodes: NodeInfo[];
+  mqttNodes: MqttNode[];
+  devices: DeviceInfo[];
+}) {
   const [since, setSince] = useState("7d");
-  const [data,  setData]  = useState<NodeActivityPoint[] | null>(null);
+  const [data, setData] = useState<NodeActivityPoint[] | null>(null);
   const [showLocal, setShowLocal] = useState(false);
 
   const localNodeIds = useMemo(
@@ -1280,8 +1657,10 @@ function ActivityTimelineTab({ nodes, mqttNodes, devices }: { nodes: NodeInfo[];
 
   useEffect(() => {
     setData(null);
-    apiFetch<NodeActivityPoint[]>(`/api/analytics/node-activity?since=${since}&bucket=${bucket}`)
-      .then(setData).catch(() => setData([]));
+    analyticsApi
+      .nodeActivity({ since, bucket })
+      .then(setData)
+      .catch(() => setData([]));
   }, [since, bucket]);
 
   // Top 15 most active nodes (excluding local device unless toggled)
@@ -1292,7 +1671,10 @@ function ActivityTimelineTab({ nodes, mqttNodes, devices }: { nodes: NodeInfo[];
       if (!showLocal && localNodeIds.has(p.nodeId)) continue;
       totals.set(p.nodeId, (totals.get(p.nodeId) ?? 0) + p.count);
     }
-    return [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15).map(([id]) => id);
+    return [...totals.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([id]) => id);
   }, [data, showLocal, localNodeIds]);
 
   // Pivot: one row per ts bucket, columns = nodes
@@ -1310,7 +1692,7 @@ function ActivityTimelineTab({ nodes, mqttNodes, devices }: { nodes: NodeInfo[];
   return (
     <div style={styles.grid}>
       <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: "1rem" }}>
-        <RangeBtn options={["24h","7d","30d"]} value={since} onChange={setSince} />
+        <RangeBtn options={["24h", "7d", "30d"]} value={since} onChange={setSince} />
         {localNodeIds.size > 0 && (
           <button
             onClick={() => setShowLocal((v) => !v)}
@@ -1331,22 +1713,35 @@ function ActivityTimelineTab({ nodes, mqttNodes, devices }: { nodes: NodeInfo[];
       </div>
 
       <ChartCard title="Node Activity Timeline (packets per bucket)" fullWidth>
-        {data === null ? <Loading /> : data.length === 0 ? <Empty /> : (
+        {data === null ? (
+          <Loading />
+        ) : data.length === 0 ? (
+          <Empty />
+        ) : (
           <ResponsiveContainer width="100%" height={Math.max(300, topNodes.length * 28 + 60)}>
             <BarChart layout="vertical" data={pivoted}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} horizontal={false} />
               <XAxis type="number" tick={TICK_STYLE} allowDecimals={false} />
-              <YAxis type="category" dataKey="ts" width={90}
+              <YAxis
+                type="category"
+                dataKey="ts"
+                width={90}
                 tick={{ ...TICK_STYLE, fontSize: 10 }}
-                tickFormatter={(v) => formatTs(v, bucket)} />
+                tickFormatter={(v) => formatTs(v, bucket)}
+              />
               <Tooltip
                 {...TOOLTIP_STYLE}
                 labelFormatter={(v) => new Date(v as string).toLocaleString()}
                 formatter={(value, name) => [value, nodeName(Number(name), nodes, mqttNodes)]}
               />
               {topNodes.map((id) => (
-                <Bar key={id} dataKey={String(id)} name={String(id)}
-                  stackId="a" fill={nodeColor(id)} />
+                <Bar
+                  key={id}
+                  dataKey={String(id)}
+                  name={String(id)}
+                  stackId="a"
+                  fill={nodeColor(id)}
+                />
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -1355,27 +1750,42 @@ function ActivityTimelineTab({ nodes, mqttNodes, devices }: { nodes: NodeInfo[];
 
       {/* Per-node packet count summary */}
       <ChartCard title="Total Activity by Node" fullWidth>
-        {data === null ? <Loading /> : data.length === 0 ? <Empty /> : (() => {
-          const totals = new Map<number, number>();
-          for (const p of data) {
-            if (!showLocal && localNodeIds.has(p.nodeId)) continue;
-            totals.set(p.nodeId, (totals.get(p.nodeId) ?? 0) + p.count);
-          }
-          const sorted = [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([id, count]) => ({
-            name: nodeName(id, nodes, mqttNodes), count,
-          }));
-          return (
-            <ResponsiveContainer width="100%" height={Math.max(200, sorted.length * 26)}>
-              <BarChart layout="vertical" data={sorted}>
-                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} horizontal={false} />
-                <XAxis type="number" tick={TICK_STYLE} allowDecimals={false} />
-                <YAxis type="category" dataKey="name" width={150} tick={{ ...TICK_STYLE, fontSize: 10 }} />
-                <Tooltip {...TOOLTIP_STYLE} />
-                <Bar dataKey="count" name="Packets" fill="#60a5fa" />
-              </BarChart>
-            </ResponsiveContainer>
-          );
-        })()}
+        {data === null ? (
+          <Loading />
+        ) : data.length === 0 ? (
+          <Empty />
+        ) : (
+          (() => {
+            const totals = new Map<number, number>();
+            for (const p of data) {
+              if (!showLocal && localNodeIds.has(p.nodeId)) continue;
+              totals.set(p.nodeId, (totals.get(p.nodeId) ?? 0) + p.count);
+            }
+            const sorted = [...totals.entries()]
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 20)
+              .map(([id, count]) => ({
+                name: nodeName(id, nodes, mqttNodes),
+                count,
+              }));
+            return (
+              <ResponsiveContainer width="100%" height={Math.max(200, sorted.length * 26)}>
+                <BarChart layout="vertical" data={sorted}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} horizontal={false} />
+                  <XAxis type="number" tick={TICK_STYLE} allowDecimals={false} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={150}
+                    tick={{ ...TICK_STYLE, fontSize: 10 }}
+                  />
+                  <Tooltip {...TOOLTIP_STYLE} />
+                  <Bar dataKey="count" name="Packets" fill="#60a5fa" />
+                </BarChart>
+              </ResponsiveContainer>
+            );
+          })()
+        )}
       </ChartCard>
     </div>
   );
@@ -1388,15 +1798,16 @@ function ActivityTimelineTab({ nodes, mqttNodes, devices }: { nodes: NodeInfo[];
 const TRAIL_VIEW = { longitude: -98.5, latitude: 39.5, zoom: 3 };
 
 function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNode[] }) {
-  const [since,          setSince]          = useState("24h");
+  const [since, setSince] = useState("24h");
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
-  const [data,           setData]           = useState<PositionRecord[] | null>(null);
+  const [data, setData] = useState<PositionRecord[] | null>(null);
 
   useEffect(() => {
     setData(null);
-    const nodeParam = selectedNodeId != null ? `&nodeId=${selectedNodeId}` : "";
-    apiFetch<PositionRecord[]>(`/api/analytics/position-history?since=${since}${nodeParam}&limit=5000`)
-      .then(setData).catch(() => setData([]));
+    analyticsApi
+      .positionHistory({ since, nodeId: selectedNodeId ?? undefined, limit: 5000 })
+      .then(setData)
+      .catch(() => setData([]));
   }, [since, selectedNodeId]);
 
   // Unique nodes present in data
@@ -1440,47 +1851,80 @@ function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
     return [...byNode.values()];
   }, [data]);
 
-  const latestGeoJson = useMemo((): GeoJSON.FeatureCollection => ({
-    type: "FeatureCollection",
-    features: latestFixes.map((f) => ({
-      type: "Feature",
-      properties: { nodeId: f.nodeId, color: nodeColor(f.nodeId) },
-      geometry: { type: "Point", coordinates: [f.longitude, f.latitude] },
-    })),
-  }), [latestFixes]);
+  const latestGeoJson = useMemo(
+    (): GeoJSON.FeatureCollection => ({
+      type: "FeatureCollection",
+      features: latestFixes.map((f) => ({
+        type: "Feature",
+        properties: { nodeId: f.nodeId, color: nodeColor(f.nodeId) },
+        geometry: { type: "Point", coordinates: [f.longitude, f.latitude] },
+      })),
+    }),
+    [latestFixes],
+  );
 
   // Table rows sorted newest first
   const tableRows = useMemo(
-    () => (data ?? []).slice().sort((a, b) => b.recordedAt.localeCompare(a.recordedAt)).slice(0, 500),
-    [data]
+    () =>
+      (data ?? [])
+        .slice()
+        .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
+        .slice(0, 500),
+    [data],
   );
 
   return (
     <div style={styles.grid}>
       {/* Controls */}
-      <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-        <RangeBtn options={["1h","6h","24h","7d","30d","all"]} value={since} onChange={setSince} />
+      <div
+        style={{
+          gridColumn: "1 / -1",
+          display: "flex",
+          alignItems: "center",
+          gap: "1rem",
+          flexWrap: "wrap",
+        }}
+      >
+        <RangeBtn
+          options={["1h", "6h", "24h", "7d", "30d", "all"]}
+          value={since}
+          onChange={setSince}
+        />
         <select
           value={selectedNodeId ?? ""}
           onChange={(e) => setSelectedNodeId(e.target.value ? Number(e.target.value) : null)}
-          style={{ background: "#0f172a", color: "#e2e8f0", border: "1px solid #1e293b",
-            borderRadius: "0.25rem", padding: "0.15rem 0.4rem", fontFamily: "monospace", fontSize: "0.72rem" }}
+          style={{
+            background: "#0f172a",
+            color: "#e2e8f0",
+            border: "1px solid #1e293b",
+            borderRadius: "0.25rem",
+            padding: "0.15rem 0.4rem",
+            fontFamily: "monospace",
+            fontSize: "0.72rem",
+          }}
         >
           <option value="">All nodes</option>
           {nodeIds.map((id) => (
-            <option key={id} value={id}>{nodeName(id, nodes, mqttNodes)}</option>
+            <option key={id} value={id}>
+              {nodeName(id, nodes, mqttNodes)}
+            </option>
           ))}
         </select>
         {data && (
           <span style={{ color: "#64748b", fontSize: "0.7rem", fontFamily: "monospace" }}>
-            {data.length.toLocaleString()} fixes · {nodeIds.length} node{nodeIds.length !== 1 ? "s" : ""}
+            {data.length.toLocaleString()} fixes · {nodeIds.length} node
+            {nodeIds.length !== 1 ? "s" : ""}
           </span>
         )}
       </div>
 
       {/* Trail Map */}
       <ChartCard title="Position Trails" fullWidth>
-        {data === null ? <Loading /> : data.length === 0 ? <Empty message="No position fixes recorded yet. Position data is saved when nodes broadcast GPS packets." /> : (
+        {data === null ? (
+          <Loading />
+        ) : data.length === 0 ? (
+          <Empty message="No position fixes recorded yet. Position data is saved when nodes broadcast GPS packets." />
+        ) : (
           <div style={{ height: 420, borderRadius: "0.375rem", overflow: "hidden" }}>
             <MapGL
               initialViewState={TRAIL_VIEW}
@@ -1495,8 +1939,8 @@ function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
                   id="trail-lines"
                   type="line"
                   paint={{
-                    "line-color":   ["get", "color"],
-                    "line-width":   2,
+                    "line-color": ["get", "color"],
+                    "line-width": 2,
                     "line-opacity": 0.8,
                   }}
                 />
@@ -1507,8 +1951,8 @@ function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
                   id="dot-circles"
                   type="circle"
                   paint={{
-                    "circle-color":        ["get", "color"],
-                    "circle-radius":       6,
+                    "circle-color": ["get", "color"],
+                    "circle-radius": 6,
                     "circle-stroke-color": "#0f172a",
                     "circle-stroke-width": 1.5,
                   }}
@@ -1521,13 +1965,35 @@ function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
 
       {/* Recent fixes table */}
       <ChartCard title="Recent Position Fixes (newest first, max 500 shown)" fullWidth>
-        {data === null ? <Loading /> : tableRows.length === 0 ? <Empty /> : (
+        {data === null ? (
+          <Loading />
+        ) : tableRows.length === 0 ? (
+          <Empty />
+        ) : (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", fontFamily: "monospace", fontSize: "0.68rem", width: "100%" }}>
+            <table
+              style={{
+                borderCollapse: "collapse",
+                fontFamily: "monospace",
+                fontSize: "0.68rem",
+                width: "100%",
+              }}
+            >
               <thead>
                 <tr>
-                  {["Node","Lat","Lon","Alt (m)","Speed (m/s)","Track °","Sats","Recorded"].map((h) => (
-                    <th key={h} style={styles.matrixHeader}>{h}</th>
+                  {[
+                    "Node",
+                    "Lat",
+                    "Lon",
+                    "Alt (m)",
+                    "Speed (m/s)",
+                    "Track °",
+                    "Sats",
+                    "Recorded",
+                  ].map((h) => (
+                    <th key={h} style={styles.matrixHeader}>
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -1535,15 +2001,26 @@ function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
                 {tableRows.map((r) => (
                   <tr key={r.id} style={{ borderBottom: "1px solid #1e293b" }}>
                     <td style={styles.matrixRowHeader}>
-                      <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%",
-                        background: nodeColor(r.nodeId), marginRight: 5, verticalAlign: "middle" }} />
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: nodeColor(r.nodeId),
+                          marginRight: 5,
+                          verticalAlign: "middle",
+                        }}
+                      />
                       {nodeName(r.nodeId, nodes, mqttNodes)}
                     </td>
                     <td style={styles.matrixCell}>{r.latitude.toFixed(5)}</td>
                     <td style={styles.matrixCell}>{r.longitude.toFixed(5)}</td>
                     <td style={styles.matrixCell}>{r.altitude ?? "—"}</td>
                     <td style={styles.matrixCell}>{r.speed != null ? r.speed.toFixed(1) : "—"}</td>
-                    <td style={styles.matrixCell}>{r.groundTrack != null ? r.groundTrack.toFixed(0) : "—"}</td>
+                    <td style={styles.matrixCell}>
+                      {r.groundTrack != null ? r.groundTrack.toFixed(0) : "—"}
+                    </td>
                     <td style={styles.matrixCell}>{r.satsInView ?? "—"}</td>
                     <td style={styles.matrixCell}>{new Date(r.recordedAt).toLocaleString()}</td>
                   </tr>
@@ -1561,7 +2038,15 @@ function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
 // Main AnalyticsPage
 // ---------------------------------------------------------------------------
 
-type AnalyticsTab = "signal" | "messages" | "network" | "telemetry" | "packets" | "linkquality" | "timeline" | "positions";
+type AnalyticsTab =
+  | "signal"
+  | "messages"
+  | "network"
+  | "telemetry"
+  | "packets"
+  | "linkquality"
+  | "timeline"
+  | "positions";
 
 interface Props {
   nodes: NodeInfo[];
@@ -1576,21 +2061,40 @@ export function AnalyticsPage({ nodes, mqttNodes, devices }: Props) {
     <div style={styles.page}>
       {/* Sub-tab nav */}
       <div style={styles.subNav}>
-        {(["messages", "signal", "network", "telemetry", "packets", "linkquality", "timeline", "positions"] as AnalyticsTab[]).map((t) => (
+        {(
+          [
+            "messages",
+            "signal",
+            "network",
+            "telemetry",
+            "packets",
+            "linkquality",
+            "timeline",
+            "positions",
+          ] as AnalyticsTab[]
+        ).map((t) => (
           <button key={t} style={subTabStyle(tab === t)} onClick={() => setTab(t)}>
-            {t === "linkquality" ? "Link Quality" : t === "timeline" ? "Timeline" : t === "positions" ? "Positions" : t.charAt(0).toUpperCase() + t.slice(1)}
+            {t === "linkquality"
+              ? "Link Quality"
+              : t === "timeline"
+                ? "Timeline"
+                : t === "positions"
+                  ? "Positions"
+                  : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
 
-      {tab === "signal"      && <SignalTab          nodes={nodes} mqttNodes={mqttNodes} />}
-      {tab === "messages"    && <MessagesTab        nodes={nodes} mqttNodes={mqttNodes} />}
-      {tab === "network"     && <NetworkTab         nodes={nodes} mqttNodes={mqttNodes} />}
-      {tab === "telemetry"   && <TelemetryTab       nodes={nodes} mqttNodes={mqttNodes} />}
-      {tab === "packets"     && <PacketsTab />}
-      {tab === "linkquality" && <LinkQualityTab      nodes={nodes} mqttNodes={mqttNodes} />}
-      {tab === "timeline"    && <ActivityTimelineTab nodes={nodes} mqttNodes={mqttNodes} devices={devices} />}
-      {tab === "positions"   && <PositionsTab        nodes={nodes} mqttNodes={mqttNodes} />}
+      {tab === "signal" && <SignalTab nodes={nodes} mqttNodes={mqttNodes} />}
+      {tab === "messages" && <MessagesTab nodes={nodes} mqttNodes={mqttNodes} />}
+      {tab === "network" && <NetworkTab nodes={nodes} mqttNodes={mqttNodes} />}
+      {tab === "telemetry" && <TelemetryTab nodes={nodes} mqttNodes={mqttNodes} />}
+      {tab === "packets" && <PacketsTab />}
+      {tab === "linkquality" && <LinkQualityTab nodes={nodes} mqttNodes={mqttNodes} />}
+      {tab === "timeline" && (
+        <ActivityTimelineTab nodes={nodes} mqttNodes={mqttNodes} devices={devices} />
+      )}
+      {tab === "positions" && <PositionsTab nodes={nodes} mqttNodes={mqttNodes} />}
     </div>
   );
 }
@@ -1601,149 +2105,149 @@ export function AnalyticsPage({ nodes, mqttNodes, devices }: Props) {
 
 function subTabStyle(active: boolean): React.CSSProperties {
   return {
-    background:    "transparent",
-    color:         active ? "#e2e8f0" : "#64748b",
-    border:        "none",
-    borderBottom:  active ? "2px solid #3b82f6" : "2px solid transparent",
-    padding:       "0.3rem 0.9rem",
-    cursor:        "pointer",
-    fontFamily:    "monospace",
-    fontSize:      "0.8rem",
-    marginBottom:  "-1px",
+    background: "transparent",
+    color: active ? "#e2e8f0" : "#64748b",
+    border: "none",
+    borderBottom: active ? "2px solid #3b82f6" : "2px solid transparent",
+    padding: "0.3rem 0.9rem",
+    cursor: "pointer",
+    fontFamily: "monospace",
+    fontSize: "0.8rem",
+    marginBottom: "-1px",
   };
 }
 
 function rangeStyle(active: boolean): React.CSSProperties {
   return {
-    background:   active ? "#1e3a5f" : "#0f172a",
-    color:        active ? "#60a5fa" : "#64748b",
-    border:       `1px solid ${active ? "#3b82f6" : "#1e293b"}`,
-    padding:      "0.15rem 0.5rem",
+    background: active ? "#1e3a5f" : "#0f172a",
+    color: active ? "#60a5fa" : "#64748b",
+    border: `1px solid ${active ? "#3b82f6" : "#1e293b"}`,
+    padding: "0.15rem 0.5rem",
     borderRadius: "0.25rem",
-    cursor:       "pointer",
-    fontFamily:   "monospace",
-    fontSize:     "0.72rem",
+    cursor: "pointer",
+    fontFamily: "monospace",
+    fontSize: "0.72rem",
   };
 }
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    padding:    "1rem 1.5rem",
-    display:    "flex",
+    padding: "1rem 1.5rem",
+    display: "flex",
     flexDirection: "column",
-    height:     "100%",
-    boxSizing:  "border-box",
-    overflowY:  "auto",
+    height: "100%",
+    boxSizing: "border-box",
+    overflowY: "auto",
   },
   subNav: {
-    display:       "flex",
-    gap:           "0.1rem",
-    borderBottom:  "1px solid #1e293b",
-    marginBottom:  "1rem",
-    flexShrink:    0,
+    display: "flex",
+    gap: "0.1rem",
+    borderBottom: "1px solid #1e293b",
+    marginBottom: "1rem",
+    flexShrink: 0,
   },
   grid: {
-    display:             "grid",
+    display: "grid",
     gridTemplateColumns: "repeat(2, 1fr)",
-    gap:                 "1rem",
-    alignItems:          "start",
+    gap: "1rem",
+    alignItems: "start",
   },
   card: {
-    background:   "#0f172a",
+    background: "#0f172a",
     borderRadius: "0.5rem",
-    padding:      "1rem",
-    border:       "1px solid #1e293b",
+    padding: "1rem",
+    border: "1px solid #1e293b",
   },
   cardTitle: {
-    fontSize:      "0.7rem",
-    fontWeight:    "bold",
+    fontSize: "0.7rem",
+    fontWeight: "bold",
     letterSpacing: "0.08em",
     textTransform: "uppercase" as const,
-    color:         "#64748b",
+    color: "#64748b",
     paddingBottom: "0.5rem",
-    borderBottom:  "1px solid #1e293b",
-    marginBottom:  "0.75rem",
+    borderBottom: "1px solid #1e293b",
+    marginBottom: "0.75rem",
   },
   empty: {
-    height:         "160px",
-    display:        "flex",
-    alignItems:     "center",
+    height: "160px",
+    display: "flex",
+    alignItems: "center",
     justifyContent: "center",
-    color:          "#475569",
-    fontSize:       "0.75rem",
-    fontFamily:     "monospace",
+    color: "#475569",
+    fontSize: "0.75rem",
+    fontFamily: "monospace",
   },
   legendWrap: {
-    fontSize:   "0.7rem",
+    fontSize: "0.7rem",
     fontFamily: "monospace",
-    color:      "#94a3b8",
+    color: "#94a3b8",
   },
   subLabel: {
-    fontSize:      "0.65rem",
-    fontWeight:    "bold",
+    fontSize: "0.65rem",
+    fontWeight: "bold",
     letterSpacing: "0.06em",
     textTransform: "uppercase" as const,
-    color:         "#475569",
-    marginBottom:  "0.3rem",
-    marginTop:     "0.5rem",
+    color: "#475569",
+    marginBottom: "0.3rem",
+    marginTop: "0.5rem",
   },
   errorRow: {
-    display:        "flex",
+    display: "flex",
     justifyContent: "space-between",
-    fontSize:       "0.72rem",
-    fontFamily:     "monospace",
-    padding:        "0.1rem 0",
+    fontSize: "0.72rem",
+    fontFamily: "monospace",
+    padding: "0.1rem 0",
   },
   deliverySummary: {
-    fontSize:     "0.72rem",
-    fontFamily:   "monospace",
-    color:        "#94a3b8",
+    fontSize: "0.72rem",
+    fontFamily: "monospace",
+    color: "#94a3b8",
     marginBottom: "0.25rem",
   },
   latencySummary: {
-    display:      "flex",
-    gap:          "1.5rem",
-    fontSize:     "0.72rem",
-    fontFamily:   "monospace",
-    color:        "#64748b",
+    display: "flex",
+    gap: "1.5rem",
+    fontSize: "0.72rem",
+    fontFamily: "monospace",
+    color: "#64748b",
     marginBottom: "0.5rem",
   },
   matrixCorner: {
-    padding:    "0.2rem 0.4rem",
+    padding: "0.2rem 0.4rem",
     background: "#020617",
   },
   matrixHeader: {
-    padding:       "0.2rem 0.4rem",
-    textAlign:     "center" as const,
-    color:         "#94a3b8",
-    background:    "#020617",
-    borderBottom:  "1px solid #1e293b",
-    fontWeight:    "normal",
-    whiteSpace:    "nowrap" as const,
-    maxWidth:      "5rem",
-    overflow:      "hidden",
-    textOverflow:  "ellipsis",
+    padding: "0.2rem 0.4rem",
+    textAlign: "center" as const,
+    color: "#94a3b8",
+    background: "#020617",
+    borderBottom: "1px solid #1e293b",
+    fontWeight: "normal",
+    whiteSpace: "nowrap" as const,
+    maxWidth: "5rem",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
   matrixRowHeader: {
-    padding:     "0.2rem 0.5rem",
-    color:       "#94a3b8",
-    background:  "#020617",
+    padding: "0.2rem 0.5rem",
+    color: "#94a3b8",
+    background: "#020617",
     borderRight: "1px solid #1e293b",
-    whiteSpace:  "nowrap" as const,
-    maxWidth:    "8rem",
-    overflow:    "hidden",
-    textOverflow:"ellipsis",
+    whiteSpace: "nowrap" as const,
+    maxWidth: "8rem",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
   matrixCell: {
-    padding:   "0.2rem 0.4rem",
+    padding: "0.2rem 0.4rem",
     textAlign: "center" as const,
-    fontSize:  "0.62rem",
-    color:     "#64748b",
-    border:    "1px solid #0f172a",
+    fontSize: "0.62rem",
+    color: "#64748b",
+    border: "1px solid #0f172a",
   },
   logCell: {
-    padding:    "0.25rem 0.5rem",
-    color:      "#94a3b8",
+    padding: "0.25rem 0.5rem",
+    color: "#94a3b8",
     whiteSpace: "nowrap" as const,
   },
 };

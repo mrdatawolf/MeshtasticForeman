@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+
 import type { ActivityEntry } from "@foreman/shared";
 
 const MAX_ENTRIES = 500;

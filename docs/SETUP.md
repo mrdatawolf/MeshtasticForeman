@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org) 20+
-- [pnpm](https://pnpm.io) 8+
+- [Node.js](https://nodejs.org) 22.13+
+- [pnpm](https://pnpm.io) 11.21.0, as pinned by root `package.json`'s `packageManager` field
 - A Meshtastic device connected via USB serial
 
 ## Installation

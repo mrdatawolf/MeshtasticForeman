@@ -1,0 +1,9 @@
+**/node_modules/**
+**/dist/**
+**/build/**
+dist-daemon/**
+dist-electron/**
+pglite-data/**
+**/coverage/**
+*.lock
+packages/web/src/assets/

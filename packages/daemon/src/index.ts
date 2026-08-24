@@ -1,21 +1,22 @@
-import Fastify from "fastify";
-import fastifyCors from "@fastify/cors";
-import fastifyWebsocket from "@fastify/websocket";
-import fastifyStatic from "@fastify/static";
-import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
+import fastifyCors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
+import fastifyWebsocket from "@fastify/websocket";
+import Fastify from "fastify";
+
+import { consoleLog } from "./activity/console-log.js";
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrations.js";
-import { consoleLog } from "./activity/console-log.js";
 import { DeviceManager } from "./device/device-manager.js";
+import { syncHwModels } from "./hw-models.js";
 import { MqttGateway } from "./mqtt/gateway.js";
-import { registerDeviceRoutes } from "./routes/devices.js";
 import { registerAnalyticsRoutes } from "./routes/analytics.js";
 import { registerCoverageRoutes } from "./routes/coverage.js";
+import { registerDeviceRoutes } from "./routes/devices.js";
 import { registerProposalRoutes } from "./routes/proposals.js";
 import { registerWsRoute } from "./routes/websocket.js";
-import { syncHwModels } from "./hw-models.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -28,7 +29,7 @@ const HOST = process.env.API_HOST ?? "0.0.0.0";
  * user time to read the error before the window restarts.
  */
 async function fatalError(label: string, err: unknown): Promise<never> {
-  const msg = err instanceof Error ? err.stack ?? err.message : String(err);
+  const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
   process.stderr.write(`\n\n${"=".repeat(60)}\n`);
   process.stderr.write(`  FATAL — ${label}\n\n`);
   process.stderr.write(`  ${msg.split("\n").join("\n  ")}\n`);
@@ -40,11 +41,13 @@ async function fatalError(label: string, err: unknown): Promise<never> {
   if (process.stdin.isTTY) {
     process.stdin.setRawMode(true);
     process.stdin.resume();
-    await new Promise<void>((resolve) => process.stdin.once("data", () => {
-      process.stdin.setRawMode(false);
-      process.stdin.pause();
-      resolve();
-    }));
+    await new Promise<void>((resolve) =>
+      process.stdin.once("data", () => {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        resolve();
+      }),
+    );
   } else {
     await new Promise<void>((resolve) => setTimeout(resolve, 5000));
   }
@@ -65,10 +68,7 @@ process.on("unhandledRejection", (reason) => {
 // ERR_STREAM_PREMATURE_CLOSE). These become uncaught exceptions that would
 // crash the process. We swallow only the known serial-disconnect error codes
 // so the daemon stays up and waits for the device to reconnect.
-const SERIAL_DISCONNECT_CODES = new Set([
-  "ABORT_ERR",
-  "ERR_STREAM_PREMATURE_CLOSE",
-]);
+const SERIAL_DISCONNECT_CODES = new Set(["ABORT_ERR", "ERR_STREAM_PREMATURE_CLOSE"]);
 process.on("uncaughtException", (err) => {
   const code = (err as NodeJS.ErrnoException).code ?? "";
   const msg = err.message ?? "";
@@ -109,19 +109,24 @@ async function main() {
   //    auto-started when ENABLE_MQTT=true so the system is lightweight by default)
   let mqttGateway: MqttGateway | null = null;
   if (process.env.MQTT_BROKER) {
-    mqttGateway = new MqttGateway({
-      broker:    process.env.MQTT_BROKER,
-      port:      Number(process.env.MQTT_PORT ?? 1883),
-      username:  process.env.MQTT_USER ?? "meshdev",
-      password:  process.env.MQTT_PASS ?? "large4cats",
-      rootTopic: process.env.MQTT_ROOT ?? "msh/US",
-    }, db);
+    mqttGateway = new MqttGateway(
+      {
+        broker: process.env.MQTT_BROKER,
+        port: Number(process.env.MQTT_PORT ?? 1883),
+        username: process.env.MQTT_USER ?? "meshdev",
+        password: process.env.MQTT_PASS ?? "large4cats",
+        rootTopic: process.env.MQTT_ROOT ?? "msh/US",
+      },
+      db,
+    );
     deviceManager.setMqttGateway(mqttGateway);
     if (process.env.ENABLE_MQTT === "true") {
       mqttGateway.start();
       console.log(`[mqtt] gateway started → ${process.env.MQTT_BROKER}`);
     } else {
-      console.log(`[mqtt] gateway configured (ENABLE_MQTT is not true, not starting) → ${process.env.MQTT_BROKER}`);
+      console.log(
+        `[mqtt] gateway configured (ENABLE_MQTT is not true, not starting) → ${process.env.MQTT_BROKER}`,
+      );
     }
   }
 
@@ -154,9 +159,7 @@ async function main() {
 
   // Background: sync hardware model names from the protobufs repo.
   // Runs after the server is up so it never delays startup.
-  syncHwModels(db).catch((err) =>
-    console.warn("[hw-models] unexpected error during sync:", err)
-  );
+  syncHwModels(db).catch((err) => console.warn("[hw-models] unexpected error during sync:", err));
 }
 
 main().catch((err) => fatalError("startup failure", err));
