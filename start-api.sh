@@ -2,7 +2,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-VERSION=$(grep '^VERSION=' "$ROOT/VERSION.txt" | cut -d= -f2)
+VERSION=$(node -p "require('$ROOT/package.json').version")
 
 echo ""
 echo "  Meshtastic Foreman — API Daemon"

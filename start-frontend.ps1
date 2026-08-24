@@ -1,5 +1,5 @@
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
-$version = (Get-Content "$root\VERSION.txt" | Where-Object { $_ -match '^VERSION=' }) -replace '^VERSION=', ''
+$version = (Get-Content "$root\package.json" -Raw | ConvertFrom-Json).version
 
 Write-Host ""
 Write-Host "  Meshtastic Foreman — Frontend" -ForegroundColor Cyan
