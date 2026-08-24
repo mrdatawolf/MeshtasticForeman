@@ -124,6 +124,7 @@ export function DeviceConfigPage({ devices, configs, autoOpenWizard, onWizardOpe
 
   const config = selectedId ? configs.get(selectedId) : null;
   const device = devices.find((d) => d.id === selectedId);
+  const deviceConnected = device?.status === "connected";
 
   useEffect(() => {
     if (!selectedId) return;
@@ -136,6 +137,11 @@ export function DeviceConfigPage({ devices, configs, autoOpenWizard, onWizardOpe
       onWizardOpened?.();
     }
   }, [autoOpenWizard, selectedId, config]);
+
+  useEffect(() => {
+    if (!wizardOpen || deviceConnected) return;
+    setWizardOpen(false);
+  }, [wizardOpen, deviceConnected]);
 
   const radioEntries = config
     ? Object.entries(config.radioConfig).filter(
@@ -175,9 +181,18 @@ export function DeviceConfigPage({ devices, configs, autoOpenWizard, onWizardOpe
           <div style={styles.wizardBar}>
             <div>
               <div style={styles.wizardBarTitle}>Setup Wizard</div>
-              <div style={styles.wizardBarSub}>Guided role, region, and feature configuration</div>
+              <div style={styles.wizardBarSub}>
+                {deviceConnected
+                  ? "Guided role, region, and feature configuration"
+                  : "Connect a device to use the setup wizard"}
+              </div>
             </div>
-            <button style={styles.wizardBtn} onClick={() => setWizardOpen(true)}>
+            <button
+              style={wizardLaunchBtnStyle(deviceConnected)}
+              onClick={() => setWizardOpen(true)}
+              disabled={!deviceConnected}
+              title={deviceConnected ? "Launch setup wizard" : "A connected device is required"}
+            >
               Launch Wizard →
             </button>
           </div>
@@ -1288,6 +1303,20 @@ function saveBtnStyle(disabled: boolean): React.CSSProperties {
   };
 }
 
+function wizardLaunchBtnStyle(enabled: boolean): React.CSSProperties {
+  return {
+    background: enabled ? "#1e3a5f" : "#1e293b",
+    border: `1px solid ${enabled ? "#3b82f6" : "#334155"}`,
+    color: enabled ? "#93c5fd" : "#64748b",
+    padding: "0.35rem 1rem",
+    borderRadius: "0.375rem",
+    cursor: enabled ? "pointer" : "not-allowed",
+    fontFamily: "monospace",
+    fontSize: "0.82rem",
+    whiteSpace: "nowrap",
+  };
+}
+
 function toggleBtn(on: boolean): React.CSSProperties {
   return {
     background: on ? "#166534" : "#1e293b",
@@ -1543,15 +1572,4 @@ const styles: Record<string, React.CSSProperties> = {
   },
   wizardBarTitle: { color: "#e2e8f0", fontSize: "0.85rem", fontWeight: "bold" },
   wizardBarSub: { color: "#64748b", fontSize: "0.75rem", marginTop: "0.1rem" },
-  wizardBtn: {
-    background: "#1e3a5f",
-    border: "1px solid #3b82f6",
-    color: "#93c5fd",
-    padding: "0.35rem 1rem",
-    borderRadius: "0.375rem",
-    cursor: "pointer",
-    fontFamily: "monospace",
-    fontSize: "0.82rem",
-    whiteSpace: "nowrap",
-  },
 };
