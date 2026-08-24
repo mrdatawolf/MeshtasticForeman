@@ -9,8 +9,8 @@ import MapGL, {
   Layer,
 } from "react-map-gl/maplibre";
 
-import { mergeCoveragePolygons } from "../lib/coverageMath.js";
 import { buildCoverageCircle, clipViewshedToRadius } from "../lib/coordinateHelpers.js";
+import { mergeCoveragePolygons } from "../lib/coverageMath.js";
 import { foremanClient } from "../ws/client.js";
 
 import type { NodeInfo, MqttNode, DeviceConfig, CoverageProposal } from "@foreman/shared";
@@ -445,14 +445,14 @@ export function MapPage({
 
   // Only produce new array references when GPS-relevant data actually changes,
   // preventing the viewshed effect from re-firing on every WebSocket update.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   const mappableMesh = useMemo(
     () => nodes.filter((n) => n.latitude != null && n.longitude != null),
     [meshGpsKey],
   );
   // Exclude any MQTT node whose nodeId is already present in the mesh list —
   // the mesh copy is authoritative and we don't want duplicate markers/coverage.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   const mappableMqtt = useMemo(() => {
     const meshIds = new Set(mappableMesh.map((n) => n.nodeId));
     return mqttNodes.filter(
@@ -575,7 +575,6 @@ export function MapPage({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCoverage, terrainMode, effectiveFocusedNodeId, mappableMesh, mappableMqtt]);
 
   // Fetch viewsheds for visible proposals whenever terrain mode is active.
@@ -623,7 +622,6 @@ export function MapPage({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showProposals, terrainMode, proposals]);
 
   // Build GeoJSON for proposal coverage — always separate from live node coverage.

@@ -1,12 +1,13 @@
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Worker } from "node:worker_threads";
 
-import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { clearDbLock, openDb } from "../open.js";
+
+import type { PGlite } from "@electric-sql/pglite";
+import type { Worker } from "node:worker_threads";
 
 const originalExecArgv = [...process.execArgv];
 

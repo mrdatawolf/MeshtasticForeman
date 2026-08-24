@@ -20,6 +20,9 @@ const clientMock = vi.hoisted(() => {
 
 vi.mock("../ws/client.js", () => ({ foremanClient: clientMock }));
 
+// Must be imported after vi.mock() above so the mocked ../ws/client.js is in
+// place before messages.js's own top-level import of it runs.
+// eslint-disable-next-line import/order
 import { clearConversation, getConversation, initMessageStore } from "./messages.js";
 
 const message: Message = {
