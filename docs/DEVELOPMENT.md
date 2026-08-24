@@ -1,0 +1,77 @@
+# Development Guide
+
+## Technology stack
+
+* TypeScript throughout, managed as a pnpm workspace (`pnpm-workspace.yaml`).
+* `packages/daemon` — Node.js + Fastify backend (serial, MQTT, REST, WebSocket,
+  PGlite persistence).
+* `packages/web` — React frontend (Vite).
+* `packages/shared` — TypeScript types shared between daemon and web.
+* `electron-app/` — Electron shell used to package installers via
+  `electron-builder`.
+* `docs/` — VitePress documentation site (`@foreman/docs`).
+* Node.js >= 20, pnpm >= 9 (pinned to `pnpm@11.21.0` via `packageManager`).
+
+### Version metadata
+
+The root `package.json` is the canonical, single source of truth for the
+application version. The private `packages/daemon`, `packages/web`, and
+`packages/shared` packages have independent `package.json` versions and are not
+required to track the root version. `scripts/sync-version.js` propagates the
+root version to `electron-app/package.json` for `electron-builder`.
+
+## Repository layout
+
+```text
+packages/daemon   Backend: DeviceManager, MqttGateway, PGlite DB, REST API, WebSocket
+packages/web      React frontend: Nodes, Map, Messages, Analytics, Activity, Logs, Config
+packages/shared   Shared TypeScript types
+electron-app/     Electron main/preload for desktop packaging
+scripts/          Build/versioning helpers (bundle-daemon.js, sync-version.js)
+docs/             VitePress documentation site + project knowledge (this file, ROADMAP.md, etc.)
+tasks/            DbC task board — see tasks/README.md
+```
+
+See `docs/ARCHITECTURE.md` for how these pieces fit together at runtime.
+
+## Setup and commands
+
+```sh
+cp .env.example .env        # set MESHTASTIC_PORT at minimum
+pnpm install
+./start-both.sh             # or start-both.ps1 on Windows — daemon + frontend dev server
+```
+
+| Command | Purpose |
+|---|---|
+| `pnpm dev` | Run all packages in parallel dev mode |
+| `pnpm build` | Build all workspace packages |
+| `pnpm lint` | Lint all workspace packages |
+| `pnpm format` | Format all workspace packages |
+| `pnpm test` | Test all workspace packages |
+| `pnpm build:installer` | Build web, bundle the daemon, and produce Electron installers |
+
+`start-api.sh`/`start-frontend.sh` (and `.ps1` equivalents) start the daemon or
+frontend individually. In production, the daemon serves the built frontend —
+run `pnpm build` first, then start only the daemon.
+
+## Coding conventions
+
+Not yet formalized beyond what the codebase already does. Stage 1 of
+`docs/ROADMAP.md` (shared ESLint config, Prettier, shared base `tsconfig`) is
+where these conventions are meant to become explicit and enforced. Until then,
+match existing style in the file being changed.
+
+## Testing philosophy
+
+No enforced test suite yet. `docs/ROADMAP.md` Stage 2 defines the intended
+initial coverage (analytics endpoints, database migrations, MQTT gateway
+parsing/encryption, shared WebSocket schemas, frontend WebSocket lifecycle and
+pure logic) and prefers behavior-focused tests over large snapshot tests.
+
+## Security and privacy
+
+* All user-defined configuration (device port, MQTT credentials, ports, map
+  style, etc.) is read from the root `.env` file — never hardcode secrets.
+* MQTT gateway traffic is re-encrypted with the channel PSK (AES-128-CTR)
+  before publishing; do not log decrypted payloads or PSKs.
