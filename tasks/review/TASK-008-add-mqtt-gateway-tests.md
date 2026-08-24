@@ -79,13 +79,28 @@ Acceptance-criteria evidence:
 
 Validation performed (all commands and exact outcomes):
 
-- `pnpm --filter @foreman/daemon test -- src/mqtt/__tests__/gateway.test.ts` — could not start,
-  exit 127: `pnpm: command not found`.
-- `corepack pnpm --filter @foreman/daemon test -- src/mqtt/__tests__/gateway.test.ts` — failed
-  before tests, exit 1: Corepack could not create its cache under the read-only home filesystem.
-- `COREPACK_HOME=/tmp/task008-corepack corepack pnpm --filter @foreman/daemon test --
-  src/mqtt/__tests__/gateway.test.ts` — failed before tests, exit 1: Corepack attempted to obtain
-  pnpm from `registry.npmjs.org`, but network access is unavailable.
+- pnpm resolution investigation found that the shell exports
+  `NVM_BIN=/home/patrick/.nvm/versions/node/v24.16.0/bin` but omits it from `PATH`. The working shim
+  is `/home/patrick/.nvm/versions/node/v24.16.0/bin/pnpm`, resolving through NVM Corepack to the
+  repository-pinned pnpm 11.21.0 already present in the local Corepack cache. The root
+  `package.json` pins `pnpm@11.21.0+sha512...`; `pnpm --version` returned `11.21.0` after prepending
+  `NVM_BIN` to `PATH`. Root `node_modules/.bin` has project tools but no pnpm shim.
+- Initial exact-command attempt,
+  `PATH=/home/patrick/.nvm/versions/node/v24.16.0/bin:$PATH pnpm --filter @foreman/daemon test`,
+  resolved pnpm but exited 1 before tests. pnpm's automatic dependency-status check attempted an
+  internal install and failed opening its read-only store SQLite database with
+  `[ERR_SQLITE_ERROR] unable to open database file`. No explicit `pnpm install` was run.
+- Authoritative exact-command run,
+  `PATH=/home/patrick/.nvm/versions/node/v24.16.0/bin:$PATH
+  PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false pnpm --filter @foreman/daemon test`, disabled only that
+  automatic pre-script dependency check and executed the requested `pnpm --filter
+  @foreman/daemon test` script. Result: exit 1; 7 test files total, 5 passed / 2 failed; 144 tests
+  total, 138 passed / 6 failed; duration 87.96s. All 10 gateway tests passed.
+- The six exact-command failures were confined to files outside TASK-008's allowed scope:
+  `src/db/__tests__/open.test.ts` had five failures (one 5000ms timeout while opening the worker DB,
+  followed by four `TypeError: Cannot read properties of undefined (reading 'exec')` failures),
+  and `src/__tests__/db/migrations.test.ts` had one 5000ms timeout in `migrates an empty database
+  to the latest schema`. `src/mqtt/__tests__/gateway.test.ts` was not named in any failure or error.
 - `packages/daemon/node_modules/.bin/vitest run
   packages/daemon/src/mqtt/__tests__/gateway.test.ts` — initial iteration: 1 file, 10 tests,
   7 passed / 3 failed due to fixture-expectation mismatches; assertions were corrected to match
@@ -95,7 +110,7 @@ Validation performed (all commands and exact outcomes):
   10/10 tests passed.
 - `node_modules/.bin/vitest run` from `packages/daemon` — full-suite attempt: 6 files total,
   4 passed / 2 failed; 93 tests total, 58 passed / 35 failed, plus 28 unhandled errors. All 10 new
-  gateway tests passed. Pre-existing PGlite-backed tests could not load the absent installed asset
+  gateway tests passed. Untouched PGlite-backed tests could not load the then-absent installed asset
   `node_modules/.pnpm/@electric-sql+pglite@0.4.6/node_modules/@electric-sql/pglite/dist/pglite.data`;
   worker tests also reported unknown `.ts` extension for `src/db/pglite.thread.ts`.
 - `packages/daemon/node_modules/.bin/prettier --check
@@ -111,13 +126,16 @@ Assumptions and deviations:
 - Test keys other than the gateway's documented public default-key expansion expectation are
   explicitly synthetic byte patterns. No private/real channel PSK fixture is used, and tests add
   no logging of decrypted plaintext or key bytes.
-- The required pnpm full-suite green result could not be demonstrated because pnpm is unavailable
-  and the existing dependency installation lacks a required PGlite runtime asset. No dependency
-  installation or out-of-scope repository repair was attempted.
+- The full pnpm suite is not green due exclusively to DB tests outside this task. During the earlier
+  raw run the PGlite `pglite.data` asset was absent and the worker could not load its `.ts` entry;
+  the asset now exists with a later timestamp, while the exact pnpm run still times out initializing
+  the DB/worker. This is consistent with an incomplete or concurrently changing shared
+  `node_modules` installation/runtime setup, not the mocked, DB-independent gateway tests. No
+  dependency repair, source fix, or explicit install was attempted.
 
-Unresolved risk: a correctly provisioned environment should rerun
-`pnpm --filter @foreman/daemon test` to confirm the expected complete green aggregate. The new
-gateway suite itself is green (10/10) with the installed Vitest runner.
+Unresolved risk: the two unrelated DB test files need a stable dependency installation and worker
+runtime before the complete daemon suite can be demonstrated green. The requested exact pnpm
+command does demonstrate that the TASK-008 gateway suite itself is green (10/10).
 
 ## Review
 
