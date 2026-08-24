@@ -20,7 +20,14 @@ describe("coordinate helpers", () => {
   });
 
   it("clips only viewshed vertices beyond the requested radius", () => {
-    const input = polygon([[[0, 0], [0.01, 0], [1, 0], [0, 0]]]);
+    const input = polygon([
+      [
+        [0, 0],
+        [0.01, 0],
+        [1, 0],
+        [0, 0],
+      ],
+    ]);
     const result = clipViewshedToRadius(input, 0, 0, 10);
     expect(result.geometry.coordinates[0][1]).toEqual([0.01, 0]);
     expect(result.geometry.coordinates[0][2][0]).toBeCloseTo(0.08993, 4);

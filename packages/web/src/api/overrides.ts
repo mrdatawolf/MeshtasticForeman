@@ -1,6 +1,6 @@
-import type { NodeOverride } from "@foreman/shared";
-
 import { request } from "./client.js";
+
+import type { NodeOverride } from "@foreman/shared";
 
 export type NodeOverridePatch = Partial<
   Pick<NodeOverride, "aliasName" | "latitude" | "longitude" | "altitude" | "notes">

@@ -8,9 +8,7 @@ export function mergeCoveragePolygons(
 ): GeoJSON.FeatureCollection {
   if (features.length === 0) return featureCollection([]);
   if (features.length === 1) {
-    return featureCollection([
-      { ...features[0], properties: { color, focused: focused ? 1 : 0 } },
-    ]);
+    return featureCollection([{ ...features[0], properties: { color, focused: focused ? 1 : 0 } }]);
   }
 
   try {

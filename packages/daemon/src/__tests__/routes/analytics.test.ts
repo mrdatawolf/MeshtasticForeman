@@ -35,9 +35,10 @@ describe("analytics REST endpoints", () => {
     await seedDevice(db, DEVICE_A, "Alpha Gateway");
     await seedDevice(db, DEVICE_B, "Beta Gateway");
     await db.query("INSERT INTO hw_models(model_num, name) VALUES (10, 'TBEAM')");
-    await db.query("INSERT INTO channels(device_id, idx, name, role) VALUES ($1, 2, 'Primary', 1)", [
-      DEVICE_A,
-    ]);
+    await db.query(
+      "INSERT INTO channels(device_id, idx, name, role) VALUES ($1, 2, 'Primary', 1)",
+      [DEVICE_A],
+    );
 
     await seedNode(db, { nodeId: 101, hopsAway: 1, hwModel: 10 });
     await seedNode(db, { nodeId: 202, hopsAway: 2, hwModel: 99 });
@@ -201,7 +202,10 @@ describe("analytics REST endpoints", () => {
     });
 
     it("rejects a non-numeric nodeId", async () => {
-      const res = await app.inject({ method: "GET", url: "/api/analytics/snr-history?nodeId=nope" });
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/analytics/snr-history?nodeId=nope",
+      });
       expect(res.statusCode).toBe(400);
       expect(res.json()).toEqual({ error: "Invalid nodeId" });
     });
@@ -228,7 +232,10 @@ describe("analytics REST endpoints", () => {
     });
 
     it("rejects an unsupported bucket", async () => {
-      const res = await app.inject({ method: "GET", url: "/api/analytics/message-volume?bucket=week" });
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/analytics/message-volume?bucket=week",
+      });
       expect(res.statusCode).toBe(400);
       expect(res.json()).toEqual({ error: "bucket must be 'hour' or 'day'" });
     });
@@ -333,10 +340,16 @@ describe("analytics REST endpoints", () => {
         method: "GET",
         url: `/api/analytics/packet-timeline?deviceId=${DEVICE_A}&since=1h&bucket=minute`,
       });
-      const body = res.json() as Array<{ ts: string; counts: Record<string, number>; total: number }>;
+      const body = res.json() as Array<{
+        ts: string;
+        counts: Record<string, number>;
+        total: number;
+      }>;
       expect(body).toHaveLength(recent.slice(0, 16) === recentEarlier.slice(0, 16) ? 1 : 2);
       expect(body.reduce((sum, row) => sum + row.total, 0)).toBe(4);
-      expect(body.every((row) => typeof row.ts === "string" && typeof row.counts === "object")).toBe(true);
+      expect(
+        body.every((row) => typeof row.ts === "string" && typeof row.counts === "object"),
+      ).toBe(true);
       expect(body.flatMap((row) => Object.entries(row.counts))).toEqual(
         expect.arrayContaining([
           ["TEXT_MESSAGE_APP", expect.any(Number)],
@@ -355,7 +368,10 @@ describe("analytics REST endpoints", () => {
     });
 
     it("rejects an unsupported bucket", async () => {
-      const res = await app.inject({ method: "GET", url: "/api/analytics/packet-timeline?bucket=day" });
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/analytics/packet-timeline?bucket=day",
+      });
       expect(res.statusCode).toBe(400);
       expect(res.json()).toEqual({ error: "bucket must be 'minute' or 'hour'" });
     });
@@ -584,7 +600,9 @@ describe("analytics REST endpoints", () => {
           { ts: truncateIso(recent, "hour"), nodeId: 404, count: 1 },
         ]),
       );
-      expect(body.every((row) => typeof row.nodeId === "number" && typeof row.count === "number")).toBe(true);
+      expect(
+        body.every((row) => typeof row.nodeId === "number" && typeof row.count === "number"),
+      ).toBe(true);
     });
 
     it("returns an empty array when neither source table matches", async () => {
@@ -596,7 +614,10 @@ describe("analytics REST endpoints", () => {
     });
 
     it("rejects an unsupported bucket", async () => {
-      const res = await app.inject({ method: "GET", url: "/api/analytics/node-activity?bucket=minute" });
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/analytics/node-activity?bucket=minute",
+      });
       expect(res.statusCode).toBe(400);
       expect(res.json()).toEqual({ error: "bucket must be 'hour' or 'day'" });
     });
@@ -704,7 +725,10 @@ describe("analytics REST endpoints", () => {
     });
 
     it("returns an empty array for an unmatched portnum", async () => {
-      const res = await app.inject({ method: "GET", url: "/api/analytics/packet-log?portnum=NOPE" });
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/analytics/packet-log?portnum=NOPE",
+      });
       expect(res.json()).toEqual([]);
     });
 

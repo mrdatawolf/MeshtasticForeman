@@ -85,7 +85,8 @@ function makeState(key: Buffer): DeviceStateFixture {
 }
 
 function makeEnvelope(
-  payloadVariant: { case: "decoded"; value: Protobuf.Mesh.Data } | { case: "encrypted"; value: Uint8Array },
+  payloadVariant:
+    { case: "decoded"; value: Protobuf.Mesh.Data } | { case: "encrypted"; value: Uint8Array },
 ) {
   const packet = create(Protobuf.Mesh.MeshPacketSchema, {
     from: 0x01020304,
@@ -319,7 +320,9 @@ describe("MqttGateway MQTT publication", () => {
       Buffer.from(toBinary(Protobuf.Mesh.DataSchema, decoded)),
     );
     expect(secondEnvelope.packet?.payloadVariant.case).toBe("encrypted");
-    expect(Buffer.from(secondEnvelope.packet?.payloadVariant.value as Uint8Array)).toEqual(expected);
+    expect(Buffer.from(secondEnvelope.packet?.payloadVariant.value as Uint8Array)).toEqual(
+      expected,
+    );
     expect(mqttClient.publish).toHaveBeenNthCalledWith(
       2,
       "msh/US/CA/CentralCoast/2/e/TestChannel/!12345678",

@@ -23,8 +23,24 @@ function planarArea(feature: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPoly
 
 describe("mergeCoveragePolygons", () => {
   it("produces the known union area for two half-overlapping unit squares", () => {
-    const left = polygon([[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]);
-    const right = polygon([[[0.5, 0], [1.5, 0], [1.5, 1], [0.5, 1], [0.5, 0]]]);
+    const left = polygon([
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+        [0, 0],
+      ],
+    ]);
+    const right = polygon([
+      [
+        [0.5, 0],
+        [1.5, 0],
+        [1.5, 1],
+        [0.5, 1],
+        [0.5, 0],
+      ],
+    ]);
 
     const result = mergeCoveragePolygons([left, right], "#3b82f6", false);
 
@@ -34,7 +50,15 @@ describe("mergeCoveragePolygons", () => {
   });
 
   it("styles a single polygon without changing its geometry", () => {
-    const square = polygon([[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]);
+    const square = polygon([
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+        [0, 0],
+      ],
+    ]);
     const result = mergeCoveragePolygons([square], "red", true);
     expect(result.features[0].geometry).toEqual(square.geometry);
     expect(result.features[0].properties).toEqual({ color: "red", focused: 1 });

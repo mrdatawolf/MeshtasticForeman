@@ -19,8 +19,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-import type { NodeInfo, MqttNode, DeviceInfo } from "@foreman/shared";
 import * as analyticsApi from "../api/analytics.js";
+
 import type {
   BusiestNode,
   ChannelBucket,
@@ -40,6 +40,7 @@ import type {
   TelemetryPoint,
   TracerouteRecord,
 } from "../api/analytics.js";
+import type { NodeInfo, MqttNode, DeviceInfo } from "@foreman/shared";
 
 const ForceGraph2D = lazy(() => import("react-force-graph-2d"));
 

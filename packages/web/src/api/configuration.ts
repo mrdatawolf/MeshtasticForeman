@@ -1,6 +1,6 @@
-import type { DeviceConfig } from "@foreman/shared";
-
 import { request } from "./client.js";
+
+import type { DeviceConfig } from "@foreman/shared";
 
 export function getConfiguration(
   deviceId: string,

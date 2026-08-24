@@ -1,6 +1,6 @@
-import type { CoverageProposal } from "@foreman/shared";
-
 import { request } from "./client.js";
+
+import type { CoverageProposal } from "@foreman/shared";
 
 export type CreateProposal = Pick<
   CoverageProposal,

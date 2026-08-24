@@ -16,7 +16,16 @@ const override: NodeOverride = {
 describe("applyNodeOverrides", () => {
   it("fills missing node values from an override", () => {
     const [result] = applyNodeOverrides(
-      [{ nodeId: 1, latitude: null, longitude: null, altitude: null, longName: null, shortName: null }],
+      [
+        {
+          nodeId: 1,
+          latitude: null,
+          longitude: null,
+          altitude: null,
+          longName: null,
+          shortName: null,
+        },
+      ],
       new Map([[1, override]]),
     );
 

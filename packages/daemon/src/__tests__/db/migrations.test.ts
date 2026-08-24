@@ -167,8 +167,6 @@ describe("database migrations", () => {
       FROM messages m
       JOIN devices d ON d.id = m.device_id
     `);
-    expect(rows).toEqual([
-      { device_name: "Test Device", text: "hello", reply_to_packet_id: 900 },
-    ]);
+    expect(rows).toEqual([{ device_name: "Test Device", text: "hello", reply_to_packet_id: 900 }]);
   });
 });

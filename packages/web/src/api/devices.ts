@@ -1,6 +1,6 @@
-import type { DeviceConfig, DeviceInfo, NodeInfo } from "@foreman/shared";
-
 import { request } from "./client.js";
+
+import type { DeviceConfig, DeviceInfo, NodeInfo } from "@foreman/shared";
 
 export function listDevices(signal?: AbortSignal): Promise<DeviceInfo[] | undefined> {
   return request<DeviceInfo[]>("/api/devices", { signal });
