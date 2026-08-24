@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "lint": "echo 'no linter configured yet'"
+    "lint": "eslint .",
+    "format": "prettier --write package.json index.html vite.config.ts \"src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check package.json index.html vite.config.ts \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
     "@foreman/shared": "workspace:*",

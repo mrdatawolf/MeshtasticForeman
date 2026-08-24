@@ -1,14 +1,24 @@
-import { EventEmitter } from "node:events";
-import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
+import { randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
+
 import { fromBinary } from "@bufbuild/protobuf";
-import type { PGlite } from "@electric-sql/pglite";
-import type { ServerEvent, Message, NodeInfo, DeviceConfig, Channel, GpsDetail } from "@foreman/shared";
 import { MeshDevice, Types, Protobuf } from "@meshtastic/core";
 import { TransportNodeSerial } from "@meshtastic/transport-node-serial";
-import type { MqttGateway } from "../mqtt/gateway.js";
+
 import { activityLog } from "../activity/log.js";
 import { toPlainObject, decodePayload } from "../decode-payload.js";
+
+import type { MqttGateway } from "../mqtt/gateway.js";
+import type { PGlite } from "@electric-sql/pglite";
+import type {
+  ServerEvent,
+  Message,
+  NodeInfo,
+  DeviceConfig,
+  Channel,
+  GpsDetail,
+} from "@foreman/shared";
 
 export interface ConnectedDevice {
   id: string;
@@ -74,7 +84,7 @@ export class DeviceManager extends EventEmitter {
   /** Reconnect all devices that were saved in the DB from a previous run. */
   async reconnectSaved() {
     const { rows } = await this.db.query<{ id: string; name: string; port: string }>(
-      "SELECT id, name, port FROM devices ORDER BY created_at"
+      "SELECT id, name, port FROM devices ORDER BY created_at",
     );
     for (const row of rows) {
       await this.connect(row.port, row.name, row.id).catch((err) => {
@@ -106,23 +116,20 @@ export class DeviceManager extends EventEmitter {
     if (!id) {
       const { rows } = await this.db.query<{ id: string }>(
         "SELECT id FROM devices WHERE port = $1 ORDER BY created_at LIMIT 1",
-        [port]
+        [port],
       );
       id = rows[0]?.id ?? randomUUID();
     }
 
     // Delete any duplicate rows for this port that aren't the canonical id
-    await this.db.query(
-      "DELETE FROM devices WHERE port = $1 AND id != $2",
-      [port, id]
-    );
+    await this.db.query("DELETE FROM devices WHERE port = $1 AND id != $2", [port, id]);
 
     // Upsert canonical row
     await this.db.query(
       `INSERT INTO devices(id, name, port)
        VALUES ($1, $2, $3)
        ON CONFLICT(id) DO UPDATE SET name = EXCLUDED.name, port = EXCLUDED.port`,
-      [id, name, port]
+      [id, name, port],
     );
 
     this._emitStatus(id, name, port, "connecting");
@@ -149,7 +156,7 @@ export class DeviceManager extends EventEmitter {
     // Subscribe to all relevant events
     meshDevice.events.onMessagePacket.subscribe((pkt: Types.PacketMetadata<string>) => {
       this._handleMessage(id, pkt).catch((err) =>
-        console.error(`[devices] message error on ${name}:`, err)
+        console.error(`[devices] message error on ${name}:`, err),
       );
     });
 
@@ -158,28 +165,28 @@ export class DeviceManager extends EventEmitter {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onMeshPacket.subscribe((pkt: any) => {
       this._handleRawPacket(id, pkt).catch((err) =>
-        console.error(`[devices] raw packet error on ${name}:`, err)
+        console.error(`[devices] raw packet error on ${name}:`, err),
       );
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onNodeInfoPacket.subscribe((nodeInfo: any) => {
       this._handleNodeInfo(id, nodeInfo).catch((err) =>
-        console.error(`[devices] node info error on ${name}:`, err)
+        console.error(`[devices] node info error on ${name}:`, err),
       );
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onPositionPacket.subscribe((pkt: any) => {
       this._handlePosition(id, pkt).catch((err) =>
-        console.error(`[devices] position error on ${name}:`, err)
+        console.error(`[devices] position error on ${name}:`, err),
       );
     });
 
     meshDevice.events.onDeviceStatus.subscribe((status: Types.DeviceStatusEnum) => {
       console.log(`[devices] status ${name} → ${Types.DeviceStatusEnum[status] ?? status}`);
       void this._handleDeviceStatus(id, name, port, transport, status).catch((err) =>
-        console.warn(`[devices] disconnect cleanup failed for ${name}:`, err)
+        console.warn(`[devices] disconnect cleanup failed for ${name}:`, err),
       );
     });
 
@@ -192,7 +199,9 @@ export class DeviceManager extends EventEmitter {
         // Device is advertising a file on its local filesystem (map tiles,
         // ringtones, UI assets, etc.).  Informational only — log and move on.
         const f = msg.payloadVariant.value;
-        console.log(`[devices] fileInfo ${name}: "${f?.fileName ?? "?"}" (${f?.sizeBytes ?? "??"} bytes)`);
+        console.log(
+          `[devices] fileInfo ${name}: "${f?.fileName ?? "?"}" (${f?.sizeBytes ?? "??"} bytes)`,
+        );
         return;
       }
       console.log(`[devices] fromRadio ${name} variant=${variant}`);
@@ -200,12 +209,14 @@ export class DeviceManager extends EventEmitter {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onQueueStatus.subscribe((status: any) => {
-      console.log(`[devices] queue status on ${name}: res=${status.res} free=${status.free}/${status.maxlen} packetId=${status.meshPacketId}`);
+      console.log(
+        `[devices] queue status on ${name}: res=${status.res} free=${status.free}/${status.maxlen} packetId=${status.meshPacketId}`,
+      );
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onTraceRoutePacket.subscribe((pkt: any) => {
-      const route: number[]     = Array.from(pkt.data?.route     ?? []);
+      const route: number[] = Array.from(pkt.data?.route ?? []);
       const routeBack: number[] = Array.from(pkt.data?.routeBack ?? []);
       const nodeId: number = pkt.from ?? 0;
       const fromNodeId = this.myNodeIds.get(id) ?? 0;
@@ -214,38 +225,40 @@ export class DeviceManager extends EventEmitter {
         payload: { deviceId: id, nodeId, route, routeBack },
       };
       this.emit("event", event);
-      console.log(`[devices] traceroute result from !${nodeId.toString(16).padStart(8,"0")} route=[${route.map((n) => "!"+n.toString(16)).join(",")}]`);
+      console.log(
+        `[devices] traceroute result from !${nodeId.toString(16).padStart(8, "0")} route=[${route.map((n) => "!" + n.toString(16)).join(",")}]`,
+      );
       // Persist to DB asynchronously
       this._saveTraceroute(id, fromNodeId, nodeId, route, routeBack).catch((err) =>
-        console.error(`[devices] traceroute save error:`, err)
+        console.error(`[devices] traceroute save error:`, err),
       );
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onDeviceMetadataPacket.subscribe(({ data }: any) => {
       this._handleMetadata(id, data).catch((err) =>
-        console.error(`[devices] metadata error on ${name}:`, err)
+        console.error(`[devices] metadata error on ${name}:`, err),
       );
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onConfigPacket.subscribe((pkt: any) => {
       this._handleConfigPacket(id, name, pkt).catch((err) =>
-        console.error(`[devices] config packet error on ${name}:`, err)
+        console.error(`[devices] config packet error on ${name}:`, err),
       );
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onModuleConfigPacket.subscribe((pkt: any) => {
       this._handleModuleConfigPacket(id, name, pkt).catch((err) =>
-        console.error(`[devices] module config packet error on ${name}:`, err)
+        console.error(`[devices] module config packet error on ${name}:`, err),
       );
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onChannelPacket.subscribe((pkt: any) => {
       this._handleChannelPacket(id, name, pkt).catch((err) =>
-        console.error(`[devices] channel packet error on ${name}:`, err)
+        console.error(`[devices] channel packet error on ${name}:`, err),
       );
     });
 
@@ -254,14 +267,16 @@ export class DeviceManager extends EventEmitter {
       const nodeNum: number = info?.myNodeNum ?? 0;
       if (nodeNum !== 0) {
         this.myNodeIds.set(id, nodeNum);
-        console.log(`[devices] myNodeInfo ${name} nodeNum=!${nodeNum.toString(16).padStart(8,"0")}`);
+        console.log(
+          `[devices] myNodeInfo ${name} nodeNum=!${nodeNum.toString(16).padStart(8, "0")}`,
+        );
       }
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onTelemetryPacket.subscribe((pkt: any) => {
       this._handleTelemetry(id, name, pkt).catch((err) =>
-        console.error(`[devices] telemetry error on ${name}:`, err)
+        console.error(`[devices] telemetry error on ${name}:`, err),
       );
     });
 
@@ -277,9 +292,11 @@ export class DeviceManager extends EventEmitter {
     // This ensures GPS data arrives even if the device hasn't broadcast a position yet.
     const ownNodeId = this.myNodeIds.get(id);
     if (ownNodeId) {
-      meshDevice.requestPosition(ownNodeId).catch((err: unknown) =>
-        console.warn(`[devices] requestPosition failed for ${name}:`, err)
-      );
+      meshDevice
+        .requestPosition(ownNodeId)
+        .catch((err: unknown) =>
+          console.warn(`[devices] requestPosition failed for ${name}:`, err),
+        );
     }
 
     // Send periodic heartbeats so the serial link stays alive indefinitely.
@@ -368,7 +385,7 @@ export class DeviceManager extends EventEmitter {
       `SELECT node_id, long_name, short_name, mac_address, hw_model, public_key,
               last_heard, snr, hops_away, latitude, longitude, altitude
        FROM nodes WHERE device_id = $1 ORDER BY last_heard DESC NULLS LAST`,
-      [deviceId]
+      [deviceId],
     );
     return rows.map((r) => ({
       nodeId: r.node_id,
@@ -388,7 +405,7 @@ export class DeviceManager extends EventEmitter {
 
   async getMessageHistory(
     deviceId: string,
-    opts: { channelIndex?: number; toNodeId?: number; limit: number; before?: string }
+    opts: { channelIndex?: number; toNodeId?: number; limit: number; before?: string },
   ): Promise<Message[]> {
     let query = `
       SELECT id, packet_id, from_node_id, to_node_id, channel_index, text,
@@ -461,7 +478,7 @@ export class DeviceManager extends EventEmitter {
       `DELETE FROM messages
        WHERE device_id = $1
          AND (to_node_id = $2 OR from_node_id = $2)`,
-      [deviceId, nodeId]
+      [deviceId, nodeId],
     );
   }
 
@@ -477,8 +494,8 @@ export class DeviceManager extends EventEmitter {
   private _startPacketWatchdog(deviceId: string, name: string, meshDevice: MeshDevice): void {
     this.lastPacketMs.set(deviceId, Date.now());
 
-    const INTERVAL = 45_000;   // check every 45 s
-    const STALE_MS = 90_000;   // re-configure if silent for 90 s
+    const INTERVAL = 45_000; // check every 45 s
+    const STALE_MS = 90_000; // re-configure if silent for 90 s
 
     const existing = this.watchdogTimers.get(deviceId);
     if (existing) clearInterval(existing);
@@ -492,7 +509,9 @@ export class DeviceManager extends EventEmitter {
       const last = this.lastPacketMs.get(deviceId) ?? 0;
       const silentMs = Date.now() - last;
       if (silentMs >= STALE_MS) {
-        console.log(`[devices] watchdog: ${name} silent for ${Math.round(silentMs / 1000)}s — re-running configure()`);
+        console.log(
+          `[devices] watchdog: ${name} silent for ${Math.round(silentMs / 1000)}s — re-running configure()`,
+        );
         this.lastPacketMs.set(deviceId, Date.now()); // prevent hammering
         try {
           await meshDevice.configure();
@@ -511,7 +530,7 @@ export class DeviceManager extends EventEmitter {
     name: string,
     port: string,
     status: "disconnected" | "connecting" | "connected" | "error",
-    connectedAt?: string
+    connectedAt?: string,
   ) {
     const event: ServerEvent = {
       type: "device:status",
@@ -538,7 +557,7 @@ export class DeviceManager extends EventEmitter {
     name: string,
     port: string,
     transport: TransportNodeSerial,
-    status: Types.DeviceStatusEnum
+    status: Types.DeviceStatusEnum,
   ) {
     if (status === Types.DeviceStatusEnum.DeviceDisconnected) {
       const device = this.devices.get(deviceId);
@@ -547,7 +566,10 @@ export class DeviceManager extends EventEmitter {
       if (!device || device.transport !== transport) return;
       // Stop watchdog — reconnect will start a fresh one
       const wt = this.watchdogTimers.get(deviceId);
-      if (wt) { clearInterval(wt); this.watchdogTimers.delete(deviceId); }
+      if (wt) {
+        clearInterval(wt);
+        this.watchdogTimers.delete(deviceId);
+      }
       this.devices.delete(deviceId);
       this.myNodeIds.delete(deviceId);
       this.batteryLevels.delete(deviceId);
@@ -609,14 +631,11 @@ export class DeviceManager extends EventEmitter {
     await this.db.query(
       `INSERT INTO traceroutes(id, device_id, from_node_id, to_node_id, route, route_back)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [id, deviceId, fromNodeId, toNodeId, JSON.stringify(route), JSON.stringify(routeBack)]
+      [id, deviceId, fromNodeId, toNodeId, JSON.stringify(route), JSON.stringify(routeBack)],
     );
   }
 
-  private async _handleMessage(
-    deviceId: string,
-    packet: Types.PacketMetadata<string>
-  ) {
+  private async _handleMessage(deviceId: string, packet: Types.PacketMetadata<string>) {
     const id = randomUUID();
     const rxTime = packet.rxTime.toISOString();
     const replyToPacketId = this.pendingReplyIds.get(packet.id) ?? 0;
@@ -626,7 +645,17 @@ export class DeviceManager extends EventEmitter {
       `INSERT INTO messages(id, packet_id, device_id, from_node_id, to_node_id, channel_index, text, rx_time, role, reply_to_packet_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'received', $9)
        ON CONFLICT(id) DO NOTHING`,
-      [id, packet.id, deviceId, packet.from, packet.to, packet.channel, packet.data, rxTime, replyToPacketId]
+      [
+        id,
+        packet.id,
+        deviceId,
+        packet.from,
+        packet.to,
+        packet.channel,
+        packet.data,
+        rxTime,
+        replyToPacketId,
+      ],
     );
     await this.db.query("UPDATE devices SET last_seen = $1 WHERE id = $2", [rxTime, deviceId]);
 
@@ -657,14 +686,14 @@ export class DeviceManager extends EventEmitter {
     // Bot command handler — only active when BOT_ENABLED=true
     if (process.env.BOT_ENABLED === "true" && packet.data?.startsWith("!")) {
       await this._handleBotCommand(deviceId, packet).catch((err) =>
-        console.error("[bot] command handler error:", err)
+        console.error("[bot] command handler error:", err),
       );
     }
   }
 
   private async _handleBotCommand(
     deviceId: string,
-    packet: Types.PacketMetadata<string>
+    packet: Types.PacketMetadata<string>,
   ): Promise<void> {
     const device = this.devices.get(deviceId);
     if (!device) return;
@@ -685,7 +714,7 @@ export class DeviceManager extends EventEmitter {
       case "nodes": {
         const { rows } = await this.db.query<{ cnt: string }>(
           "SELECT COUNT(*) AS cnt FROM nodes WHERE device_id = $1",
-          [deviceId]
+          [deviceId],
         );
         reply = `${rows[0]?.cnt ?? 0} nodes in mesh`;
         break;
@@ -694,7 +723,7 @@ export class DeviceManager extends EventEmitter {
       case "status": {
         const { rows } = await this.db.query<{ cnt: string }>(
           "SELECT COUNT(*) AS cnt FROM nodes WHERE device_id = $1",
-          [deviceId]
+          [deviceId],
         );
         const nodeCount = rows[0]?.cnt ?? 0;
         const myNodeId = this.myNodeIds.get(deviceId);
@@ -712,25 +741,25 @@ export class DeviceManager extends EventEmitter {
 
     if (!reply) return;
 
-    const toNodeId = packet.from;        // reply to whoever sent it
+    const toNodeId = packet.from; // reply to whoever sent it
     const channelIndex = packet.channel; // same channel
 
     const packetId = await device.meshDevice.sendText(
       reply,
       toNodeId,
       false,
-      channelIndex as Types.ChannelNumber
+      channelIndex as Types.ChannelNumber,
     );
 
     const txTime = new Date().toISOString();
-    const msgId  = randomUUID();
+    const msgId = randomUUID();
     const myNodeId = this.myNodeIds.get(deviceId) ?? 0;
 
     await this.db.query(
       `INSERT INTO messages(id, packet_id, device_id, from_node_id, to_node_id, channel_index,
          text, rx_time, want_ack, role, ack_status, reply_to_packet_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, 'sent', null, 0)`,
-      [msgId, packetId, deviceId, myNodeId, toNodeId, channelIndex, reply, txTime]
+      [msgId, packetId, deviceId, myNodeId, toNodeId, channelIndex, reply, txTime],
     );
 
     const botEvent: ServerEvent = {
@@ -756,7 +785,9 @@ export class DeviceManager extends EventEmitter {
       },
     };
     this.emit("event", botEvent);
-    console.log(`[bot] replied to !${cmd} → "${reply}" → !${toNodeId.toString(16).padStart(8, "0")}`);
+    console.log(
+      `[bot] replied to !${cmd} → "${reply}" → !${toNodeId.toString(16).padStart(8, "0")}`,
+    );
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -780,15 +811,14 @@ export class DeviceManager extends EventEmitter {
       (Protobuf.Portnums.PortNum as Record<number, string>)[portnum] ?? "UNKNOWN_APP";
 
     const rxTimeSec: number = p.rxTime ?? 0;
-    const rxTime = rxTimeSec > 0
-      ? new Date(rxTimeSec * 1000).toISOString()
-      : new Date().toISOString();
+    const rxTime =
+      rxTimeSec > 0 ? new Date(rxTimeSec * 1000).toISOString() : new Date().toISOString();
 
     let payloadRaw: string | null = null;
     let decodedJson: unknown = null;
     if (isDecoded && p.payloadVariant.value.payload instanceof Uint8Array) {
       const payloadBytes: Uint8Array = p.payloadVariant.value.payload;
-      payloadRaw  = Buffer.from(payloadBytes).toString("base64");
+      payloadRaw = Buffer.from(payloadBytes).toString("base64");
       decodedJson = decodePayload(portnumName, payloadBytes);
     } else if (isEncrypted && p.payloadVariant.value instanceof Uint8Array) {
       payloadRaw = Buffer.from(p.payloadVariant.value).toString("base64");
@@ -799,7 +829,9 @@ export class DeviceManager extends EventEmitter {
     const isMqttEcho = p.viaMqtt ?? false;
     // Update watchdog timestamp so it knows the stream is alive
     this.lastPacketMs.set(deviceId, Date.now());
-    console.log(`[devices] raw pkt from=!${fromNodeId.toString(16).padStart(8,"0")} portnum=${portnumName} viaMqtt=${isMqttEcho}`);
+    console.log(
+      `[devices] raw pkt from=!${fromNodeId.toString(16).padStart(8, "0")} portnum=${portnumName} viaMqtt=${isMqttEcho}`,
+    );
     if (fromNodeId !== 0) {
       activityLog.add({
         ts: rxTime,
@@ -818,29 +850,44 @@ export class DeviceManager extends EventEmitter {
          VALUES ($1, $2, $3)
          ON CONFLICT(node_id, device_id) DO UPDATE SET
            last_heard = GREATEST(EXCLUDED.last_heard, nodes.last_heard)`,
-        [fromNodeId, deviceId, rxTime]
+        [fromNodeId, deviceId, rxTime],
       );
 
       const { rows } = await this.db.query<{
-        node_id: number; long_name: string | null; short_name: string | null;
-        mac_address: string | null; hw_model: number | null; public_key: string | null;
-        snr: number | null; hops_away: number | null;
-        latitude: number | null; longitude: number | null; altitude: number | null;
+        node_id: number;
+        long_name: string | null;
+        short_name: string | null;
+        mac_address: string | null;
+        hw_model: number | null;
+        public_key: string | null;
+        snr: number | null;
+        hops_away: number | null;
+        latitude: number | null;
+        longitude: number | null;
+        altitude: number | null;
       }>(
         `SELECT node_id, long_name, short_name, mac_address, hw_model, public_key,
                 snr, hops_away, latitude, longitude, altitude
          FROM nodes WHERE device_id = $1 AND node_id = $2`,
-        [deviceId, fromNodeId]
+        [deviceId, fromNodeId],
       );
       if (rows[0]) {
         const r = rows[0];
         const nodeEvent: ServerEvent = {
           type: "node:update",
           payload: {
-            nodeId: r.node_id, longName: r.long_name, shortName: r.short_name,
-            macAddress: r.mac_address, hwModel: r.hw_model, publicKey: r.public_key,
-            lastHeard: rxTime, snr: r.snr, hopsAway: r.hops_away,
-            latitude: r.latitude, longitude: r.longitude, altitude: r.altitude,
+            nodeId: r.node_id,
+            longName: r.long_name,
+            shortName: r.short_name,
+            macAddress: r.mac_address,
+            hwModel: r.hw_model,
+            publicKey: r.public_key,
+            lastHeard: rxTime,
+            snr: r.snr,
+            hopsAway: r.hops_away,
+            latitude: r.latitude,
+            longitude: r.longitude,
+            altitude: r.altitude,
           },
         };
         this.emit("event", nodeEvent);
@@ -871,7 +918,7 @@ export class DeviceManager extends EventEmitter {
         p.viaMqtt ?? false,
         payloadRaw,
         decodedJson !== null ? JSON.stringify(decodedJson) : null,
-      ]
+      ],
     );
 
     const event: ServerEvent = {
@@ -911,14 +958,15 @@ export class DeviceManager extends EventEmitter {
             const ackAt = new Date().toISOString();
             const ackError = isAck
               ? null
-              : ((Protobuf.Mesh.Routing_Error as Record<number, string>)[routing.variant.value] ?? String(routing.variant.value));
+              : ((Protobuf.Mesh.Routing_Error as Record<number, string>)[routing.variant.value] ??
+                String(routing.variant.value));
 
             const { rows } = await this.db.query<{ id: string }>(
               `UPDATE messages
                SET ack_status = $1, ack_at = $2, ack_error = $3
                WHERE packet_id = $4 AND device_id = $5 AND role = 'sent' AND ack_status = 'pending'
                RETURNING id`,
-              [isAck ? "acked" : "error", ackAt, ackError, requestId, deviceId]
+              [isAck ? "acked" : "error", ackAt, ackError, requestId, deviceId],
             );
 
             if (rows[0]) {
@@ -933,7 +981,9 @@ export class DeviceManager extends EventEmitter {
                 },
               };
               this.emit("event", ackEvent);
-              console.log(`[devices] ACK ${isAck ? "✓" : "✗"} for packet ${requestId}${ackError ? ` (${ackError})` : ""}`);
+              console.log(
+                `[devices] ACK ${isAck ? "✓" : "✗"} for packet ${requestId}${ackError ? ` (${ackError})` : ""}`,
+              );
             }
           }
         } catch (err) {
@@ -963,10 +1013,20 @@ export class DeviceManager extends EventEmitter {
            text, rx_time, rx_snr, rx_rssi, hop_limit, want_ack, via_mqtt, role, reply_to_packet_id)
          VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9, $10, $11, $12, 'relayed', $13)`,
         [
-          relayId, p.id ?? 0, deviceId, fromNodeId, toNodeId, p.channel ?? 0,
-          rxTime, p.rxSnr || null, p.rxRssi || null, p.hopLimit || null,
-          p.wantAck ?? false, p.viaMqtt ?? false, p.replyId ?? 0,
-        ]
+          relayId,
+          p.id ?? 0,
+          deviceId,
+          fromNodeId,
+          toNodeId,
+          p.channel ?? 0,
+          rxTime,
+          p.rxSnr || null,
+          p.rxRssi || null,
+          p.hopLimit || null,
+          p.wantAck ?? false,
+          p.viaMqtt ?? false,
+          p.replyId ?? 0,
+        ],
       );
     }
   }
@@ -977,22 +1037,24 @@ export class DeviceManager extends EventEmitter {
     const n = nodeInfo as any;
     const nodeId: number = n.num ?? 0;
     if (nodeId === 0) return;
-    console.log(`[devices] nodeInfo !${nodeId.toString(16).padStart(8,"0")} "${n.user?.longName ?? n.user?.shortName ?? "?"}"`);
+    console.log(
+      `[devices] nodeInfo !${nodeId.toString(16).padStart(8, "0")} "${n.user?.longName ?? n.user?.shortName ?? "?"}"`,
+    );
 
     const macBytes: Uint8Array | undefined = n.user?.macaddr;
-    const macAddress = macBytes && macBytes.length > 0
-      ? Array.from(macBytes).map((b: number) => b.toString(16).padStart(2, "0")).join(":")
-      : null;
+    const macAddress =
+      macBytes && macBytes.length > 0
+        ? Array.from(macBytes)
+            .map((b: number) => b.toString(16).padStart(2, "0"))
+            .join(":")
+        : null;
 
     const pubKeyBytes: Uint8Array | undefined = n.user?.publicKey;
-    const publicKey = pubKeyBytes && pubKeyBytes.length > 0
-      ? Buffer.from(pubKeyBytes).toString("hex")
-      : null;
+    const publicKey =
+      pubKeyBytes && pubKeyBytes.length > 0 ? Buffer.from(pubKeyBytes).toString("hex") : null;
 
     const lastHeardSec: number = n.lastHeard ?? 0;
-    const lastHeard = lastHeardSec > 0
-      ? new Date(lastHeardSec * 1000).toISOString()
-      : null;
+    const lastHeard = lastHeardSec > 0 ? new Date(lastHeardSec * 1000).toISOString() : null;
 
     await this.db.query(
       `INSERT INTO nodes(node_id, device_id, long_name, short_name, mac_address,
@@ -1018,16 +1080,18 @@ export class DeviceManager extends EventEmitter {
         lastHeard,
         n.snr || null,
         n.hopsAway ?? null,
-      ]
+      ],
     );
 
     // Read back current position so the emitted event reflects what's actually in DB
     const { rows: posRows } = await this.db.query<{
-      latitude: number | null; longitude: number | null; altitude: number | null;
-    }>(
-      `SELECT latitude, longitude, altitude FROM nodes WHERE device_id = $1 AND node_id = $2`,
-      [deviceId, nodeId]
-    );
+      latitude: number | null;
+      longitude: number | null;
+      altitude: number | null;
+    }>(`SELECT latitude, longitude, altitude FROM nodes WHERE device_id = $1 AND node_id = $2`, [
+      deviceId,
+      nodeId,
+    ]);
     const pos = posRows[0];
 
     const event: ServerEvent = {
@@ -1042,9 +1106,9 @@ export class DeviceManager extends EventEmitter {
         lastHeard,
         snr: n.snr || null,
         hopsAway: n.hopsAway ?? null,
-        latitude:  pos?.latitude  ?? null,
+        latitude: pos?.latitude ?? null,
         longitude: pos?.longitude ?? null,
-        altitude:  pos?.altitude  ?? null,
+        altitude: pos?.altitude ?? null,
       },
     };
     this.emit("event", event);
@@ -1058,22 +1122,20 @@ export class DeviceManager extends EventEmitter {
     const pos = pkt.data;
     if (!pos) return;
 
-    const lat = pos.latitudeI  != null ? pos.latitudeI  / 1e7 : null;
+    const lat = pos.latitudeI != null ? pos.latitudeI / 1e7 : null;
     const lon = pos.longitudeI != null ? pos.longitudeI / 1e7 : null;
     if (lat === null || lon === null || (lat === 0 && lon === 0)) return;
 
-    const alt          = pos.altitude     ?? null;
-    const speed        = pos.groundSpeed  != null ? pos.groundSpeed  / 100 : null; // cm/s → m/s
-    const groundTrack  = pos.groundTrack  ?? null;
-    const satsInView   = pos.satsInView   ?? null;
-    const rxTime = pkt.rxTime instanceof Date
-      ? pkt.rxTime.toISOString()
-      : new Date().toISOString();
+    const alt = pos.altitude ?? null;
+    const speed = pos.groundSpeed != null ? pos.groundSpeed / 100 : null; // cm/s → m/s
+    const groundTrack = pos.groundTrack ?? null;
+    const satsInView = pos.satsInView ?? null;
+    const rxTime = pkt.rxTime instanceof Date ? pkt.rxTime.toISOString() : new Date().toISOString();
 
     await this.db.query(
       `UPDATE nodes SET latitude = $1, longitude = $2, altitude = $3, last_heard = GREATEST(last_heard, $4)
        WHERE device_id = $5 AND node_id = $6`,
-      [lat, lon, alt, rxTime, deviceId, fromNodeId]
+      [lat, lon, alt, rxTime, deviceId, fromNodeId],
     );
 
     // Record every fix so we can show position trails in analytics
@@ -1081,28 +1143,42 @@ export class DeviceManager extends EventEmitter {
       `INSERT INTO position_history(id, device_id, node_id, latitude, longitude, altitude,
          speed, ground_track, sats_in_view, recorded_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [randomUUID(), deviceId, fromNodeId, lat, lon, alt, speed, groundTrack, satsInView, rxTime]
+      [randomUUID(), deviceId, fromNodeId, lat, lon, alt, speed, groundTrack, satsInView, rxTime],
     );
 
     // Emit update so frontend map refreshes immediately
     const { rows } = await this.db.query<{
-      node_id: number; long_name: string | null; short_name: string | null;
-      mac_address: string | null; hw_model: number | null; public_key: string | null;
-      last_heard: string | null; snr: number | null; hops_away: number | null;
+      node_id: number;
+      long_name: string | null;
+      short_name: string | null;
+      mac_address: string | null;
+      hw_model: number | null;
+      public_key: string | null;
+      last_heard: string | null;
+      snr: number | null;
+      hops_away: number | null;
     }>(
       `SELECT node_id, long_name, short_name, mac_address, hw_model, public_key,
               last_heard, snr, hops_away FROM nodes WHERE device_id = $1 AND node_id = $2`,
-      [deviceId, fromNodeId]
+      [deviceId, fromNodeId],
     );
     if (!rows[0]) return;
     const r = rows[0];
     const event: ServerEvent = {
       type: "node:update",
       payload: {
-        nodeId: r.node_id, longName: r.long_name, shortName: r.short_name,
-        macAddress: r.mac_address, hwModel: r.hw_model, publicKey: r.public_key,
-        lastHeard: r.last_heard, snr: r.snr, hopsAway: r.hops_away,
-        latitude: lat, longitude: lon, altitude: alt,
+        nodeId: r.node_id,
+        longName: r.long_name,
+        shortName: r.short_name,
+        macAddress: r.mac_address,
+        hwModel: r.hw_model,
+        publicKey: r.public_key,
+        lastHeard: r.last_heard,
+        snr: r.snr,
+        hopsAway: r.hops_away,
+        latitude: lat,
+        longitude: lon,
+        altitude: alt,
       },
     };
     this.emit("event", event);
@@ -1119,7 +1195,7 @@ export class DeviceManager extends EventEmitter {
       `UPDATE devices
        SET radio_config = jsonb_set(COALESCE(radio_config, '{}'), ARRAY[$1], $2::jsonb)
        WHERE id = $3`,
-      [section, JSON.stringify(value), deviceId]
+      [section, JSON.stringify(value), deviceId],
     );
     console.log(`[devices] radio config ${name} section=${section}`);
   }
@@ -1135,7 +1211,7 @@ export class DeviceManager extends EventEmitter {
       `UPDATE devices
        SET module_config = jsonb_set(COALESCE(module_config, '{}'), ARRAY[$1], $2::jsonb)
        WHERE id = $3`,
-      [section, JSON.stringify(value), deviceId]
+      [section, JSON.stringify(value), deviceId],
     );
     console.log(`[devices] module config ${name} section=${section}`);
   }
@@ -1149,15 +1225,13 @@ export class DeviceManager extends EventEmitter {
     const chName: string | null = ch.settings?.name ?? null;
     const role: number = Number(ch.role ?? 0);
     const pskBytes: Uint8Array | null = ch.settings?.psk ?? null;
-    const psk: string | null = pskBytes?.length
-      ? Buffer.from(pskBytes).toString("base64")
-      : null;
+    const psk: string | null = pskBytes?.length ? Buffer.from(pskBytes).toString("base64") : null;
     await this.db.query(
       `INSERT INTO channels(device_id, idx, name, role, psk)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT(device_id, idx) DO UPDATE
          SET name = EXCLUDED.name, role = EXCLUDED.role, psk = EXCLUDED.psk`,
-      [deviceId, idx, chName, role, psk]
+      [deviceId, idx, chName, role, psk],
     );
     console.log(`[devices] channel ${name} idx=${idx} name=${chName ?? "(none)"} role=${role}`);
   }
@@ -1170,11 +1244,11 @@ export class DeviceManager extends EventEmitter {
     if (!rows[0]) return null;
 
     const { rows: chRows } = await this.db.query<{
-      idx: number; name: string | null; role: number; psk: string | null;
-    }>(
-      "SELECT idx, name, role, psk FROM channels WHERE device_id = $1 ORDER BY idx",
-      [deviceId]
-    );
+      idx: number;
+      name: string | null;
+      role: number;
+      psk: string | null;
+    }>("SELECT idx, name, role, psk FROM channels WHERE device_id = $1 ORDER BY idx", [deviceId]);
 
     const channels: Channel[] = chRows.map((r) => ({
       index: r.idx,
@@ -1205,7 +1279,7 @@ export class DeviceManager extends EventEmitter {
     if (!device) throw new Error(`Device ${deviceId} not connected`);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { create } = await import("@bufbuild/protobuf") as any;
+    const { create } = (await import("@bufbuild/protobuf")) as any;
 
     if (namespace === "radio") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1250,10 +1324,11 @@ export class DeviceManager extends EventEmitter {
     const hwModel: string | null = m.hwModel != null ? String(m.hwModel) : null;
     const firmware: string | null = m.firmwareVersion ?? null;
 
-    await this.db.query(
-      "UPDATE devices SET hw_model = $1, firmware = $2 WHERE id = $3",
-      [hwModel, firmware, deviceId]
-    );
+    await this.db.query("UPDATE devices SET hw_model = $1, firmware = $2 WHERE id = $3", [
+      hwModel,
+      firmware,
+      deviceId,
+    ]);
 
     // Re-emit device status with updated hw/firmware info
     const device = this.devices.get(deviceId);
@@ -1306,7 +1381,7 @@ export class DeviceManager extends EventEmitter {
     // Fetch current hw/firmware to include in the status event
     const { rows } = await this.db.query<{ hw_model: string | null; firmware: string | null }>(
       "SELECT hw_model, firmware FROM devices WHERE id = $1",
-      [deviceId]
+      [deviceId],
     );
     const row = rows[0];
 

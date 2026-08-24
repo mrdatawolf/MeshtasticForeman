@@ -332,7 +332,7 @@ export async function runMigrations(db: PGlite) {
   `);
 
   const { rows } = await db.query<{ version: number }>(
-    "SELECT version FROM schema_migrations ORDER BY version"
+    "SELECT version FROM schema_migrations ORDER BY version",
   );
   const applied = new Set(rows.map((r) => r.version));
 
@@ -343,10 +343,7 @@ export async function runMigrations(db: PGlite) {
     console.log(`[db] applying migration ${version}`);
     await db.transaction(async (tx) => {
       await tx.exec(migrations[i]);
-      await tx.query(
-        "INSERT INTO schema_migrations(version) VALUES ($1)",
-        [version]
-      );
+      await tx.query("INSERT INTO schema_migrations(version) VALUES ($1)", [version]);
     });
   }
 }

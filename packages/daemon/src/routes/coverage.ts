@@ -1,5 +1,5 @@
-import type { FastifyInstance } from "fastify";
 import type { PGlite } from "@electric-sql/pglite";
+import type { FastifyInstance } from "fastify";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -53,7 +53,7 @@ async function fetchElevations(
   points: Array<{ lat: number; lon: number }>,
 ): Promise<number[]> {
   const results = new Array<number>(points.length).fill(0);
-  const needDb:  Array<{ idx: number; lat: number; lon: number }> = [];
+  const needDb: Array<{ idx: number; lat: number; lon: number }> = [];
 
   // ── L1: memory cache ──────────────────────────────────────────────────────
   for (let i = 0; i < points.length; i++) {
@@ -133,7 +133,9 @@ async function fetchElevations(
         signal: AbortSignal.timeout(15_000),
       });
       if (res.status !== 429) break;
-      console.warn(`[coverage] Elevation API rate-limited (429), retry ${attempt + 1}/${ELEVATION_MAX_RETRIES}`);
+      console.warn(
+        `[coverage] Elevation API rate-limited (429), retry ${attempt + 1}/${ELEVATION_MAX_RETRIES}`,
+      );
     }
     if (!res || !res.ok) throw new Error(`Elevation API returned HTTP ${res?.status ?? "???"}`);
     const data = (await res.json()) as { results: Array<{ elevation: number }> };
@@ -183,19 +185,14 @@ function destinationPoint(
   const λ1 = (lon * Math.PI) / 180;
   const θ = (bearingDeg * Math.PI) / 180;
 
-  const φ2 = Math.asin(
-    Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ),
-  );
+  const φ2 = Math.asin(Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ));
   const λ2 =
     λ1 +
-    Math.atan2(
-      Math.sin(θ) * Math.sin(δ) * Math.cos(φ1),
-      Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2),
-    );
+    Math.atan2(Math.sin(θ) * Math.sin(δ) * Math.cos(φ1), Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2));
 
   return {
     lat: (φ2 * 180) / Math.PI,
-    lon: (((λ2 * 180) / Math.PI) + 540) % 360 - 180,
+    lon: (((λ2 * 180) / Math.PI + 540) % 360) - 180,
   };
 }
 
@@ -221,8 +218,8 @@ export async function registerCoverageRoutes(app: FastifyInstance, db: PGlite) {
   app.get("/api/coverage/viewshed", async (req, reply) => {
     const q = req.query as Record<string, string | undefined>;
 
-    const lat      = Number(q.lat);
-    const lon      = Number(q.lon);
+    const lat = Number(q.lat);
+    const lon = Number(q.lon);
     const antennaM = Math.max(0, Number(q.altitudeM ?? 2) || 2);
     const radiusKm = Math.min(50, Math.max(0.5, Number(q.radiusKm ?? 10) || 10));
     const numRadials = Math.min(72, Math.max(8, Number(q.radials ?? 36) || 36));
@@ -301,17 +298,17 @@ export async function registerCoverageRoutes(app: FastifyInstance, db: PGlite) {
 
       for (let s = 0; s < numSteps; s++) {
         const elevIdx = 1 + r * numSteps + s;
-        const distM   = stepKm * (s + 1) * 1000;
+        const distM = stepKm * (s + 1) * 1000;
         const terrain = elevations[elevIdx];
 
         // Earth curvature correction (terrain appears lower at distance)
         const curvDrop = (distM * distM) / (2 * EARTH_RADIUS_EFF_M);
-        const slope    = (terrain - curvDrop - sourceHeightM) / distM;
+        const slope = (terrain - curvDrop - sourceHeightM) / distM;
 
         // Point is visible if it's on or above the running angular horizon
         if (slope >= maxSlope) {
           furthestStep = s;
-          maxSlope     = slope;
+          maxSlope = slope;
         }
       }
 
@@ -384,8 +381,8 @@ export async function registerCoverageRoutes(app: FastifyInstance, db: PGlite) {
 
   app.delete("/api/coverage/viewshed", async (req, reply) => {
     const q = req.query as Record<string, string | undefined>;
-    const lat      = Number(q.lat);
-    const lon      = Number(q.lon);
+    const lat = Number(q.lat);
+    const lon = Number(q.lon);
     const radiusKm = Number(q.radiusKm ?? 20);
 
     if (!isFinite(lat) || !isFinite(lon)) {

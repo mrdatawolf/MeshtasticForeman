@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import type { Message } from "@foreman/shared";
+
 import { foremanClient } from "../ws/client.js";
+
+import type { Message } from "@foreman/shared";
 
 // ---------------------------------------------------------------------------
 // Module-level store — Map from "other node id" to Message[]
@@ -48,7 +50,12 @@ function addOrUpdate(msg: Message) {
     conversations.set(key, next);
   } else {
     const next = [...existing, msg];
-    conversations.set(key, next.length > MAX_MESSAGES_PER_CONVERSATION ? next.slice(-MAX_MESSAGES_PER_CONVERSATION) : next);
+    conversations.set(
+      key,
+      next.length > MAX_MESSAGES_PER_CONVERSATION
+        ? next.slice(-MAX_MESSAGES_PER_CONVERSATION)
+        : next,
+    );
   }
   notify();
 }
@@ -77,7 +84,7 @@ export function initMessageStore() {
           (m) =>
             m.id.startsWith("local-") &&
             m.toNodeId === msg.toNodeId &&
-            Math.abs(new Date(m.rxTime).getTime() - sentTime) < 5000
+            Math.abs(new Date(m.rxTime).getTime() - sentTime) < 5000,
         );
         if (optIdx >= 0) {
           const next = [...convo];
@@ -107,9 +114,14 @@ export function initMessageStore() {
           deduped.set(messageSignature(msg), msg);
         }
         const merged = [...deduped.values()].sort(
-          (a, b) => new Date(a.rxTime).getTime() - new Date(b.rxTime).getTime()
+          (a, b) => new Date(a.rxTime).getTime() - new Date(b.rxTime).getTime(),
         );
-        conversations.set(key, merged.length > MAX_MESSAGES_PER_CONVERSATION ? merged.slice(-MAX_MESSAGES_PER_CONVERSATION) : merged);
+        conversations.set(
+          key,
+          merged.length > MAX_MESSAGES_PER_CONVERSATION
+            ? merged.slice(-MAX_MESSAGES_PER_CONVERSATION)
+            : merged,
+        );
       }
       notify();
     }
@@ -169,7 +181,9 @@ export function useConversation(nodeId: number): Message[] {
   useEffect(() => {
     const fn = () => rerender((n) => n + 1);
     listeners.add(fn);
-    return () => { listeners.delete(fn); };
+    return () => {
+      listeners.delete(fn);
+    };
   }, []);
   return conversations.get(nodeId) ?? [];
 }
@@ -184,20 +198,20 @@ export function useConversationList(): ConversationSummary[] {
   useEffect(() => {
     const fn = () => rerender((n) => n + 1);
     listeners.add(fn);
-    return () => { listeners.delete(fn); };
+    return () => {
+      listeners.delete(fn);
+    };
   }, []);
 
   const result: ConversationSummary[] = [];
   for (const [nodeId, msgs] of conversations) {
     if (msgs.length === 0) continue;
-    const last = [...msgs].sort(
-      (a, b) => new Date(a.rxTime).getTime() - new Date(b.rxTime).getTime()
-    ).at(-1)!;
+    const last = [...msgs]
+      .sort((a, b) => new Date(a.rxTime).getTime() - new Date(b.rxTime).getTime())
+      .at(-1)!;
     result.push({ nodeId, lastMessage: last });
   }
   return result.sort(
-    (a, b) =>
-      new Date(b.lastMessage.rxTime).getTime() -
-      new Date(a.lastMessage.rxTime).getTime()
+    (a, b) => new Date(b.lastMessage.rxTime).getTime() - new Date(a.lastMessage.rxTime).getTime(),
   );
 }

@@ -10,15 +10,18 @@
  *   {root}/2/map/                       — unencrypted ServiceEnvelope (MapReport)
  */
 
-import { EventEmitter } from "node:events";
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { Buffer } from "node:buffer";
-import mqtt from "mqtt";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { EventEmitter } from "node:events";
+
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
 import { MeshDevice, Types, Protobuf } from "@meshtastic/core";
+import mqtt from "mqtt";
+
+import { activityLog } from "../activity/log.js";
+
 import type { PGlite } from "@electric-sql/pglite";
 import type { MqttNode } from "@foreman/shared";
-import { activityLog } from "../activity/log.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -59,13 +62,13 @@ interface ChannelInfo {
 interface DeviceState {
   nodeNum: number;
   gatewayId: string;
-  channels: Map<number, ChannelInfo>;      // channel index → name + AES key
+  channels: Map<number, ChannelInfo>; // channel index → name + AES key
   cachedUser: Protobuf.Mesh.User | null;
   cachedPosition: Protobuf.Mesh.Position | null;
   selfAnnounceTimer: NodeJS.Timeout | null;
-  announceScheduled: boolean;              // prevents duplicate announce timers
-  lastRelayAnnounceMs: number;             // timestamp of last relay-triggered self-announce
-  lastDistanceRecalcMs: number;            // timestamp of last bulk distance recalculation
+  announceScheduled: boolean; // prevents duplicate announce timers
+  lastRelayAnnounceMs: number; // timestamp of last relay-triggered self-announce
+  lastDistanceRecalcMs: number; // timestamp of last bulk distance recalculation
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +81,10 @@ export class MqttGateway extends EventEmitter {
   private connected = false;
   private readonly devices = new Map<string, DeviceState>();
 
-  constructor(cfg: MqttGatewayConfig, private readonly db: PGlite) {
+  constructor(
+    cfg: MqttGatewayConfig,
+    private readonly db: PGlite,
+  ) {
     super();
     this.cfg = {
       selfAnnounceInterval: DEFAULT_SELF_ANNOUNCE_INTERVAL,
@@ -125,14 +131,19 @@ export class MqttGateway extends EventEmitter {
 
     this.client.on("message", (topic, payload) => {
       this._handleInbound(topic, payload).catch((err) =>
-        console.error("[mqtt] inbound error:", err.message)
+        console.error("[mqtt] inbound error:", err.message),
       );
     });
 
-    this.client.on("disconnect", (packet: any) => {
-      this.connected = false;
-      console.log(`[mqtt] disconnected reason=${packet?.reasonCode ?? "?"} (${packet?.properties?.reasonString ?? "no reason"})`);
-    });
+    this.client.on(
+      "disconnect",
+      (packet: { reasonCode?: number; properties?: { reasonString?: string } } | undefined) => {
+        this.connected = false;
+        console.log(
+          `[mqtt] disconnected reason=${packet?.reasonCode ?? "?"} (${packet?.properties?.reasonString ?? "no reason"})`,
+        );
+      },
+    );
 
     this.client.on("close", () => {
       this.connected = false;
@@ -151,7 +162,7 @@ export class MqttGateway extends EventEmitter {
         state.selfAnnounceTimer = null;
       }
     }
-    this.client?.end(true);  // force-close so reconnectPeriod doesn't restart it
+    this.client?.end(true); // force-close so reconnectPeriod doesn't restart it
     this.client = null;
     this.connected = false;
     console.log("[mqtt] stopped");
@@ -225,15 +236,20 @@ export class MqttGateway extends EventEmitter {
     // mqtt_nodes is exclusively populated from _handleInbound (remote broker data).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onNodeInfoPacket.subscribe((nodeInfo: any) => {
-      const isOurs = state.nodeNum !== 0
-        ? nodeInfo.num === state.nodeNum
-        : !!(nodeInfo.user?.id && nodeInfo.user.id === state.gatewayId);
-      console.log(`[mqtt] nodeInfo num=!${(nodeInfo.num ?? 0).toString(16).padStart(8,"0")} ours=${isOurs} stateNum=${state.gatewayId} hasPos=${!!nodeInfo.position?.latitudeI} latI=${nodeInfo.position?.latitudeI ?? "none"}`);
+      const isOurs =
+        state.nodeNum !== 0
+          ? nodeInfo.num === state.nodeNum
+          : !!(nodeInfo.user?.id && nodeInfo.user.id === state.gatewayId);
+      console.log(
+        `[mqtt] nodeInfo num=!${(nodeInfo.num ?? 0).toString(16).padStart(8, "0")} ours=${isOurs} stateNum=${state.gatewayId} hasPos=${!!nodeInfo.position?.latitudeI} latI=${nodeInfo.position?.latitudeI ?? "none"}`,
+      );
       if (isOurs) {
         if (nodeInfo.user) state.cachedUser = nodeInfo.user as Protobuf.Mesh.User;
         if (nodeInfo.position?.latitudeI) {
           state.cachedPosition = nodeInfo.position as Protobuf.Mesh.Position;
-          console.log(`[mqtt] cached own position from nodeInfo: lat=${nodeInfo.position.latitudeI / 1e7} lon=${nodeInfo.position.longitudeI / 1e7}`);
+          console.log(
+            `[mqtt] cached own position from nodeInfo: lat=${nodeInfo.position.latitudeI / 1e7} lon=${nodeInfo.position.longitudeI / 1e7}`,
+          );
         }
       }
     });
@@ -241,11 +257,15 @@ export class MqttGateway extends EventEmitter {
     // Cache own position for self-announce — fires when device transmits its own position
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onPositionPacket.subscribe((pkt: any) => {
-      console.log(`[mqtt] positionPacket from=!${(pkt.from ?? 0).toString(16).padStart(8,"0")} stateNum=${state.gatewayId} latI=${pkt.data?.latitudeI ?? "none"}`);
+      console.log(
+        `[mqtt] positionPacket from=!${(pkt.from ?? 0).toString(16).padStart(8, "0")} stateNum=${state.gatewayId} latI=${pkt.data?.latitudeI ?? "none"}`,
+      );
       if (pkt.from === state.nodeNum) {
         const hadPosition = !!state.cachedPosition;
         state.cachedPosition = pkt.data as Protobuf.Mesh.Position;
-        console.log(`[mqtt] cached own position from positionPacket: lat=${pkt.data?.latitudeI / 1e7}`);
+        console.log(
+          `[mqtt] cached own position from positionPacket: lat=${pkt.data?.latitudeI / 1e7}`,
+        );
         // Re-announce immediately if this is the first position fix — the initial
         // self-announce fired before GPS was ready so remote instances missed our location.
         if (!hadPosition && state.announceScheduled) {
@@ -255,22 +275,23 @@ export class MqttGateway extends EventEmitter {
         if (state.cachedPosition.latitudeI && state.cachedPosition.longitudeI) {
           const pos = state.cachedPosition;
           this.emit("gps:position", deviceId, {
-            latitude:       pos.latitudeI  / 1e7,
-            longitude:      pos.longitudeI / 1e7,
-            altitude:       pos.altitude   ?? null,
-            satsInView:     pos.satsInView  > 0 ? pos.satsInView  : null,
-            fixType:        pos.fixType     > 0 ? pos.fixType     : null,
-            fixQuality:     pos.fixQuality  > 0 ? pos.fixQuality  : null,
-            pdop:           pos.PDOP        > 0 ? pos.PDOP        : null,
-            hdop:           pos.HDOP        > 0 ? pos.HDOP        : null,
+            latitude: pos.latitudeI / 1e7,
+            longitude: pos.longitudeI / 1e7,
+            altitude: pos.altitude ?? null,
+            satsInView: pos.satsInView > 0 ? pos.satsInView : null,
+            fixType: pos.fixType > 0 ? pos.fixType : null,
+            fixQuality: pos.fixQuality > 0 ? pos.fixQuality : null,
+            pdop: pos.PDOP > 0 ? pos.PDOP : null,
+            hdop: pos.HDOP > 0 ? pos.HDOP : null,
             locationSource: pos.locationSource != null ? pos.locationSource : null,
-            gpsTimestamp:   pos.time        ? new Date(Number(pos.time) * 1000).toISOString() : null,
+            gpsTimestamp: pos.time ? new Date(Number(pos.time) * 1000).toISOString() : null,
           });
         }
         // Recalculate distance_m for all known nodes — rate-limited to once per 5 min
         const RECALC_INTERVAL_MS = 5 * 60 * 1000;
         if (
-          state.cachedPosition.latitudeI && state.cachedPosition.longitudeI &&
+          state.cachedPosition.latitudeI &&
+          state.cachedPosition.longitudeI &&
           Date.now() - state.lastDistanceRecalcMs > RECALC_INTERVAL_MS
         ) {
           state.lastDistanceRecalcMs = Date.now();
@@ -285,7 +306,7 @@ export class MqttGateway extends EventEmitter {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onMeshPacket.subscribe((pkt: any) => {
       this._handleMeshPacket(deviceId, pkt).catch((err) =>
-        console.error(`[mqtt] packet error on ${deviceId}:`, err.message)
+        console.error(`[mqtt] packet error on ${deviceId}:`, err.message),
       );
     });
 
@@ -321,18 +342,18 @@ export class MqttGateway extends EventEmitter {
     // Don't re-publish packets that arrived via MQTT downlink
     if (pkt.viaMqtt) return;
 
-    const isDecoded   = pkt.payloadVariant?.case === "decoded";
+    const isDecoded = pkt.payloadVariant?.case === "decoded";
     const isEncrypted = pkt.payloadVariant?.case === "encrypted";
     if (!isDecoded && !isEncrypted) return;
 
-    const fromNum:  number = pkt.from   ?? 0;
-    const toNum:    number = pkt.to     ?? 0xFFFFFFFF;
-    const packetId: number = pkt.id     ?? 0;
-    const chIdx:    number = pkt.channel ?? 0;
-    const rxTime:   number = pkt.rxTime  ?? Math.floor(Date.now() / 1000);
+    const fromNum: number = pkt.from ?? 0;
+    const toNum: number = pkt.to ?? 0xffffffff;
+    const packetId: number = pkt.id ?? 0;
+    const chIdx: number = pkt.channel ?? 0;
+    const rxTime: number = pkt.rxTime ?? Math.floor(Date.now() / 1000);
     const hopLimit: number = pkt.hopLimit ?? 3;
     const hopStart: number = pkt.hopStart ?? 0;
-    const wantAck:  boolean = pkt.wantAck ?? false;
+    const wantAck: boolean = pkt.wantAck ?? false;
 
     const ch = state.channels.get(chIdx) ?? { name: "LongFast", key: DEFAULT_KEY };
 
@@ -346,19 +367,22 @@ export class MqttGateway extends EventEmitter {
       const portnum: number = pkt.payloadVariant.value.portnum ?? 0;
       const innerPayload: Uint8Array = pkt.payloadVariant.value.payload ?? new Uint8Array();
 
-      const dataBytes = toBinary(Protobuf.Mesh.DataSchema, create(Protobuf.Mesh.DataSchema, {
-        portnum,
-        payload: innerPayload,
-      }));
+      const dataBytes = toBinary(
+        Protobuf.Mesh.DataSchema,
+        create(Protobuf.Mesh.DataSchema, {
+          portnum,
+          payload: innerPayload,
+        }),
+      );
 
       encryptedPayload = this._encrypt(ch.key, packetId, fromNum, Buffer.from(dataBytes));
     }
 
     const meshPkt = create(Protobuf.Mesh.MeshPacketSchema, {
-      from:    fromNum,
-      to:      toNum,
+      from: fromNum,
+      to: toNum,
       channel: chIdx,
-      id:      packetId,
+      id: packetId,
       rxTime,
       hopLimit,
       hopStart,
@@ -367,18 +391,24 @@ export class MqttGateway extends EventEmitter {
     });
 
     const envelope = create(Protobuf.Mqtt.ServiceEnvelopeSchema, {
-      packet:    meshPkt,
+      packet: meshPkt,
       channelId: ch.name,
       gatewayId: state.gatewayId,
     });
 
     const topic = `${this.cfg.rootTopic === "all" ? "msh" : this.cfg.rootTopic}/2/e/${ch.name}/${state.gatewayId}`;
-    this.client.publish(topic, Buffer.from(toBinary(Protobuf.Mqtt.ServiceEnvelopeSchema, envelope)));
+    this.client.publish(
+      topic,
+      Buffer.from(toBinary(Protobuf.Mqtt.ServiceEnvelopeSchema, envelope)),
+    );
 
     const portnumName = isDecoded
-      ? ((Protobuf.Portnums.PortNum as Record<number, string>)[pkt.payloadVariant.value.portnum] ?? "?")
+      ? ((Protobuf.Portnums.PortNum as Record<number, string>)[pkt.payloadVariant.value.portnum] ??
+        "?")
       : "encrypted";
-    console.log(`[mqtt] pub  ${portnumName} from !${fromNum.toString(16).padStart(8,"0")} → ${topic}`);
+    console.log(
+      `[mqtt] pub  ${portnumName} from !${fromNum.toString(16).padStart(8, "0")} → ${topic}`,
+    );
 
     // Piggyback a self-announce on relay traffic so remote app instances can see
     // this gateway node without waiting for the 15-minute announce timer.
@@ -403,14 +433,18 @@ export class MqttGateway extends EventEmitter {
     const state = this.devices.get(deviceId);
     if (!state || state.nodeNum === 0) return;
 
-    console.log(`[mqtt] _publishSelf ${state.gatewayId}: hasUser=${!!state.cachedUser} hasPos=${!!state.cachedPosition} latI=${state.cachedPosition?.latitudeI ?? "none"} lonI=${state.cachedPosition?.longitudeI ?? "none"}`);
+    console.log(
+      `[mqtt] _publishSelf ${state.gatewayId}: hasUser=${!!state.cachedUser} hasPos=${!!state.cachedPosition} latI=${state.cachedPosition?.latitudeI ?? "none"} lonI=${state.cachedPosition?.longitudeI ?? "none"}`,
+    );
 
     const ch = state.channels.get(0) ?? { name: "LongFast", key: DEFAULT_KEY };
 
     // NODEINFO_APP
     if (state.cachedUser) {
       await this._publishOwnPacket(
-        state, ch, Protobuf.Portnums.PortNum.NODEINFO_APP,
+        state,
+        ch,
+        Protobuf.Portnums.PortNum.NODEINFO_APP,
         toBinary(Protobuf.Mesh.UserSchema, state.cachedUser),
       );
     }
@@ -419,16 +453,18 @@ export class MqttGateway extends EventEmitter {
     const pos = state.cachedPosition;
     if (pos && (pos.latitudeI || pos.longitudeI)) {
       await this._publishOwnPacket(
-        state, ch, Protobuf.Portnums.PortNum.POSITION_APP,
+        state,
+        ch,
+        Protobuf.Portnums.PortNum.POSITION_APP,
         toBinary(Protobuf.Mesh.PositionSchema, pos),
       );
 
       // Write our own position directly — don't rely on broker echo
-      const lat = pos.latitudeI  != null ? pos.latitudeI  / 1e7 : null;
+      const lat = pos.latitudeI != null ? pos.latitudeI / 1e7 : null;
       const lon = pos.longitudeI != null ? pos.longitudeI / 1e7 : null;
-      const alt = pos.altitude   ?? null;
+      const alt = pos.altitude ?? null;
       const publishRoot = this.cfg.rootTopic === "all" ? "msh" : this.cfg.rootTopic;
-      const regionPath  = publishRoot.split("/").slice(1).join("/"); // strip leading "msh"
+      const regionPath = publishRoot.split("/").slice(1).join("/"); // strip leading "msh"
       const rxTime = new Date().toISOString();
       if (lat !== null && lon !== null && !(lat === 0 && lon === 0)) {
         await this.db.query(
@@ -442,10 +478,20 @@ export class MqttGateway extends EventEmitter {
              last_gateway = EXCLUDED.last_gateway,
              region_path  = EXCLUDED.region_path,
              distance_m   = 0`,
-          [state.nodeNum, lat, lon, alt, rxTime, state.gatewayId, regionPath]
+          [state.nodeNum, lat, lon, alt, rxTime, state.gatewayId, regionPath],
         );
-        await this._emitNodeUpdate(state.nodeNum, rxTime, state.gatewayId, regionPath, "LongFast", null, null);
-        console.log(`[mqtt] self position written to mqtt_nodes: ${lat.toFixed(5)}, ${lon.toFixed(5)}`);
+        await this._emitNodeUpdate(
+          state.nodeNum,
+          rxTime,
+          state.gatewayId,
+          regionPath,
+          "LongFast",
+          null,
+          null,
+        );
+        console.log(
+          `[mqtt] self position written to mqtt_nodes: ${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+        );
       }
     }
 
@@ -464,30 +510,36 @@ export class MqttGateway extends EventEmitter {
     if (!this.client) return;
 
     const packetId = this._randomPacketId();
-    const dataBytes = toBinary(Protobuf.Mesh.DataSchema, create(Protobuf.Mesh.DataSchema, {
-      portnum,
-      payload: innerPayload,
-    }));
+    const dataBytes = toBinary(
+      Protobuf.Mesh.DataSchema,
+      create(Protobuf.Mesh.DataSchema, {
+        portnum,
+        payload: innerPayload,
+      }),
+    );
     const encrypted = this._encrypt(ch.key, packetId, state.nodeNum, Buffer.from(dataBytes));
 
     const meshPkt = create(Protobuf.Mesh.MeshPacketSchema, {
-      from:    state.nodeNum,
-      to:      0xFFFFFFFF,
+      from: state.nodeNum,
+      to: 0xffffffff,
       channel: 0,
-      id:      packetId,
-      rxTime:  Math.floor(Date.now() / 1000),
+      id: packetId,
+      rxTime: Math.floor(Date.now() / 1000),
       hopLimit: 3,
       payloadVariant: { case: "encrypted", value: encrypted },
     });
 
     const envelope = create(Protobuf.Mqtt.ServiceEnvelopeSchema, {
-      packet:    meshPkt,
+      packet: meshPkt,
       channelId: ch.name,
       gatewayId: state.gatewayId,
     });
 
     const topic = `${this.cfg.rootTopic === "all" ? "msh" : this.cfg.rootTopic}/2/e/${ch.name}/${state.gatewayId}`;
-    this.client.publish(topic, Buffer.from(toBinary(Protobuf.Mqtt.ServiceEnvelopeSchema, envelope)));
+    this.client.publish(
+      topic,
+      Buffer.from(toBinary(Protobuf.Mqtt.ServiceEnvelopeSchema, envelope)),
+    );
     console.log(`[mqtt] self ${Protobuf.Portnums.PortNum[portnum]} → ${topic}`);
   }
 
@@ -495,21 +547,23 @@ export class MqttGateway extends EventEmitter {
     if (!this.client || !state.cachedUser) return;
 
     const user = state.cachedUser;
-    const pos  = state.cachedPosition;
+    const pos = state.cachedPosition;
     const packetId = this._randomPacketId();
     const hasDefaultCh = (state.channels.get(0)?.key ?? DEFAULT_KEY).equals(DEFAULT_KEY);
 
     const report = create(Protobuf.Mqtt.MapReportSchema, {
-      longName:          user.longName,
-      shortName:         user.shortName,
-      hwModel:           user.hwModel,
+      longName: user.longName,
+      shortName: user.shortName,
+      hwModel: user.hwModel,
       hasDefaultChannel: hasDefaultCh,
       numOnlineLocalNodes: state.channels.size,
-      ...(pos?.latitudeI ? {
-        latitudeI:  pos.latitudeI,
-        longitudeI: pos.longitudeI ?? 0,
-        altitude:   pos.altitude   ?? 0,
-      } : {}),
+      ...(pos?.latitudeI
+        ? {
+            latitudeI: pos.latitudeI,
+            longitudeI: pos.longitudeI ?? 0,
+            altitude: pos.altitude ?? 0,
+          }
+        : {}),
     });
 
     const reportBytes = toBinary(Protobuf.Mqtt.MapReportSchema, report);
@@ -521,22 +575,25 @@ export class MqttGateway extends EventEmitter {
     });
 
     const meshPkt = create(Protobuf.Mesh.MeshPacketSchema, {
-      from:    state.nodeNum,
-      to:      0xFFFFFFFF,
-      id:      packetId,
-      rxTime:  Math.floor(Date.now() / 1000),
+      from: state.nodeNum,
+      to: 0xffffffff,
+      id: packetId,
+      rxTime: Math.floor(Date.now() / 1000),
       hopLimit: 3,
       payloadVariant: { case: "decoded", value: data },
     });
 
     const envelope = create(Protobuf.Mqtt.ServiceEnvelopeSchema, {
-      packet:    meshPkt,
+      packet: meshPkt,
       channelId: channelName,
       gatewayId: state.gatewayId,
     });
 
     const topic = `${this.cfg.rootTopic === "all" ? "msh" : this.cfg.rootTopic}/2/map/`;
-    this.client.publish(topic, Buffer.from(toBinary(Protobuf.Mqtt.ServiceEnvelopeSchema, envelope)));
+    this.client.publish(
+      topic,
+      Buffer.from(toBinary(Protobuf.Mqtt.ServiceEnvelopeSchema, envelope)),
+    );
     console.log(`[mqtt] self MAP_REPORT_APP → ${topic}`);
   }
 
@@ -546,22 +603,42 @@ export class MqttGateway extends EventEmitter {
 
   async listMqttNodes(): Promise<MqttNode[]> {
     const { rows } = await this.db.query<{
-      node_id: number; long_name: string | null; short_name: string | null;
-      hw_model: number | null; public_key: string | null; last_heard: string | null;
-      latitude: number | null; longitude: number | null; altitude: number | null;
-      last_gateway: string | null; region_path: string | null; channel_name: string | null;
-      snr: number | null; hops_away: number | null; distance_m: number | null;
+      node_id: number;
+      long_name: string | null;
+      short_name: string | null;
+      hw_model: number | null;
+      public_key: string | null;
+      last_heard: string | null;
+      latitude: number | null;
+      longitude: number | null;
+      altitude: number | null;
+      last_gateway: string | null;
+      region_path: string | null;
+      channel_name: string | null;
+      snr: number | null;
+      hops_away: number | null;
+      distance_m: number | null;
     }>(
       `SELECT node_id, long_name, short_name, hw_model, public_key, last_heard,
               latitude, longitude, altitude, last_gateway, region_path, channel_name, snr, hops_away, distance_m
-       FROM mqtt_nodes ORDER BY last_heard DESC NULLS LAST`
+       FROM mqtt_nodes ORDER BY last_heard DESC NULLS LAST`,
     );
     return rows.map((r) => ({
-      nodeId: r.node_id, longName: r.long_name, shortName: r.short_name,
-      hwModel: r.hw_model, publicKey: r.public_key, lastHeard: r.last_heard,
-      latitude: r.latitude, longitude: r.longitude, altitude: r.altitude,
-      lastGateway: r.last_gateway, regionPath: r.region_path, channelName: r.channel_name,
-      snr: r.snr, hopsAway: r.hops_away, distanceM: r.distance_m,
+      nodeId: r.node_id,
+      longName: r.long_name,
+      shortName: r.short_name,
+      hwModel: r.hw_model,
+      publicKey: r.public_key,
+      lastHeard: r.last_heard,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      altitude: r.altitude,
+      lastGateway: r.last_gateway,
+      regionPath: r.region_path,
+      channelName: r.channel_name,
+      snr: r.snr,
+      hopsAway: r.hops_away,
+      distanceM: r.distance_m,
     }));
   }
 
@@ -576,8 +653,11 @@ export class MqttGateway extends EventEmitter {
     const jsonIdx = parts.indexOf("json");
     if (jsonIdx !== -1 && parts[jsonIdx - 1] === "2") {
       const channelName = parts[jsonIdx + 1] ?? "unknown";
-      const gatewayId   = parts[jsonIdx + 2] ?? "unknown";
-      const regionPath  = parts.slice(1, jsonIdx - 1).filter(Boolean).join("/");
+      const gatewayId = parts[jsonIdx + 2] ?? "unknown";
+      const regionPath = parts
+        .slice(1, jsonIdx - 1)
+        .filter(Boolean)
+        .join("/");
       await this._handleJsonInbound(payload, channelName, gatewayId, regionPath);
       return;
     }
@@ -589,12 +669,17 @@ export class MqttGateway extends EventEmitter {
       return;
     }
     const channelName = parts[eIdx + 1] ?? "LongFast";
-    const gatewayId   = parts[eIdx + 2] ?? "unknown";
+    const gatewayId = parts[eIdx + 2] ?? "unknown";
     // Region path = everything between "msh/" and "/2/e" e.g. "US/CA/Humboldt/Eureka"
     // Filter empty segments to handle topics without a city level (double-slash, e.g. msh/US/CA/CentralCoast//2/e/...)
-    const regionPath = parts.slice(1, eIdx - 1).filter(Boolean).join("/");
+    const regionPath = parts
+      .slice(1, eIdx - 1)
+      .filter(Boolean)
+      .join("/");
 
-    console.log(`[mqtt] inbound topic=${topic} channel=${channelName} gw=${gatewayId} region=${regionPath}`);
+    console.log(
+      `[mqtt] inbound topic=${topic} channel=${channelName} gw=${gatewayId} region=${regionPath}`,
+    );
 
     let envelope: Protobuf.Mqtt.ServiceEnvelope;
     try {
@@ -605,11 +690,16 @@ export class MqttGateway extends EventEmitter {
     }
 
     const pkt = envelope.packet;
-    if (!pkt) { console.log("[mqtt] inbound: no packet in envelope"); return; }
+    if (!pkt) {
+      console.log("[mqtt] inbound: no packet in envelope");
+      return;
+    }
 
-    const fromNum  = pkt.from ?? 0;
-    const packetId = pkt.id   ?? 0;
-    console.log(`[mqtt] inbound pkt from=!${fromNum.toString(16).padStart(8,"0")} variant=${pkt.payloadVariant?.case}`);
+    const fromNum = pkt.from ?? 0;
+    const packetId = pkt.id ?? 0;
+    console.log(
+      `[mqtt] inbound pkt from=!${fromNum.toString(16).padStart(8, "0")} variant=${pkt.payloadVariant?.case}`,
+    );
 
     let data: Protobuf.Mesh.Data;
 
@@ -621,28 +711,43 @@ export class MqttGateway extends EventEmitter {
       let channelKey = DEFAULT_KEY;
       for (const state of this.devices.values()) {
         for (const [, ch] of state.channels) {
-          if (ch.name === channelName) { channelKey = Buffer.from(ch.key) as Buffer<ArrayBuffer>; break; }
+          if (ch.name === channelName) {
+            channelKey = Buffer.from(ch.key) as Buffer<ArrayBuffer>;
+            break;
+          }
         }
       }
       try {
-        const plain = this._decrypt(channelKey, packetId, fromNum,
-          Buffer.from(pkt.payloadVariant.value as Uint8Array));
+        const plain = this._decrypt(
+          channelKey,
+          packetId,
+          fromNum,
+          Buffer.from(pkt.payloadVariant.value as Uint8Array),
+        );
         data = fromBinary(Protobuf.Mesh.DataSchema, plain);
       } catch {
-        console.log(`[mqtt] privately encrypted data from=!${fromNum.toString(16).padStart(8,"0")}`);
+        console.log(
+          `[mqtt] privately encrypted data from=!${fromNum.toString(16).padStart(8, "0")}`,
+        );
         return;
       }
     } else {
-      console.log(`[mqtt] inbound skip unknown variant=${pkt.payloadVariant?.case} from=!${fromNum.toString(16).padStart(8,"0")}`);
+      console.log(
+        `[mqtt] inbound skip unknown variant=${pkt.payloadVariant?.case} from=!${fromNum.toString(16).padStart(8, "0")}`,
+      );
       return;
     }
 
-    const portname = (Protobuf.Portnums.PortNum as Record<number, string>)[data.portnum] ?? String(data.portnum);
-    console.log(`[mqtt] inbound decoded portnum=${portname} from=!${fromNum.toString(16).padStart(8,"0")}`);
+    const portname =
+      (Protobuf.Portnums.PortNum as Record<number, string>)[data.portnum] ?? String(data.portnum);
+    console.log(
+      `[mqtt] inbound decoded portnum=${portname} from=!${fromNum.toString(16).padStart(8, "0")}`,
+    );
 
-    const rxTime = pkt.rxTime && pkt.rxTime > 0
-      ? new Date(pkt.rxTime * 1000).toISOString()
-      : new Date().toISOString();
+    const rxTime =
+      pkt.rxTime && pkt.rxTime > 0
+        ? new Date(pkt.rxTime * 1000).toISOString()
+        : new Date().toISOString();
 
     activityLog.add({
       ts: rxTime,
@@ -654,8 +759,16 @@ export class MqttGateway extends EventEmitter {
       viaMqtt: false,
     });
 
-    await this._upsertFromData(fromNum, data, rxTime, gatewayId, regionPath, channelName,
-      pkt.rxSnr ?? null, pkt.hopLimit ?? null);
+    await this._upsertFromData(
+      fromNum,
+      data,
+      rxTime,
+      gatewayId,
+      regionPath,
+      channelName,
+      pkt.rxSnr ?? null,
+      pkt.hopLimit ?? null,
+    );
   }
 
   private async _upsertFromData(
@@ -674,7 +787,11 @@ export class MqttGateway extends EventEmitter {
 
     if (portnum === Protobuf.Portnums.PortNum.NODEINFO_APP) {
       let user: Protobuf.Mesh.User;
-      try { user = fromBinary(Protobuf.Mesh.UserSchema, data.payload); } catch { return; }
+      try {
+        user = fromBinary(Protobuf.Mesh.UserSchema, data.payload);
+      } catch {
+        return;
+      }
 
       await this.db.query(
         `INSERT INTO mqtt_nodes(node_id, long_name, short_name, hw_model, public_key,
@@ -691,21 +808,35 @@ export class MqttGateway extends EventEmitter {
            channel_name = EXCLUDED.channel_name,
            snr          = COALESCE(EXCLUDED.snr,          mqtt_nodes.snr),
            hops_away    = COALESCE(EXCLUDED.hops_away,    mqtt_nodes.hops_away)`,
-        [nodeId, user.longName || null, user.shortName || null,
-         user.hwModel ?? null, user.publicKey?.length
-           ? Buffer.from(user.publicKey).toString("hex") : null,
-         rxTime, gatewayId, regionPath, channelName, snr, hopsAway]
+        [
+          nodeId,
+          user.longName || null,
+          user.shortName || null,
+          user.hwModel ?? null,
+          user.publicKey?.length ? Buffer.from(user.publicKey).toString("hex") : null,
+          rxTime,
+          gatewayId,
+          regionPath,
+          channelName,
+          snr,
+          hopsAway,
+        ],
       );
       await this._emitNodeUpdate(nodeId, rxTime, gatewayId, regionPath, channelName, snr, hopsAway);
-
     } else if (portnum === Protobuf.Portnums.PortNum.POSITION_APP) {
       let pos: Protobuf.Mesh.Position;
-      try { pos = fromBinary(Protobuf.Mesh.PositionSchema, data.payload); } catch { return; }
+      try {
+        pos = fromBinary(Protobuf.Mesh.PositionSchema, data.payload);
+      } catch {
+        return;
+      }
 
-      const lat = pos.latitudeI  != null ? pos.latitudeI  / 1e7 : null;
+      const lat = pos.latitudeI != null ? pos.latitudeI / 1e7 : null;
       const lon = pos.longitudeI != null ? pos.longitudeI / 1e7 : null;
-      const alt = pos.altitude   ?? null;
-      console.log(`[mqtt] POSITION_APP from=!${nodeId.toString(16).padStart(8,"0")} latI=${pos.latitudeI ?? "null"} lonI=${pos.longitudeI ?? "null"} → lat=${lat} lon=${lon}`);
+      const alt = pos.altitude ?? null;
+      console.log(
+        `[mqtt] POSITION_APP from=!${nodeId.toString(16).padStart(8, "0")} latI=${pos.latitudeI ?? "null"} lonI=${pos.longitudeI ?? "null"} → lat=${lat} lon=${lon}`,
+      );
       if (lat === null || lon === null || (lat === 0 && lon === 0)) {
         console.log(`[mqtt] POSITION_APP dropped (lat=${lat} lon=${lon})`);
         return;
@@ -728,7 +859,7 @@ export class MqttGateway extends EventEmitter {
            snr          = COALESCE(EXCLUDED.snr,         mqtt_nodes.snr),
            hops_away    = COALESCE(EXCLUDED.hops_away,   mqtt_nodes.hops_away),
            distance_m   = COALESCE(EXCLUDED.distance_m,  mqtt_nodes.distance_m)`,
-        [nodeId, lat, lon, alt, rxTime, gatewayId, regionPath, channelName, snr, hopsAway, distM]
+        [nodeId, lat, lon, alt, rxTime, gatewayId, regionPath, channelName, snr, hopsAway, distM],
       );
 
       // Also update the local mesh nodes table — MQTT is authoritative for position
@@ -737,11 +868,10 @@ export class MqttGateway extends EventEmitter {
         `UPDATE nodes SET latitude = $1, longitude = $2, altitude = COALESCE($3, altitude),
            last_heard = GREATEST(last_heard, $4)
          WHERE node_id = $5`,
-        [lat, lon, alt, rxTime, nodeId]
+        [lat, lon, alt, rxTime, nodeId],
       );
 
       await this._emitNodeUpdate(nodeId, rxTime, gatewayId, regionPath, channelName, snr, hopsAway);
-
     } else {
       // Any other portnum — upsert so an unknown node is created on first contact,
       // then fill in details when NODEINFO / POSITION packets eventually arrive.
@@ -753,33 +883,54 @@ export class MqttGateway extends EventEmitter {
            last_gateway = EXCLUDED.last_gateway,
            region_path  = EXCLUDED.region_path,
            channel_name = EXCLUDED.channel_name`,
-        [nodeId, rxTime, gatewayId, regionPath, channelName]
+        [nodeId, rxTime, gatewayId, regionPath, channelName],
       );
       await this._emitNodeUpdate(nodeId, rxTime, gatewayId, regionPath, channelName, snr, hopsAway);
     }
   }
 
   private async _emitNodeUpdate(
-    nodeId: number, rxTime: string, gatewayId: string, regionPath: string,
-    channelName: string, snr: number | null, hopsAway: number | null,
+    nodeId: number,
+    rxTime: string,
+    gatewayId: string,
+    regionPath: string,
+    channelName: string,
+    snr: number | null,
+    hopsAway: number | null,
   ): Promise<void> {
     const { rows } = await this.db.query<{
-      node_id: number; long_name: string | null; short_name: string | null;
-      hw_model: number | null; public_key: string | null;
-      latitude: number | null; longitude: number | null; altitude: number | null;
+      node_id: number;
+      long_name: string | null;
+      short_name: string | null;
+      hw_model: number | null;
+      public_key: string | null;
+      latitude: number | null;
+      longitude: number | null;
+      altitude: number | null;
       distance_m: number | null;
     }>(
       `SELECT node_id, long_name, short_name, hw_model, public_key,
               latitude, longitude, altitude, distance_m FROM mqtt_nodes WHERE node_id = $1`,
-      [nodeId]
+      [nodeId],
     );
     if (!rows[0]) return;
     const r = rows[0];
     const node: MqttNode = {
-      nodeId: r.node_id, longName: r.long_name, shortName: r.short_name,
-      hwModel: r.hw_model, publicKey: r.public_key, lastHeard: rxTime,
-      latitude: r.latitude, longitude: r.longitude, altitude: r.altitude,
-      lastGateway: gatewayId, regionPath, channelName, snr, hopsAway, distanceM: r.distance_m,
+      nodeId: r.node_id,
+      longName: r.long_name,
+      shortName: r.short_name,
+      hwModel: r.hw_model,
+      publicKey: r.public_key,
+      lastHeard: rxTime,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      altitude: r.altitude,
+      lastGateway: gatewayId,
+      regionPath,
+      channelName,
+      snr,
+      hopsAway,
+      distanceM: r.distance_m,
     };
     this.emit("mqtt_node:update", node);
   }
@@ -804,45 +955,61 @@ export class MqttGateway extends EventEmitter {
       return;
     }
 
-    const type      = typeof msg.type      === "string" ? msg.type      : null;
-    const sender    = typeof msg.sender    === "string" ? msg.sender    : null;
-    const channel   = typeof msg.channel   === "number" ? msg.channel   : null;
-    const toNode    = typeof msg.to        === "number" ? msg.to        : null;
-    const packetId  = typeof msg.id        === "number" ? msg.id        : null;
-    const rssi      = typeof msg.rssi      === "number" ? msg.rssi      : null;
-    const snr       = typeof msg.snr       === "number" ? msg.snr       : null;
-    const hopsAway  = typeof msg.hops_away === "number" ? msg.hops_away : null;
-    const hopStart  = typeof msg.hop_start === "number" ? msg.hop_start : null;
-    const tsRaw     = typeof msg.timestamp === "number" ? msg.timestamp : null;
-    const rxTime    = tsRaw ? new Date(tsRaw * 1000).toISOString() : new Date().toISOString();
-    const pld       = (msg.payload && typeof msg.payload === "object") ? msg.payload : null;
+    const type = typeof msg.type === "string" ? msg.type : null;
+    const sender = typeof msg.sender === "string" ? msg.sender : null;
+    const channel = typeof msg.channel === "number" ? msg.channel : null;
+    const toNode = typeof msg.to === "number" ? msg.to : null;
+    const packetId = typeof msg.id === "number" ? msg.id : null;
+    const rssi = typeof msg.rssi === "number" ? msg.rssi : null;
+    const snr = typeof msg.snr === "number" ? msg.snr : null;
+    const hopsAway = typeof msg.hops_away === "number" ? msg.hops_away : null;
+    const hopStart = typeof msg.hop_start === "number" ? msg.hop_start : null;
+    const tsRaw = typeof msg.timestamp === "number" ? msg.timestamp : null;
+    const rxTime = tsRaw ? new Date(tsRaw * 1000).toISOString() : new Date().toISOString();
+    const pld = msg.payload && typeof msg.payload === "object" ? msg.payload : null;
 
-    console.log(`[mqtt] json inbound type=${type ?? "unknown"} from=${sender ?? "!"+fromNode.toString(16).padStart(8,"0")} channel=${channelName}`);
+    console.log(
+      `[mqtt] json inbound type=${type ?? "unknown"} from=${sender ?? "!" + fromNode.toString(16).padStart(8, "0")} channel=${channelName}`,
+    );
 
     await this.db.query(
       `INSERT INTO mqtt_json_packets
          (packet_id, from_node, to_node, sender, channel, type, payload,
           rssi, snr, hops_away, hop_start, region_path, channel_name, gateway_id, rx_time)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-      [packetId, fromNode, toNode, sender, channel, type,
-       pld ? JSON.stringify(pld) : null,
-       rssi, snr, hopsAway, hopStart, regionPath, channelName, gatewayId, rxTime]
+      [
+        packetId,
+        fromNode,
+        toNode,
+        sender,
+        channel,
+        type,
+        pld ? JSON.stringify(pld) : null,
+        rssi,
+        snr,
+        hopsAway,
+        hopStart,
+        regionPath,
+        channelName,
+        gatewayId,
+        rxTime,
+      ],
     );
 
     // For position packets, also keep mqtt_nodes up-to-date so the node
     // appears on the map immediately without waiting for a protobuf packet.
     if (type === "position" && pld && typeof pld === "object") {
       const p = pld as Record<string, unknown>;
-      const latI = typeof p.latitude_i  === "number" ? p.latitude_i  : null;
+      const latI = typeof p.latitude_i === "number" ? p.latitude_i : null;
       const lonI = typeof p.longitude_i === "number" ? p.longitude_i : null;
-      const alt  = typeof p.altitude    === "number" ? p.altitude    : null;
+      const alt = typeof p.altitude === "number" ? p.altitude : null;
 
       if (latI !== null && lonI !== null) {
         const lat = latI / 1e7;
         const lon = lonI / 1e7;
 
         if (lat !== 0 || lon !== 0) {
-          const own   = this._getOwnLatLon();
+          const own = this._getOwnLatLon();
           const distM = own ? this._haversineMeters(own.lat, own.lon, lat, lon) : null;
 
           await this.db.query(
@@ -860,10 +1027,30 @@ export class MqttGateway extends EventEmitter {
                snr          = COALESCE(EXCLUDED.snr,        mqtt_nodes.snr),
                hops_away    = COALESCE(EXCLUDED.hops_away,  mqtt_nodes.hops_away),
                distance_m   = COALESCE(EXCLUDED.distance_m, mqtt_nodes.distance_m)`,
-            [fromNode, lat, lon, alt, rxTime, gatewayId, regionPath, channelName, snr, hopsAway, distM]
+            [
+              fromNode,
+              lat,
+              lon,
+              alt,
+              rxTime,
+              gatewayId,
+              regionPath,
+              channelName,
+              snr,
+              hopsAway,
+              distM,
+            ],
           );
 
-          await this._emitNodeUpdate(fromNode, rxTime, gatewayId, regionPath, channelName, snr, hopsAway);
+          await this._emitNodeUpdate(
+            fromNode,
+            rxTime,
+            gatewayId,
+            regionPath,
+            channelName,
+            snr,
+            hopsAway,
+          );
         }
       }
     }
@@ -909,10 +1096,10 @@ export class MqttGateway extends EventEmitter {
   /** Haversine distance in metres between two lat/lon points. */
   private _haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6_371_000;
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
     const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
@@ -953,7 +1140,7 @@ export class MqttGateway extends EventEmitter {
          )
        )
        WHERE latitude IS NOT NULL AND longitude IS NOT NULL`,
-      [ownLat, ownLon]
+      [ownLat, ownLon],
     );
     console.log(`[mqtt] recalculated distances for all positioned nodes`);
   }

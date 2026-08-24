@@ -17,8 +17,9 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openDb, clearDbLock } from "../db/open.js";
+
 import { runMigrations } from "../db/migrations.js";
+import { openDb, clearDbLock } from "../db/open.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CACHE_DIR = resolve(__dirname, "../../../../TD_cache");

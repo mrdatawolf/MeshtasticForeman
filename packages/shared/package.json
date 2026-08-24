@@ -6,7 +6,9 @@
   "main": "./src/index.ts",
   "scripts": {
     "build": "tsc --noEmit",
-    "lint": "echo 'no linter configured yet'"
+    "lint": "eslint .",
+    "format": "prettier --write package.json \"src/**/*.ts\"",
+    "format:check": "prettier --check package.json \"src/**/*.ts\""
   },
   "devDependencies": {
     "typescript": "^5.7.0"

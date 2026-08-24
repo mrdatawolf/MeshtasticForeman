@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { DeviceInfo, NodeInfo, MqttNode, Message } from "@foreman/shared";
-import { foremanClient } from "../ws/client.js";
+
 import {
   useConversationList,
   useConversation,
@@ -9,6 +8,9 @@ import {
   clearConversation,
   BROADCAST,
 } from "../store/messages.js";
+import { foremanClient } from "../ws/client.js";
+
+import type { DeviceInfo, NodeInfo, MqttNode, Message } from "@foreman/shared";
 
 interface Props {
   devices: DeviceInfo[];
@@ -22,11 +24,7 @@ function nodeHex(nodeId: number) {
   return `!${nodeId.toString(16).padStart(8, "0")}`;
 }
 
-function nodeName(
-  nodeId: number,
-  nodes: NodeInfo[],
-  mqttNodes: MqttNode[]
-): string {
+function nodeName(nodeId: number, nodes: NodeInfo[], mqttNodes: MqttNode[]): string {
   if (nodeId === BROADCAST) return "Public Channel";
   const mesh = nodes.find((n) => n.nodeId === nodeId);
   if (mesh?.shortName) return mesh.shortName;
@@ -42,7 +40,12 @@ function formatTime(iso: string) {
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
   if (diffDays === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  if (diffDays < 7) return d.toLocaleDateString([], { weekday: "short" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (diffDays < 7)
+    return (
+      d.toLocaleDateString([], { weekday: "short" }) +
+      " " +
+      d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
@@ -82,7 +85,13 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }
     setSending(true);
     foremanClient.send({
       type: "message:send",
-      payload: { deviceId, toNodeId: nodeId, text: msgText.trim(), channelIndex: channel, wantAck: true },
+      payload: {
+        deviceId,
+        toNodeId: nodeId,
+        text: msgText.trim(),
+        channelIndex: channel,
+        wantAck: true,
+      },
     });
     const optimistic: Message = {
       id: `local-${Date.now()}`,
@@ -143,19 +152,17 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }
       <div key={m.id} style={{ ...bubbleWrapStyle(outgoing), paddingLeft: indent ? "2rem" : 0 }}>
         {indent && <div style={styles.replyConnector} />}
         <div style={bubbleStyle(outgoing, m.role === "relayed", indent)}>
-          {m.role === "relayed" && (
-            <div style={styles.relayedLabel}>relayed</div>
-          )}
+          {m.role === "relayed" && <div style={styles.relayedLabel}>relayed</div>}
           {isBroadcast && !outgoing && (
-            <div style={styles.senderLabel}>
-              {nodeName(m.fromNodeId, nodes, mqttNodes)}
-            </div>
+            <div style={styles.senderLabel}>{nodeName(m.fromNodeId, nodes, mqttNodes)}</div>
           )}
           {indent && (
             <div style={styles.replyingToLabel}>
-              ↩ replying to {nodeName(
+              ↩ replying to{" "}
+              {nodeName(
                 byPacketId?.get(m.replyToPacketId)?.fromNodeId ?? m.replyToPacketId,
-                nodes, mqttNodes
+                nodes,
+                mqttNodes,
               )}
             </div>
           )}
@@ -167,13 +174,19 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }
             {m.rxSnr != null && ` · SNR ${m.rxSnr.toFixed(1)}`}
             {m.viaMqtt && " · MQTT"}
             {outgoing && m.ackStatus === "pending" && (
-              <span style={styles.ackPending} title="Waiting for ACK">⏳</span>
+              <span style={styles.ackPending} title="Waiting for ACK">
+                ⏳
+              </span>
             )}
             {outgoing && m.ackStatus === "acked" && (
-              <span style={styles.ackOk} title="Delivered">✓</span>
+              <span style={styles.ackOk} title="Delivered">
+                ✓
+              </span>
             )}
             {outgoing && m.ackStatus === "error" && (
-              <span style={styles.ackErr} title={m.ackError ?? "Delivery failed"}>✗</span>
+              <span style={styles.ackErr} title={m.ackError ?? "Delivery failed"}>
+                ✗
+              </span>
             )}
           </div>
         </div>
@@ -186,9 +199,7 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }
       <div style={styles.threadHeader}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem" }}>
           <span style={styles.threadName}>{name}</span>
-          {nodeId !== BROADCAST && (
-            <span style={styles.threadHex}>{nodeHex(nodeId)}</span>
-          )}
+          {nodeId !== BROADCAST && <span style={styles.threadHex}>{nodeHex(nodeId)}</span>}
         </div>
         <button
           style={styles.deleteBtn}
@@ -223,7 +234,9 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }
           title="Channel"
         >
           {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-            <option key={i} value={i}>Ch {i}</option>
+            <option key={i} value={i}>
+              Ch {i}
+            </option>
           ))}
         </select>
         <input
@@ -232,7 +245,10 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }
           value={msgText}
           onChange={(e) => setMsgText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              sendMessage();
+            }
           }}
           maxLength={228}
         />
@@ -250,26 +266,35 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }
 
 // ─── Main page ───────────────────────────────────────────────────────────────
 
-export function MessagesPage({ devices, nodes, mqttNodes, initialNodeId, onInitialNodeConsumed }: Props) {
+export function MessagesPage({
+  devices,
+  nodes,
+  mqttNodes,
+  initialNodeId,
+  onInitialNodeConsumed,
+}: Props) {
   const conversations = useConversationList();
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const deviceId = devices.find((d) => d.status === "connected")?.id ?? null;
 
-  const deleteConversation = useCallback(async (nodeId: number) => {
-    if (!deviceId) return;
-    const name = nodeName(nodeId, nodes, mqttNodes);
-    const ok = window.confirm(`Delete conversation with ${name}?`);
-    if (!ok) return;
-    await fetch(`/api/devices/${deviceId}/messages/${nodeId}`, { method: "DELETE" });
-    clearConversation(nodeId);
-    setSelectedNodeId((current) => {
-      if (current !== nodeId) return current;
-      const remaining = conversations.filter((c) => c.nodeId !== nodeId);
-      return remaining[0]?.nodeId ?? null;
-    });
-  }, [conversations, deviceId, mqttNodes, nodes]);
+  const deleteConversation = useCallback(
+    async (nodeId: number) => {
+      if (!deviceId) return;
+      const name = nodeName(nodeId, nodes, mqttNodes);
+      const ok = window.confirm(`Delete conversation with ${name}?`);
+      if (!ok) return;
+      await fetch(`/api/devices/${deviceId}/messages/${nodeId}`, { method: "DELETE" });
+      clearConversation(nodeId);
+      setSelectedNodeId((current) => {
+        if (current !== nodeId) return current;
+        const remaining = conversations.filter((c) => c.nodeId !== nodeId);
+        return remaining[0]?.nodeId ?? null;
+      });
+    },
+    [conversations, deviceId, mqttNodes, nodes],
+  );
 
   // Honour external navigation (e.g. "✉ Msg" from Nodes page)
   useEffect(() => {
@@ -298,11 +323,14 @@ export function MessagesPage({ devices, nodes, mqttNodes, initialNodeId, onIniti
     return () => document.removeEventListener("mousedown", handler);
   }, [pickerOpen]);
 
-  const openConversation = useCallback((nodeId: number) => {
-    setSelectedNodeId(nodeId);
-    setPickerOpen(false);
-    if (deviceId) loadConversation(deviceId, nodeId);
-  }, [deviceId]);
+  const openConversation = useCallback(
+    (nodeId: number) => {
+      setSelectedNodeId(nodeId);
+      setPickerOpen(false);
+      if (deviceId) loadConversation(deviceId, nodeId);
+    },
+    [deviceId],
+  );
 
   // Mesh nodes sorted by most-recently-heard for the picker
   const meshNodesSorted = [...nodes].sort((a, b) => {
@@ -320,7 +348,11 @@ export function MessagesPage({ devices, nodes, mqttNodes, initialNodeId, onIniti
           <span style={styles.sidebarHeader}>Conversations</span>
           {deviceId && (
             <div ref={pickerRef} style={{ position: "relative" }}>
-              <button style={newBtnStyle(pickerOpen)} onClick={() => setPickerOpen((v) => !v)} title="Start a new conversation">
+              <button
+                style={newBtnStyle(pickerOpen)}
+                onClick={() => setPickerOpen((v) => !v)}
+                title="Start a new conversation"
+              >
                 + New
               </button>
               {pickerOpen && (
@@ -335,7 +367,9 @@ export function MessagesPage({ devices, nodes, mqttNodes, initialNodeId, onIniti
                         style={pickerRowStyle(n.nodeId === selectedNodeId)}
                         onClick={() => openConversation(n.nodeId)}
                       >
-                        <span style={styles.pickerName}>{n.shortName ?? n.longName ?? nodeHex(n.nodeId)}</span>
+                        <span style={styles.pickerName}>
+                          {n.shortName ?? n.longName ?? nodeHex(n.nodeId)}
+                        </span>
                         {n.longName && n.shortName && (
                           <span style={styles.pickerSub}>{n.longName}</span>
                         )}
@@ -384,9 +418,7 @@ export function MessagesPage({ devices, nodes, mqttNodes, initialNodeId, onIniti
           />
         ) : (
           <div style={styles.placeholder}>
-            {deviceId == null
-              ? "No device connected."
-              : "Select a conversation."}
+            {deviceId == null ? "No device connected." : "Select a conversation."}
           </div>
         )}
       </div>

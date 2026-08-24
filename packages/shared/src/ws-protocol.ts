@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 import type {
   DeviceInfo,
   NodeInfo,
@@ -24,14 +25,26 @@ export type ServerEvent =
   | { type: "message:received"; payload: Message }
   | { type: "message:sent"; payload: Message }
   | { type: "message:history"; payload: Message[] }
-  | { type: "message:ack"; payload: { messageId: string; packetId: number; status: "acked" | "error"; ackAt: string; ackError: string | null } }
+  | {
+      type: "message:ack";
+      payload: {
+        messageId: string;
+        packetId: number;
+        status: "acked" | "error";
+        ackAt: string;
+        ackError: string | null;
+      };
+    }
   | { type: "packet:raw"; payload: Packet }
   | { type: "channel:list"; payload: Channel[] }
   | { type: "waypoint:update"; payload: Waypoint }
   | { type: "waypoint:list"; payload: Waypoint[] }
   | { type: "mqtt_node:update"; payload: MqttNode }
   | { type: "mqtt_node:list"; payload: MqttNode[] }
-  | { type: "traceroute:result"; payload: { deviceId: string; nodeId: number; route: number[]; routeBack: number[] } }
+  | {
+      type: "traceroute:result";
+      payload: { deviceId: string; nodeId: number; route: number[]; routeBack: number[] };
+    }
   | { type: "node:removed"; payload: { nodeId: number } }
   | { type: "activity:entry"; payload: ActivityEntry }
   | { type: "activity:snapshot"; payload: ActivityEntry[] }

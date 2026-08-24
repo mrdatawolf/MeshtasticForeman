@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import type { NodeInfo, MqttNode, DeviceInfo, Message } from "@foreman/shared";
-import { foremanClient } from "../ws/client.js";
+
 import { useConversation, loadConversation, addOptimisticMessage } from "../store/messages.js";
+import { foremanClient } from "../ws/client.js";
+
+import type { NodeInfo, MqttNode, DeviceInfo, Message } from "@foreman/shared";
 
 interface Props {
   nodeId: number;
@@ -13,19 +15,36 @@ interface Props {
   onCoverageMap?: (nodeId: number) => void;
 }
 
-const CHANNEL_ROLES_SHORT = ["Pri", "Sec", "Sec", "Sec", "Sec", "Sec", "Sec", "Sec"];
-
 const HW_MODEL: Record<number, string> = {
-  0: "UNSET", 1: "TLORA_V2", 2: "TLORA_V1", 4: "TBEAM", 8: "T_ECHO",
-  10: "RAK4631", 13: "LILYGO_TBEAM_S3_CORE", 15: "NANO_G1",
-  43: "HELTEC_V3", 44: "HELTEC_WSL_V3",
-  48: "HELTEC_WIRELESS_TRACKER", 49: "HELTEC_WIRELESS_PAPER",
-  50: "T_DECK", 51: "T_WATCH_S3", 64: "TRACKER_T1000_E", 66: "WIO_E5",
-  69: "RAK11310", 70: "RAKWIRELESS_RAK4631", 71: "STATION_G2",
-  89: "TLORA_C6", 93: "PICOMPUTER_S3", 94: "HELTEC_HT62",
-  95: "HELTEC_WIRELESS_PAPER_V3", 99: "SEEED_WIO_TRACKER_L1",
-  100: "TLORA_T3S3", 101: "NANO_G2_ULTRA", 105: "HELTEC_V3_PLUS",
-  110: "TBEAM_S3_CORE_V2", 255: "PRIVATE_HW",
+  0: "UNSET",
+  1: "TLORA_V2",
+  2: "TLORA_V1",
+  4: "TBEAM",
+  8: "T_ECHO",
+  10: "RAK4631",
+  13: "LILYGO_TBEAM_S3_CORE",
+  15: "NANO_G1",
+  43: "HELTEC_V3",
+  44: "HELTEC_WSL_V3",
+  48: "HELTEC_WIRELESS_TRACKER",
+  49: "HELTEC_WIRELESS_PAPER",
+  50: "T_DECK",
+  51: "T_WATCH_S3",
+  64: "TRACKER_T1000_E",
+  66: "WIO_E5",
+  69: "RAK11310",
+  70: "RAKWIRELESS_RAK4631",
+  71: "STATION_G2",
+  89: "TLORA_C6",
+  93: "PICOMPUTER_S3",
+  94: "HELTEC_HT62",
+  95: "HELTEC_WIRELESS_PAPER_V3",
+  99: "SEEED_WIO_TRACKER_L1",
+  100: "TLORA_T3S3",
+  101: "NANO_G2_ULTRA",
+  105: "HELTEC_V3_PLUS",
+  110: "TBEAM_S3_CORE_V2",
+  255: "PRIVATE_HW",
 };
 
 function nodeHex(nodeId: number) {
@@ -45,7 +64,15 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessage, onCoverageMap }: Props) {
+export function NodeDetailPanel({
+  nodeId,
+  mesh,
+  mqtt,
+  devices,
+  onClose,
+  onMessage,
+  onCoverageMap,
+}: Props) {
   const deviceId = devices.find((d) => d.status === "connected")?.id ?? null;
   const primary = mesh ?? mqtt!;
 
@@ -53,9 +80,13 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
   const [msgText, setMsgText] = useState("");
   const [channel, setChannel] = useState(0);
   const [sending, setSending] = useState(false);
-  const [pendingAction, setPendingAction] = useState<"position" | "traceroute" | "remove" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"position" | "traceroute" | "remove" | null>(
+    null,
+  );
   const [confirmRemove, setConfirmRemove] = useState(false);
-  const [traceroute, setTraceroute] = useState<{ route: number[]; routeBack: number[] } | null>(null);
+  const [traceroute, setTraceroute] = useState<{ route: number[]; routeBack: number[] } | null>(
+    null,
+  );
   const msgEndRef = useRef<HTMLDivElement>(null);
 
   // Request message history and listen for traceroute results / node removal
@@ -73,7 +104,9 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
         onClose();
       }
     });
-    return () => { off(); };
+    return () => {
+      off();
+    };
   }, [deviceId, nodeId]);
 
   // Auto-scroll messages
@@ -86,7 +119,13 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
     setSending(true);
     foremanClient.send({
       type: "message:send",
-      payload: { deviceId, toNodeId: nodeId, text: msgText.trim(), channelIndex: channel, wantAck: true },
+      payload: {
+        deviceId,
+        toNodeId: nodeId,
+        text: msgText.trim(),
+        channelIndex: channel,
+        wantAck: true,
+      },
     });
     // Optimistic local message
     const optimistic: Message = {
@@ -110,7 +149,9 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
     };
     addOptimisticMessage(optimistic);
     setMsgText("");
-    setTimeout(() => { setSending(false); }, 5000);
+    setTimeout(() => {
+      setSending(false);
+    }, 5000);
   }
 
   function requestPosition() {
@@ -144,32 +185,74 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
         {/* Header */}
         <div style={styles.header}>
           <div>
-            <div style={styles.headerName}>{primary.longName ?? primary.shortName ?? "Unknown"}</div>
+            <div style={styles.headerName}>
+              {primary.longName ?? primary.shortName ?? "Unknown"}
+            </div>
             <div style={styles.headerSub}>
               <span style={styles.mono}>{nodeHex(nodeId)}</span>
               {primary.shortName && primary.longName && (
-                <span style={{ color: "#64748b", marginLeft: "0.5rem" }}>({primary.shortName})</span>
+                <span style={{ color: "#64748b", marginLeft: "0.5rem" }}>
+                  ({primary.shortName})
+                </span>
               )}
             </div>
           </div>
-          <button style={styles.closeBtn} onClick={onClose}>✕</button>
+          <button style={styles.closeBtn} onClick={onClose}>
+            ✕
+          </button>
         </div>
 
         <div style={styles.body}>
           {/* Details grid */}
           <div style={styles.detailGrid}>
             <Detail label="Node ID" value={nodeHex(nodeId)} mono />
-            <Detail label="Hardware" value={primary.hwModel != null ? (HW_MODEL[primary.hwModel] ?? `#${primary.hwModel}`) : "—"} />
+            <Detail
+              label="Hardware"
+              value={
+                primary.hwModel != null ? (HW_MODEL[primary.hwModel] ?? `#${primary.hwModel}`) : "—"
+              }
+            />
             <Detail label="Last Heard" value={formatLastHeard(primary.lastHeard)} />
-            <Detail label="SNR" value={primary.snr != null ? `${primary.snr.toFixed(1)} dB` : "—"} />
-            {mesh && <Detail label="Hops Away" value={mesh.hopsAway != null ? (mesh.hopsAway === 0 ? "Direct" : `${mesh.hopsAway} hop${mesh.hopsAway > 1 ? "s" : ""}`) : "—"} />}
-            {primary.latitude != null && <Detail label="Latitude" value={primary.latitude.toFixed(6)} mono />}
-            {primary.longitude != null && <Detail label="Longitude" value={primary.longitude.toFixed(6)} mono />}
-            {primary.altitude != null && <Detail label="Altitude" value={`${primary.altitude} m`} />}
+            <Detail
+              label="SNR"
+              value={primary.snr != null ? `${primary.snr.toFixed(1)} dB` : "—"}
+            />
+            {mesh && (
+              <Detail
+                label="Hops Away"
+                value={
+                  mesh.hopsAway != null
+                    ? mesh.hopsAway === 0
+                      ? "Direct"
+                      : `${mesh.hopsAway} hop${mesh.hopsAway > 1 ? "s" : ""}`
+                    : "—"
+                }
+              />
+            )}
+            {primary.latitude != null && (
+              <Detail label="Latitude" value={primary.latitude.toFixed(6)} mono />
+            )}
+            {primary.longitude != null && (
+              <Detail label="Longitude" value={primary.longitude.toFixed(6)} mono />
+            )}
+            {primary.altitude != null && (
+              <Detail label="Altitude" value={`${primary.altitude} m`} />
+            )}
             {mesh?.macAddress && <Detail label="MAC" value={mesh.macAddress} mono />}
-            {mesh?.publicKey && <Detail label="Public Key" value={mesh.publicKey.slice(0, 16) + "…"} mono />}
+            {mesh?.publicKey && (
+              <Detail label="Public Key" value={mesh.publicKey.slice(0, 16) + "…"} mono />
+            )}
             {mqtt?.lastGateway && <Detail label="MQTT Gateway" value={mqtt.lastGateway} />}
-            {mqtt?.distanceM != null && <Detail label="MQTT Distance" value={mqtt.distanceM < 1000 ? `${Math.round(mqtt.distanceM)} m` : `${(mqtt.distanceM / 1000).toFixed(1)} km`} />}
+            {mqtt?.distanceM != null && (
+              <Detail
+                label="MQTT Distance"
+                value={
+                  mqtt.distanceM < 1000
+                    ? `${Math.round(mqtt.distanceM)} m`
+                    : `${(mqtt.distanceM / 1000).toFixed(1)} km`
+                }
+              />
+            )}
             {mqtt?.regionPath && <Detail label="Region" value={mqtt.regionPath} />}
           </div>
 
@@ -193,7 +276,10 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
               {onMessage && (
                 <button
                   style={actionBtnStyle(false)}
-                  onClick={() => { onClose(); onMessage(nodeId); }}
+                  onClick={() => {
+                    onClose();
+                    onMessage(nodeId);
+                  }}
                 >
                   ✉ Messages Tab
                 </button>
@@ -228,7 +314,10 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
             <div style={{ ...styles.actions, marginTop: "0.3rem" }}>
               <button
                 style={{ ...actionBtnStyle(false), borderColor: "#166534", color: "#86efac" }}
-                onClick={() => { onClose(); onCoverageMap(nodeId); }}
+                onClick={() => {
+                  onClose();
+                  onCoverageMap(nodeId);
+                }}
               >
                 🗺 Coverage Map
               </button>
@@ -262,9 +351,7 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
                     const outgoing = m.role === "sent";
                     return (
                       <div key={m.id} style={messageBubbleStyle(outgoing)}>
-                        {m.role === "relayed" && (
-                          <div style={styles.relayedLabel}>relayed</div>
-                        )}
+                        {m.role === "relayed" && <div style={styles.relayedLabel}>relayed</div>}
                         <div style={{ ...styles.msgText, opacity: m.role === "relayed" ? 0.5 : 1 }}>
                           {m.text ?? <em style={{ color: "#475569" }}>encrypted</em>}
                         </div>
@@ -273,13 +360,19 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
                           {m.rxSnr != null && ` · SNR ${m.rxSnr.toFixed(1)}`}
                           {m.viaMqtt && " · MQTT"}
                           {outgoing && m.ackStatus === "pending" && (
-                            <span style={styles.ackPending} title="Waiting for ACK">⏳</span>
+                            <span style={styles.ackPending} title="Waiting for ACK">
+                              ⏳
+                            </span>
                           )}
                           {outgoing && m.ackStatus === "acked" && (
-                            <span style={styles.ackOk} title="Delivered">✓</span>
+                            <span style={styles.ackOk} title="Delivered">
+                              ✓
+                            </span>
                           )}
                           {outgoing && m.ackStatus === "error" && (
-                            <span style={styles.ackErr} title={m.ackError ?? "Delivery failed"}>✗</span>
+                            <span style={styles.ackErr} title={m.ackError ?? "Delivery failed"}>
+                              ✗
+                            </span>
                           )}
                         </div>
                       </div>
@@ -298,7 +391,9 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
                   title="Channel"
                 >
                   {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-                    <option key={i} value={i}>Ch {i}</option>
+                    <option key={i} value={i}>
+                      Ch {i}
+                    </option>
                   ))}
                 </select>
                 <input
@@ -306,7 +401,12 @@ export function NodeDetailPanel({ nodeId, mesh, mqtt, devices, onClose, onMessag
                   placeholder="Send a message…"
                   value={msgText}
                   onChange={(e) => setMsgText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
                   maxLength={228}
                 />
                 <button
@@ -329,7 +429,12 @@ function Detail({ label, value, mono }: { label: string; value: string; mono?: b
   return (
     <>
       <span style={styles.detailLabel}>{label}</span>
-      <span style={{ ...styles.detailValue, ...(mono ? { fontFamily: "monospace", color: "#94a3b8" } : {}) }}>
+      <span
+        style={{
+          ...styles.detailValue,
+          ...(mono ? { fontFamily: "monospace", color: "#94a3b8" } : {}),
+        }}
+      >
         {value}
       </span>
     </>

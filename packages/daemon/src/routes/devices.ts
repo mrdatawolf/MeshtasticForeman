@@ -1,12 +1,15 @@
-import type { FastifyInstance } from "fastify";
-import { z } from "zod";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { z } from "zod";
+
+import { getHwModels } from "../hw-models.js";
+
 import type { DeviceManager } from "../device/device-manager.js";
 import type { MqttGateway } from "../mqtt/gateway.js";
 import type { PGlite } from "@electric-sql/pglite";
-import { getHwModels } from "../hw-models.js";
+import type { FastifyInstance } from "fastify";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // region-presets.json lives at the project root — 3 levels up from src/ or dist/
@@ -19,10 +22,10 @@ const connectBodySchema = z.object({
 
 const nodeOverrideBodySchema = z.object({
   aliasName: z.string().max(64).nullable().optional(),
-  latitude:  z.number().min(-90).max(90).nullable().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
-  altitude:  z.number().int().nullable().optional(),
-  notes:     z.string().max(512).nullable().optional(),
+  altitude: z.number().int().nullable().optional(),
+  notes: z.string().max(512).nullable().optional(),
 });
 
 export async function registerDeviceRoutes(
@@ -57,7 +60,7 @@ export async function registerDeviceRoutes(
     return device;
   });
 
-  app.get("/api/devices/:id/nodes", async (req, reply) => {
+  app.get("/api/devices/:id/nodes", async (req, _reply) => {
     const { id } = req.params as { id: string };
     const nodes = await deviceManager.listNodes(id);
     return nodes;
@@ -98,14 +101,22 @@ export async function registerDeviceRoutes(
   app.get("/api/node-overrides", async () => {
     if (!db) return [];
     const { rows } = await db.query<{
-      node_id: number; alias_name: string | null;
-      latitude: number | null; longitude: number | null;
-      altitude: number | null; notes: string | null;
-    }>("SELECT node_id, alias_name, latitude, longitude, altitude, notes FROM node_overrides ORDER BY node_id");
+      node_id: number;
+      alias_name: string | null;
+      latitude: number | null;
+      longitude: number | null;
+      altitude: number | null;
+      notes: string | null;
+    }>(
+      "SELECT node_id, alias_name, latitude, longitude, altitude, notes FROM node_overrides ORDER BY node_id",
+    );
     return rows.map((r) => ({
-      nodeId: r.node_id, aliasName: r.alias_name,
-      latitude: r.latitude, longitude: r.longitude,
-      altitude: r.altitude, notes: r.notes,
+      nodeId: r.node_id,
+      aliasName: r.alias_name,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      altitude: r.altitude,
+      notes: r.notes,
     }));
   });
 
@@ -117,7 +128,13 @@ export async function registerDeviceRoutes(
     }
     const result = nodeOverrideBodySchema.safeParse(req.body);
     if (!result.success) return reply.status(400).send({ error: result.error.flatten() });
-    const { aliasName = null, latitude = null, longitude = null, altitude = null, notes = null } = result.data;
+    const {
+      aliasName = null,
+      latitude = null,
+      longitude = null,
+      altitude = null,
+      notes = null,
+    } = result.data;
     await db.query(
       `INSERT INTO node_overrides(node_id, alias_name, latitude, longitude, altitude, notes)
        VALUES ($1,$2,$3,$4,$5,$6)
@@ -127,7 +144,7 @@ export async function registerDeviceRoutes(
          longitude  = EXCLUDED.longitude,
          altitude   = EXCLUDED.altitude,
          notes      = EXCLUDED.notes`,
-      [nodeId, aliasName, latitude, longitude, altitude, notes]
+      [nodeId, aliasName, latitude, longitude, altitude, notes],
     );
     return { nodeId, aliasName, latitude, longitude, altitude, notes };
   });
@@ -172,14 +189,19 @@ export async function registerDeviceRoutes(
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const { rows } = await db.query<{
-      id: string; device_id: string; from_node_id: number; to_node_id: number;
-      route: number[]; route_back: number[]; recorded_at: string;
+      id: string;
+      device_id: string;
+      from_node_id: number;
+      to_node_id: number;
+      route: number[];
+      route_back: number[];
+      recorded_at: string;
     }>(
       `SELECT id, device_id, from_node_id, to_node_id, route, route_back, recorded_at
        FROM traceroutes ${where}
        ORDER BY recorded_at DESC
        LIMIT 500`,
-      params
+      params,
     );
     return rows.map((r) => ({
       id: r.id,

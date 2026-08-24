@@ -1,7 +1,10 @@
 import { useState, useEffect, Fragment } from "react";
-import type { DeviceInfo, NodeInfo, MqttNode } from "@foreman/shared";
+
 import logo from "../assets/logo.png";
+
 import { NodeDetailPanel } from "./NodeDetailPanel.js";
+
+import type { DeviceInfo, NodeInfo, MqttNode } from "@foreman/shared";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,106 +38,106 @@ function formatHops(hopsAway: number | null): string {
 // Complete HardwareModel enum extracted from @meshtastic/core protobufs.
 // Keys are the numeric protobuf values; values are the canonical enum names.
 const HW_MODEL: Record<number, string> = {
-  0:   "UNSET",
-  1:   "TLORA_V2",
-  2:   "TLORA_V1",
-  3:   "TLORA_V2_1_1P6",
-  4:   "TBEAM",
-  5:   "HELTEC_V2_0",
-  6:   "TBEAM_V0P7",
-  7:   "T_ECHO",
-  8:   "TLORA_V1_1P3",
-  9:   "RAK4631",
-  10:  "HELTEC_V2_1",
-  11:  "HELTEC_V1",
-  12:  "LILYGO_TBEAM_S3_CORE",
-  13:  "RAK11200",
-  14:  "NANO_G1",
-  15:  "TLORA_V2_1_1P8",
-  16:  "TLORA_T3_S3",
-  17:  "NANO_G1_EXPLORER",
-  18:  "NANO_G2_ULTRA",
-  19:  "LORA_TYPE",
-  20:  "WIPHONE",
-  21:  "WIO_WM1110",
-  22:  "RAK2560",
-  23:  "HELTEC_HRU_3601",
-  24:  "HELTEC_WIRELESS_BRIDGE",
-  25:  "STATION_G1",
-  26:  "RAK11310",
-  27:  "SENSELORA_RP2040",
-  28:  "SENSELORA_S3",
-  29:  "CANARYONE",
-  30:  "RP2040_LORA",
-  31:  "STATION_G2",
-  32:  "LORA_RELAY_V1",
-  33:  "NRF52840DK",
-  34:  "PPR",
-  35:  "GENIEBLOCKS",
-  36:  "NRF52_UNKNOWN",
-  37:  "PORTDUINO",
-  38:  "ANDROID_SIM",
-  39:  "DIY_V1",
-  40:  "NRF52840_PCA10059",
-  41:  "DR_DEV",
-  42:  "M5STACK",
-  43:  "HELTEC_V3",
-  44:  "HELTEC_WSL_V3",
-  45:  "BETAFPV_2400_TX",
-  46:  "BETAFPV_900_NANO_TX",
-  47:  "RPI_PICO",
-  48:  "HELTEC_WIRELESS_TRACKER",
-  49:  "HELTEC_WIRELESS_PAPER",
-  50:  "T_DECK",
-  51:  "T_WATCH_S3",
-  52:  "PICOMPUTER_S3",
-  53:  "HELTEC_HT62",
-  54:  "EBYTE_ESP32_S3",
-  55:  "ESP32_S3_PICO",
-  56:  "CHATTER_2",
-  57:  "HELTEC_WIRELESS_PAPER_V1_0",
-  58:  "HELTEC_WIRELESS_TRACKER_V1_0",
-  59:  "UNPHONE",
-  60:  "TD_LORAC",
-  61:  "CDEBYTE_EORA_S3",
-  62:  "TWC_MESH_V4",
-  63:  "NRF52_PROMICRO_DIY",
-  64:  "RADIOMASTER_900_BANDIT_NANO",
-  65:  "HELTEC_CAPSULE_SENSOR_V3",
-  66:  "HELTEC_VISION_MASTER_T190",
-  67:  "HELTEC_VISION_MASTER_E213",
-  68:  "HELTEC_VISION_MASTER_E290",
-  69:  "HELTEC_MESH_NODE_T114",
-  70:  "SENSECAP_INDICATOR",
-  71:  "TRACKER_T1000_E",
-  72:  "RAK3172",
-  73:  "WIO_E5",
-  74:  "RADIOMASTER_900_BANDIT",
-  75:  "ME25LS01_4Y10TD",
-  76:  "RP2040_FEATHER_RFM95",
-  77:  "M5STACK_COREBASIC",
-  78:  "M5STACK_CORE2",
-  79:  "RPI_PICO2",
-  80:  "M5STACK_CORES3",
-  81:  "SEEED_XIAO_S3",
-  82:  "MS24SF1",
-  83:  "TLORA_C6",
-  84:  "WISMESH_TAP",
-  85:  "ROUTASTIC",
-  86:  "MESH_TAB",
-  87:  "MESHLINK",
-  88:  "XIAO_NRF52_KIT",
-  89:  "THINKNODE_M1",
-  90:  "THINKNODE_M2",
-  91:  "T_ETH_ELITE",
-  92:  "HELTEC_SENSOR_HUB",
-  93:  "RESERVED_FRIED_CHICKEN",
-  94:  "HELTEC_MESH_POCKET",
-  95:  "SEEED_SOLAR_NODE",
-  96:  "NOMADSTAR_METEOR_PRO",
-  97:  "CROWPANEL",
-  98:  "LINK_32",
-  99:  "SEEED_WIO_TRACKER_L1",
+  0: "UNSET",
+  1: "TLORA_V2",
+  2: "TLORA_V1",
+  3: "TLORA_V2_1_1P6",
+  4: "TBEAM",
+  5: "HELTEC_V2_0",
+  6: "TBEAM_V0P7",
+  7: "T_ECHO",
+  8: "TLORA_V1_1P3",
+  9: "RAK4631",
+  10: "HELTEC_V2_1",
+  11: "HELTEC_V1",
+  12: "LILYGO_TBEAM_S3_CORE",
+  13: "RAK11200",
+  14: "NANO_G1",
+  15: "TLORA_V2_1_1P8",
+  16: "TLORA_T3_S3",
+  17: "NANO_G1_EXPLORER",
+  18: "NANO_G2_ULTRA",
+  19: "LORA_TYPE",
+  20: "WIPHONE",
+  21: "WIO_WM1110",
+  22: "RAK2560",
+  23: "HELTEC_HRU_3601",
+  24: "HELTEC_WIRELESS_BRIDGE",
+  25: "STATION_G1",
+  26: "RAK11310",
+  27: "SENSELORA_RP2040",
+  28: "SENSELORA_S3",
+  29: "CANARYONE",
+  30: "RP2040_LORA",
+  31: "STATION_G2",
+  32: "LORA_RELAY_V1",
+  33: "NRF52840DK",
+  34: "PPR",
+  35: "GENIEBLOCKS",
+  36: "NRF52_UNKNOWN",
+  37: "PORTDUINO",
+  38: "ANDROID_SIM",
+  39: "DIY_V1",
+  40: "NRF52840_PCA10059",
+  41: "DR_DEV",
+  42: "M5STACK",
+  43: "HELTEC_V3",
+  44: "HELTEC_WSL_V3",
+  45: "BETAFPV_2400_TX",
+  46: "BETAFPV_900_NANO_TX",
+  47: "RPI_PICO",
+  48: "HELTEC_WIRELESS_TRACKER",
+  49: "HELTEC_WIRELESS_PAPER",
+  50: "T_DECK",
+  51: "T_WATCH_S3",
+  52: "PICOMPUTER_S3",
+  53: "HELTEC_HT62",
+  54: "EBYTE_ESP32_S3",
+  55: "ESP32_S3_PICO",
+  56: "CHATTER_2",
+  57: "HELTEC_WIRELESS_PAPER_V1_0",
+  58: "HELTEC_WIRELESS_TRACKER_V1_0",
+  59: "UNPHONE",
+  60: "TD_LORAC",
+  61: "CDEBYTE_EORA_S3",
+  62: "TWC_MESH_V4",
+  63: "NRF52_PROMICRO_DIY",
+  64: "RADIOMASTER_900_BANDIT_NANO",
+  65: "HELTEC_CAPSULE_SENSOR_V3",
+  66: "HELTEC_VISION_MASTER_T190",
+  67: "HELTEC_VISION_MASTER_E213",
+  68: "HELTEC_VISION_MASTER_E290",
+  69: "HELTEC_MESH_NODE_T114",
+  70: "SENSECAP_INDICATOR",
+  71: "TRACKER_T1000_E",
+  72: "RAK3172",
+  73: "WIO_E5",
+  74: "RADIOMASTER_900_BANDIT",
+  75: "ME25LS01_4Y10TD",
+  76: "RP2040_FEATHER_RFM95",
+  77: "M5STACK_COREBASIC",
+  78: "M5STACK_CORE2",
+  79: "RPI_PICO2",
+  80: "M5STACK_CORES3",
+  81: "SEEED_XIAO_S3",
+  82: "MS24SF1",
+  83: "TLORA_C6",
+  84: "WISMESH_TAP",
+  85: "ROUTASTIC",
+  86: "MESH_TAB",
+  87: "MESHLINK",
+  88: "XIAO_NRF52_KIT",
+  89: "THINKNODE_M1",
+  90: "THINKNODE_M2",
+  91: "T_ETH_ELITE",
+  92: "HELTEC_SENSOR_HUB",
+  93: "RESERVED_FRIED_CHICKEN",
+  94: "HELTEC_MESH_POCKET",
+  95: "SEEED_SOLAR_NODE",
+  96: "NOMADSTAR_METEOR_PRO",
+  97: "CROWPANEL",
+  98: "LINK_32",
+  99: "SEEED_WIO_TRACKER_L1",
   100: "SEEED_WIO_TRACKER_L1_EINK",
   101: "MUZI_R1_NEO",
   102: "T_DECK_PRO",
@@ -246,16 +249,16 @@ function filterNodes(list: MergedNode[], query: string): MergedNode[] {
   if (!q) return list;
   return list.filter((m) => {
     const p = m.mesh ?? m.mqtt!;
-    const longName  = (p.longName  ?? "").toLowerCase();
+    const longName = (p.longName ?? "").toLowerCase();
     const shortName = (p.shortName ?? "").toLowerCase();
-    const hexFull   = nodeHex(m.nodeId).toLowerCase(); // "!abcdef01"
-    const hexBare   = hexFull.slice(1);                // "abcdef01"
-    const dec       = String(m.nodeId);
+    const hexFull = nodeHex(m.nodeId).toLowerCase(); // "!abcdef01"
+    const hexBare = hexFull.slice(1); // "abcdef01"
+    const dec = String(m.nodeId);
     const searchHex = q.startsWith("!") ? q.slice(1) : q;
     return (
-      longName.includes(q)  ||
+      longName.includes(q) ||
       shortName.includes(q) ||
-      hexFull.includes(q)   ||
+      hexFull.includes(q) ||
       hexBare.includes(searchHex) ||
       dec.includes(q)
     );
@@ -266,9 +269,15 @@ function filterNodes(list: MergedNode[], query: string): MergedNode[] {
 // Sorting
 // ---------------------------------------------------------------------------
 
-type SortCol = "name" | "id" | "connection" | "lastHeard" | "snr" | "model" | "location" | "distance";
+type SortCol =
+  "name" | "id" | "connection" | "lastHeard" | "snr" | "model" | "location" | "distance";
 
-function sortMerged(list: MergedNode[], col: SortCol, dir: "asc" | "desc", protoMap: Map<number, string>): MergedNode[] {
+function sortMerged(
+  list: MergedNode[],
+  col: SortCol,
+  dir: "asc" | "desc",
+  protoMap: Map<number, string>,
+): MergedNode[] {
   return [...list].sort((a, b) => {
     const pa = a.mesh ?? a.mqtt!;
     const pb = b.mesh ?? b.mqtt!;
@@ -356,13 +365,19 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
     try {
       const saved = localStorage.getItem("nodes-sections-collapsed");
       return saved ? JSON.parse(saved) : {};
-    } catch { return {}; }
+    } catch {
+      return {};
+    }
   });
 
   function toggleSection(key: string) {
     setCollapsed((prev) => {
       const next = { ...prev, [key]: !prev[key] };
-      try { localStorage.setItem("nodes-sections-collapsed", JSON.stringify(next)); } catch { /* ignore */ }
+      try {
+        localStorage.setItem("nodes-sections-collapsed", JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
       return next;
     });
   }
@@ -372,22 +387,23 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortCol(col);
-      setSortDir(col === "name" || col === "model" || col === "id" || col === "distance" ? "asc" : "desc");
+      setSortDir(
+        col === "name" || col === "model" || col === "id" || col === "distance" ? "asc" : "desc",
+      );
     }
   }
 
   // Build, filter, sort, then section
   const allMerged = buildMergedNodes(nodes, mqttNodes);
-  const filtered  = filterNodes(allMerged, filter);
+  const filtered = filterNodes(allMerged, filter);
 
   const apply = (list: MergedNode[]) => sortMerged(list, sortCol, sortDir, protoMap);
 
-  const isUnknown = (n: MergedNode) =>
-    (n.mesh ?? n.mqtt)?.longName?.toLowerCase() === "unknown";
+  const isUnknown = (n: MergedNode) => (n.mesh ?? n.mqtt)?.longName?.toLowerCase() === "unknown";
 
-  const matched      = apply(filtered.filter((n) => n.mesh && n.mqtt && !isUnknown(n)));
-  const meshOnly     = apply(filtered.filter((n) => n.mesh && !n.mqtt && !isUnknown(n)));
-  const mqttOnly     = apply(filtered.filter((n) => !n.mesh && n.mqtt && !isUnknown(n)));
+  const matched = apply(filtered.filter((n) => n.mesh && n.mqtt && !isUnknown(n)));
+  const meshOnly = apply(filtered.filter((n) => n.mesh && !n.mqtt && !isUnknown(n)));
+  const mqttOnly = apply(filtered.filter((n) => !n.mesh && n.mqtt && !isUnknown(n)));
   const unknownNodes = apply(filtered.filter(isUnknown));
 
   const totalUnique = nodes.length + allMerged.filter((n) => !n.mesh && n.mqtt).length;
@@ -397,13 +413,13 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
   const sharedHeaderProps = { sortCol, sortDir, onSort: handleSort };
 
   const nodeRowProps = {
-    selectedNodeId, protoMap,
-    onRowClick: (id: number) => setSelectedNodeId((prev) => prev === id ? null : id),
+    selectedNodeId,
+    protoMap,
+    onRowClick: (id: number) => setSelectedNodeId((prev) => (prev === id ? null : id)),
   };
 
-  const selectedMerged = selectedNodeId != null
-    ? allMerged.find((m) => m.nodeId === selectedNodeId) ?? null
-    : null;
+  const selectedMerged =
+    selectedNodeId != null ? (allMerged.find((m) => m.nodeId === selectedNodeId) ?? null) : null;
 
   return (
     <div style={styles.page}>
@@ -427,7 +443,15 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
               {filter ? `${filtered.length} / ${totalUnique}` : totalUnique}
             </span>
             {matched.length > 0 && !filter && (
-              <span style={{ ...styles.badge, background: "#1e3a5f", color: "#60a5fa", marginLeft: "0.4rem", fontSize: "0.65rem" }}>
+              <span
+                style={{
+                  ...styles.badge,
+                  background: "#1e3a5f",
+                  color: "#60a5fa",
+                  marginLeft: "0.4rem",
+                  fontSize: "0.65rem",
+                }}
+              >
                 {matched.length} matched
               </span>
             )}
@@ -441,7 +465,9 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
               onChange={(e) => setFilter(e.target.value)}
             />
             {filter && (
-              <button style={styles.clearBtn} onClick={() => setFilter("")} title="Clear search">✕</button>
+              <button style={styles.clearBtn} onClick={() => setFilter("")} title="Clear search">
+                ✕
+              </button>
             )}
           </div>
         </div>
@@ -460,43 +486,73 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
             <table style={styles.table}>
               <thead>
                 <tr>
-                  <SortableHeader col="name"       label="Node"        {...sharedHeaderProps} />
-                  <SortableHeader col="id"         label="ID"          {...sharedHeaderProps} />
-                  <SortableHeader col="connection" label="Connection"  {...sharedHeaderProps} />
-                  <SortableHeader col="lastHeard"  label="Last Heard"  {...sharedHeaderProps} />
-                  <SortableHeader col="snr"        label="SNR"         {...sharedHeaderProps} />
-                  <SortableHeader col="model"      label="Model"       {...sharedHeaderProps} />
-                  <SortableHeader col="distance"   label="Distance"    {...sharedHeaderProps} />
-                  <SortableHeader col="location"   label="Location"    {...sharedHeaderProps} />
+                  <SortableHeader col="name" label="Node" {...sharedHeaderProps} />
+                  <SortableHeader col="id" label="ID" {...sharedHeaderProps} />
+                  <SortableHeader col="connection" label="Connection" {...sharedHeaderProps} />
+                  <SortableHeader col="lastHeard" label="Last Heard" {...sharedHeaderProps} />
+                  <SortableHeader col="snr" label="SNR" {...sharedHeaderProps} />
+                  <SortableHeader col="model" label="Model" {...sharedHeaderProps} />
+                  <SortableHeader col="distance" label="Distance" {...sharedHeaderProps} />
+                  <SortableHeader col="location" label="Location" {...sharedHeaderProps} />
                 </tr>
               </thead>
               <tbody>
                 {matched.length > 0 && (
                   <>
-                    <SectionHeader label="Mesh + MQTT" count={matched.length} colCount={8} color="#60a5fa"
-                      collapsed={!!collapsed["both"]} onToggle={() => toggleSection("both")} />
-                    {!collapsed["both"] && matched.map((m) => <NodeRows key={m.nodeId} merged={m} {...nodeRowProps} />)}
+                    <SectionHeader
+                      label="Mesh + MQTT"
+                      count={matched.length}
+                      colCount={8}
+                      color="#60a5fa"
+                      collapsed={!!collapsed["both"]}
+                      onToggle={() => toggleSection("both")}
+                    />
+                    {!collapsed["both"] &&
+                      matched.map((m) => <NodeRows key={m.nodeId} merged={m} {...nodeRowProps} />)}
                   </>
                 )}
                 {meshOnly.length > 0 && (
                   <>
-                    <SectionHeader label="Mesh only" count={meshOnly.length} colCount={8} color="#94a3b8"
-                      collapsed={!!collapsed["mesh"]} onToggle={() => toggleSection("mesh")} />
-                    {!collapsed["mesh"] && meshOnly.map((m) => <NodeRows key={m.nodeId} merged={m} {...nodeRowProps} />)}
+                    <SectionHeader
+                      label="Mesh only"
+                      count={meshOnly.length}
+                      colCount={8}
+                      color="#94a3b8"
+                      collapsed={!!collapsed["mesh"]}
+                      onToggle={() => toggleSection("mesh")}
+                    />
+                    {!collapsed["mesh"] &&
+                      meshOnly.map((m) => <NodeRows key={m.nodeId} merged={m} {...nodeRowProps} />)}
                   </>
                 )}
                 {mqttOnly.length > 0 && (
                   <>
-                    <SectionHeader label="MQTT only" count={mqttOnly.length} colCount={8} color="#34d399"
-                      collapsed={!!collapsed["mqtt"]} onToggle={() => toggleSection("mqtt")} />
-                    {!collapsed["mqtt"] && mqttOnly.map((m) => <NodeRows key={m.nodeId} merged={m} {...nodeRowProps} />)}
+                    <SectionHeader
+                      label="MQTT only"
+                      count={mqttOnly.length}
+                      colCount={8}
+                      color="#34d399"
+                      collapsed={!!collapsed["mqtt"]}
+                      onToggle={() => toggleSection("mqtt")}
+                    />
+                    {!collapsed["mqtt"] &&
+                      mqttOnly.map((m) => <NodeRows key={m.nodeId} merged={m} {...nodeRowProps} />)}
                   </>
                 )}
                 {unknownNodes.length > 0 && (
                   <>
-                    <SectionHeader label="Unknown" count={unknownNodes.length} colCount={8} color="#6b7280"
-                      collapsed={!!collapsed["unknown"]} onToggle={() => toggleSection("unknown")} />
-                    {!collapsed["unknown"] && unknownNodes.map((m) => <NodeRows key={m.nodeId} merged={m} {...nodeRowProps} />)}
+                    <SectionHeader
+                      label="Unknown"
+                      count={unknownNodes.length}
+                      colCount={8}
+                      color="#6b7280"
+                      collapsed={!!collapsed["unknown"]}
+                      onToggle={() => toggleSection("unknown")}
+                    />
+                    {!collapsed["unknown"] &&
+                      unknownNodes.map((m) => (
+                        <NodeRows key={m.nodeId} merged={m} {...nodeRowProps} />
+                      ))}
                   </>
                 )}
               </tbody>
@@ -512,14 +568,28 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
 // Sortable column header
 // ---------------------------------------------------------------------------
 
-function SortableHeader({ col, label, sortCol, sortDir, onSort }: {
-  col: SortCol; label: string; sortCol: SortCol; sortDir: "asc" | "desc";
+function SortableHeader({
+  col,
+  label,
+  sortCol,
+  sortDir,
+  onSort,
+}: {
+  col: SortCol;
+  label: string;
+  sortCol: SortCol;
+  sortDir: "asc" | "desc";
   onSort: (col: SortCol) => void;
 }) {
   const active = sortCol === col;
   return (
     <th
-      style={{ ...styles.th, cursor: "pointer", userSelect: "none", color: active ? "#e2e8f0" : "#94a3b8" }}
+      style={{
+        ...styles.th,
+        cursor: "pointer",
+        userSelect: "none",
+        color: active ? "#e2e8f0" : "#94a3b8",
+      }}
       onClick={() => onSort(col)}
     >
       {label}
@@ -534,15 +604,23 @@ function SortableHeader({ col, label, sortCol, sortDir, onSort }: {
 // Accordion section header row
 // ---------------------------------------------------------------------------
 
-function SectionHeader({ label, count, colCount, color, collapsed, onToggle }: {
-  label: string; count: number; colCount: number; color: string;
-  collapsed: boolean; onToggle: () => void;
+function SectionHeader({
+  label,
+  count,
+  colCount,
+  color,
+  collapsed,
+  onToggle,
+}: {
+  label: string;
+  count: number;
+  colCount: number;
+  color: string;
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <tr
-      style={{ background: "#0f172a", cursor: "pointer", userSelect: "none" }}
-      onClick={onToggle}
-    >
+    <tr style={{ background: "#0f172a", cursor: "pointer", userSelect: "none" }} onClick={onToggle}>
       <td
         colSpan={colCount}
         style={{
@@ -560,17 +638,19 @@ function SectionHeader({ label, count, colCount, color, collapsed, onToggle }: {
           {collapsed ? "▶" : "▼"}
         </span>
         {label}
-        <span style={{
-          marginLeft: "0.5rem",
-          background: "#1e293b",
-          borderRadius: "9999px",
-          padding: "0.1rem 0.4rem",
-          fontSize: "0.65rem",
-          color: "#64748b",
-          fontWeight: "normal",
-          letterSpacing: 0,
-          textTransform: "none",
-        }}>
+        <span
+          style={{
+            marginLeft: "0.5rem",
+            background: "#1e293b",
+            borderRadius: "9999px",
+            padding: "0.1rem 0.4rem",
+            fontSize: "0.65rem",
+            color: "#64748b",
+            fontWeight: "normal",
+            letterSpacing: 0,
+            textTransform: "none",
+          }}
+        >
           {count}
         </span>
       </td>
@@ -631,12 +711,34 @@ function NodeRows({ merged, selectedNodeId, protoMap, onRowClick }: NodeRowsProp
 
       {mesh && mqtt && (
         <tr style={{ background: "#080f1a", borderBottom: "1px solid #1e293b" }}>
-          <td colSpan={8} style={{ ...styles.td, paddingLeft: "2.25rem", paddingTop: "0.25rem", paddingBottom: "0.3rem", fontSize: "0.75rem", color: "#64748b" }}>
-            <span style={{ color: "#34d399", fontWeight: "bold", marginRight: "0.5rem" }}>↳ MQTT</span>
-            {mqtt.lastGateway && <>via <span style={{ fontFamily: "monospace", color: "#94a3b8" }}>{mqtt.lastGateway}</span>{" · "}</>}
+          <td
+            colSpan={8}
+            style={{
+              ...styles.td,
+              paddingLeft: "2.25rem",
+              paddingTop: "0.25rem",
+              paddingBottom: "0.3rem",
+              fontSize: "0.75rem",
+              color: "#64748b",
+            }}
+          >
+            <span style={{ color: "#34d399", fontWeight: "bold", marginRight: "0.5rem" }}>
+              ↳ MQTT
+            </span>
+            {mqtt.lastGateway && (
+              <>
+                via{" "}
+                <span style={{ fontFamily: "monospace", color: "#94a3b8" }}>
+                  {mqtt.lastGateway}
+                </span>
+                {" · "}
+              </>
+            )}
             {formatLastHeard(mqtt.lastHeard)}
             {mqtt.snr != null && mqtt.snr !== 0 && ` · SNR ${mqtt.snr.toFixed(1)} dB`}
-            {mqtt.regionPath && <span style={{ marginLeft: "0.5rem", color: "#475569" }}>{mqtt.regionPath}</span>}
+            {mqtt.regionPath && (
+              <span style={{ marginLeft: "0.5rem", color: "#475569" }}>{mqtt.regionPath}</span>
+            )}
             {mqtt.latitude != null && mqtt.longitude != null && mesh.latitude == null && (
               <span style={{ marginLeft: "0.5rem", fontFamily: "monospace", color: "#94a3b8" }}>
                 · GPS {mqtt.latitude.toFixed(5)}, {mqtt.longitude.toFixed(5)}

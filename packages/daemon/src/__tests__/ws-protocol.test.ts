@@ -5,8 +5,8 @@
  * payloads.  Pure unit tests — no network, no mocks.
  */
 
-import { describe, it, expect } from "vitest";
 import { clientCommandSchema } from "@foreman/shared";
+import { describe, it, expect } from "vitest";
 
 const DEVICE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 

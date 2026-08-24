@@ -11,7 +11,9 @@
     "build": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "echo 'no linter configured yet'",
+    "lint": "eslint .",
+    "format": "prettier --write package.json vitest.config.ts \"src/**/*.ts\"",
+    "format:check": "prettier --check package.json vitest.config.ts \"src/**/*.ts\"",
     "cache:export": "node --env-file=../../.env --import tsx/esm src/scripts/export-terrain-cache.ts",
     "cache:import": "node --env-file=../../.env --import tsx/esm src/scripts/import-terrain-cache.ts"
   },

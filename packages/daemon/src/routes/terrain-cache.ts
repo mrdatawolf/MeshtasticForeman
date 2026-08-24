@@ -1,5 +1,5 @@
-import type { FastifyInstance } from "fastify";
 import type { PGlite } from "@electric-sql/pglite";
+import type { FastifyInstance } from "fastify";
 
 /** Escape a value for safe inclusion in a SQL string literal. */
 function sqlStr(s: string): string {
@@ -11,7 +11,9 @@ export async function registerTerrainCacheRoutes(app: FastifyInstance, db: PGlit
   app.addContentTypeParser(
     "text/plain",
     { parseAs: "string", bodyLimit: 100 * 1024 * 1024 },
-    (_req, body, done) => { done(null, body); },
+    (_req, body, done) => {
+      done(null, body);
+    },
   );
 
   /**
@@ -22,8 +24,13 @@ export async function registerTerrainCacheRoutes(app: FastifyInstance, db: PGlit
    */
   app.get("/api/elevation-cache/export", async (_req, reply) => {
     const { rows } = await db.query<{
-      lat_key: string; lon_key: string; elevation: number; cached_at: string;
-    }>("SELECT lat_key, lon_key, elevation, cached_at FROM elevation_cache ORDER BY lat_key, lon_key");
+      lat_key: string;
+      lon_key: string;
+      elevation: number;
+      cached_at: string;
+    }>(
+      "SELECT lat_key, lon_key, elevation, cached_at FROM elevation_cache ORDER BY lat_key, lon_key",
+    );
 
     const exportedAt = new Date().toISOString();
     const ts = exportedAt.replace(/[:.]/g, "-").slice(0, 19);
@@ -41,7 +48,10 @@ export async function registerTerrainCacheRoutes(app: FastifyInstance, db: PGlit
     for (let i = 0; i < rows.length; i += BATCH) {
       const chunk = rows.slice(i, i + BATCH);
       const values = chunk
-        .map((r) => `  (${sqlStr(r.lat_key)}, ${sqlStr(r.lon_key)}, ${r.elevation}, ${sqlStr(String(r.cached_at))})`)
+        .map(
+          (r) =>
+            `  (${sqlStr(r.lat_key)}, ${sqlStr(r.lon_key)}, ${r.elevation}, ${sqlStr(String(r.cached_at))})`,
+        )
         .join(",\n");
       lines.push(
         `INSERT INTO elevation_cache (lat_key, lon_key, elevation, cached_at)\nVALUES\n${values}\nON CONFLICT (lat_key, lon_key) DO UPDATE\n  SET elevation = EXCLUDED.elevation, cached_at = EXCLUDED.cached_at;\n`,

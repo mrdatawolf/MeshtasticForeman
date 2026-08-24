@@ -1,4 +1,5 @@
 import { useState } from "react";
+
 import type { NodeOverride } from "@foreman/shared";
 
 // Parse "!21058787" or "554010503" into a node number
@@ -50,10 +51,10 @@ export function NodeOverridesPage({ overrides, noLocationNodes, onChanged }: Pro
     setForm({
       rawId: nodeHex(o.nodeId),
       aliasName: o.aliasName ?? "",
-      latitude:  o.latitude  != null ? String(o.latitude)  : "",
+      latitude: o.latitude != null ? String(o.latitude) : "",
       longitude: o.longitude != null ? String(o.longitude) : "",
-      altitude:  o.altitude  != null ? String(o.altitude)  : "",
-      notes:     o.notes     ?? "",
+      altitude: o.altitude != null ? String(o.altitude) : "",
+      notes: o.notes ?? "",
     });
     setError(null);
   }
@@ -66,14 +67,23 @@ export function NodeOverridesPage({ overrides, noLocationNodes, onChanged }: Pro
 
   async function save() {
     const nodeId = editing ?? parseNodeId(form.rawId);
-    if (!nodeId) { setError("Invalid node ID — use !hex (e.g. !21058787) or a decimal number"); return; }
+    if (!nodeId) {
+      setError("Invalid node ID — use !hex (e.g. !21058787) or a decimal number");
+      return;
+    }
 
-    const lat = form.latitude  !== "" ? parseFloat(form.latitude)  : null;
+    const lat = form.latitude !== "" ? parseFloat(form.latitude) : null;
     const lon = form.longitude !== "" ? parseFloat(form.longitude) : null;
-    const alt = form.altitude  !== "" ? parseInt(form.altitude, 10) : null;
+    const alt = form.altitude !== "" ? parseInt(form.altitude, 10) : null;
 
-    if (lat !== null && (isNaN(lat) || lat < -90  || lat > 90))  { setError("Latitude must be between -90 and 90");   return; }
-    if (lon !== null && (isNaN(lon) || lon < -180 || lon > 180)) { setError("Longitude must be between -180 and 180"); return; }
+    if (lat !== null && (isNaN(lat) || lat < -90 || lat > 90)) {
+      setError("Latitude must be between -90 and 90");
+      return;
+    }
+    if (lon !== null && (isNaN(lon) || lon < -180 || lon > 180)) {
+      setError("Longitude must be between -180 and 180");
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -83,10 +93,10 @@ export function NodeOverridesPage({ overrides, noLocationNodes, onChanged }: Pro
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           aliasName: form.aliasName || null,
-          latitude:  lat,
+          latitude: lat,
           longitude: lon,
-          altitude:  alt,
-          notes:     form.notes || null,
+          altitude: alt,
+          notes: form.notes || null,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -121,9 +131,7 @@ export function NodeOverridesPage({ overrides, noLocationNodes, onChanged }: Pro
             Nodes without location
             <span style={s.candidateCount}>{noLocationNodes.length}</span>
           </div>
-          <div style={s.candidateHint}>
-            Click a row to pre-fill the form below.
-          </div>
+          <div style={s.candidateHint}>Click a row to pre-fill the form below.</div>
           <div style={s.candidateList}>
             {noLocationNodes.map((n) => (
               <button
@@ -132,12 +140,12 @@ export function NodeOverridesPage({ overrides, noLocationNodes, onChanged }: Pro
                 onClick={() => {
                   setEditing(null);
                   setForm({
-                    rawId:     nodeHex(n.nodeId),
+                    rawId: nodeHex(n.nodeId),
                     aliasName: n.longName ?? n.shortName ?? "",
-                    latitude:  "",
+                    latitude: "",
                     longitude: "",
-                    altitude:  "",
-                    notes:     "",
+                    altitude: "",
+                    notes: "",
                   });
                   setError(null);
                 }}
@@ -219,7 +227,9 @@ export function NodeOverridesPage({ overrides, noLocationNodes, onChanged }: Pro
             {saving ? "Saving…" : isAddingNew ? "Add" : "Save"}
           </button>
           {!isAddingNew && (
-            <button style={s.btnSecondary} onClick={cancelEdit}>Cancel</button>
+            <button style={s.btnSecondary} onClick={cancelEdit}>
+              Cancel
+            </button>
           )}
         </div>
       </div>
@@ -245,13 +255,23 @@ export function NodeOverridesPage({ overrides, noLocationNodes, onChanged }: Pro
               <tr key={o.nodeId} style={s.tr}>
                 <td style={{ ...s.td, ...s.mono }}>{nodeHex(o.nodeId)}</td>
                 <td style={s.td}>{o.aliasName ?? <span style={s.muted}>—</span>}</td>
-                <td style={{ ...s.td, ...s.mono }}>{o.latitude  ?? <span style={s.muted}>—</span>}</td>
-                <td style={{ ...s.td, ...s.mono }}>{o.longitude ?? <span style={s.muted}>—</span>}</td>
-                <td style={{ ...s.td, ...s.mono }}>{o.altitude  ?? <span style={s.muted}>—</span>}</td>
+                <td style={{ ...s.td, ...s.mono }}>
+                  {o.latitude ?? <span style={s.muted}>—</span>}
+                </td>
+                <td style={{ ...s.td, ...s.mono }}>
+                  {o.longitude ?? <span style={s.muted}>—</span>}
+                </td>
+                <td style={{ ...s.td, ...s.mono }}>
+                  {o.altitude ?? <span style={s.muted}>—</span>}
+                </td>
                 <td style={s.td}>{o.notes ?? <span style={s.muted}>—</span>}</td>
                 <td style={s.td}>
-                  <button style={s.btnEdit} onClick={() => startEdit(o)}>edit</button>
-                  <button style={s.btnDelete} onClick={() => remove(o.nodeId)}>del</button>
+                  <button style={s.btnEdit} onClick={() => startEdit(o)}>
+                    edit
+                  </button>
+                  <button style={s.btnDelete} onClick={() => remove(o.nodeId)}>
+                    del
+                  </button>
                 </td>
               </tr>
             ))}
@@ -263,56 +283,121 @@ export function NodeOverridesPage({ overrides, noLocationNodes, onChanged }: Pro
 }
 
 const s: Record<string, React.CSSProperties> = {
-  page:  { padding: "1.5rem 2rem", overflowY: "auto", maxWidth: "90%" },
+  page: { padding: "1.5rem 2rem", overflowY: "auto", maxWidth: "90%" },
   intro: { fontSize: "0.85rem", color: "#94a3b8", marginBottom: "1.5rem", lineHeight: 1.6 },
-  card:  { background: "#1e293b", borderRadius: "0.5rem", padding: "1.25rem", marginBottom: "1.5rem" },
+  card: {
+    background: "#1e293b",
+    borderRadius: "0.5rem",
+    padding: "1.25rem",
+    marginBottom: "1.5rem",
+  },
   cardTitle: { fontWeight: "bold", marginBottom: "1rem", color: "#f1f5f9" },
   errorBox: {
-    background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: "0.375rem",
-    padding: "0.5rem 0.75rem", marginBottom: "0.75rem", color: "#fca5a5", fontSize: "0.8rem",
+    background: "#450a0a",
+    border: "1px solid #7f1d1d",
+    borderRadius: "0.375rem",
+    padding: "0.5rem 0.75rem",
+    marginBottom: "0.75rem",
+    color: "#fca5a5",
+    fontSize: "0.8rem",
   },
-  grid: { display: "grid", gridTemplateColumns: "140px 1fr", gap: "0.5rem 1rem", alignItems: "center", marginBottom: "1rem" },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "140px 1fr",
+    gap: "0.5rem 1rem",
+    alignItems: "center",
+    marginBottom: "1rem",
+  },
   label: { color: "#94a3b8", fontSize: "0.8rem", textAlign: "right" as const },
   input: {
-    background: "#0f172a", border: "1px solid #334155", borderRadius: "0.375rem",
-    color: "#e2e8f0", padding: "0.35rem 0.6rem", fontFamily: "monospace", fontSize: "0.85rem",
-    width: "100%", boxSizing: "border-box" as const,
+    background: "#0f172a",
+    border: "1px solid #334155",
+    borderRadius: "0.375rem",
+    color: "#e2e8f0",
+    padding: "0.35rem 0.6rem",
+    fontFamily: "monospace",
+    fontSize: "0.85rem",
+    width: "100%",
+    boxSizing: "border-box" as const,
   },
   inputDisabled: { opacity: 0.5 },
   btnRow: { display: "flex", gap: "0.5rem" },
   btnPrimary: {
-    background: "#3b82f6", color: "#fff", border: "none", borderRadius: "0.375rem",
-    padding: "0.35rem 1rem", cursor: "pointer", fontFamily: "monospace", fontSize: "0.85rem",
+    background: "#3b82f6",
+    color: "#fff",
+    border: "none",
+    borderRadius: "0.375rem",
+    padding: "0.35rem 1rem",
+    cursor: "pointer",
+    fontFamily: "monospace",
+    fontSize: "0.85rem",
   },
   btnSecondary: {
-    background: "transparent", color: "#94a3b8", border: "1px solid #334155",
-    borderRadius: "0.375rem", padding: "0.35rem 1rem", cursor: "pointer",
-    fontFamily: "monospace", fontSize: "0.85rem",
+    background: "transparent",
+    color: "#94a3b8",
+    border: "1px solid #334155",
+    borderRadius: "0.375rem",
+    padding: "0.35rem 1rem",
+    cursor: "pointer",
+    fontFamily: "monospace",
+    fontSize: "0.85rem",
   },
   empty: { color: "#64748b", fontSize: "0.85rem" },
   table: { width: "100%", borderCollapse: "collapse", fontSize: "0.825rem" },
   th: {
-    textAlign: "left", padding: "0.4rem 0.75rem", background: "#1e293b",
-    color: "#94a3b8", fontWeight: "normal", borderBottom: "1px solid #334155",
+    textAlign: "left",
+    padding: "0.4rem 0.75rem",
+    background: "#1e293b",
+    color: "#94a3b8",
+    fontWeight: "normal",
+    borderBottom: "1px solid #334155",
   },
   tr: { borderBottom: "1px solid #1e293b" },
   td: { padding: "0.4rem 0.75rem", verticalAlign: "middle" },
   mono: { fontFamily: "monospace", fontSize: "0.78rem", color: "#94a3b8" },
   muted: { color: "#475569" },
-  btnEdit:   { background: "transparent", color: "#60a5fa", border: "none", cursor: "pointer", fontFamily: "monospace", fontSize: "0.78rem", padding: "0 0.4rem" },
-  btnDelete: { background: "transparent", color: "#f87171", border: "none", cursor: "pointer", fontFamily: "monospace", fontSize: "0.78rem", padding: "0 0.4rem" },
+  btnEdit: {
+    background: "transparent",
+    color: "#60a5fa",
+    border: "none",
+    cursor: "pointer",
+    fontFamily: "monospace",
+    fontSize: "0.78rem",
+    padding: "0 0.4rem",
+  },
+  btnDelete: {
+    background: "transparent",
+    color: "#f87171",
+    border: "none",
+    cursor: "pointer",
+    fontFamily: "monospace",
+    fontSize: "0.78rem",
+    padding: "0 0.4rem",
+  },
   candidateCount: {
-    background: "#334155", borderRadius: "9999px", padding: "0.1rem 0.5rem",
-    fontSize: "0.7rem", marginLeft: "0.6rem", color: "#94a3b8", fontWeight: "normal",
+    background: "#334155",
+    borderRadius: "9999px",
+    padding: "0.1rem 0.5rem",
+    fontSize: "0.7rem",
+    marginLeft: "0.6rem",
+    color: "#94a3b8",
+    fontWeight: "normal",
   },
   candidateHint: { fontSize: "0.78rem", color: "#64748b", marginBottom: "0.6rem" },
   candidateList: { display: "flex", flexWrap: "wrap" as const, gap: "0.4rem" },
   candidateRow: {
-    display: "flex", alignItems: "center", gap: "0.5rem",
-    background: "#0f172a", border: "1px solid #334155", borderRadius: "0.375rem",
-    padding: "0.3rem 0.75rem", cursor: "pointer", textAlign: "left" as const,
-    fontFamily: "monospace", color: "#e2e8f0",
+    display: "flex",
+    alignItems: "center",
+    gap: "0.5rem",
+    background: "#0f172a",
+    border: "1px solid #334155",
+    borderRadius: "0.375rem",
+    padding: "0.3rem 0.75rem",
+    cursor: "pointer",
+    textAlign: "left" as const,
+    fontFamily: "monospace",
+    color: "#e2e8f0",
   },
-  candidateHex:  { fontSize: "0.75rem", color: "#60a5fa" },
+  candidateHex: { fontSize: "0.75rem", color: "#60a5fa" },
   candidateName: { fontSize: "0.8rem", color: "#cbd5e1" },
 };

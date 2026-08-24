@@ -5,8 +5,9 @@
  * known packet types into plain JSON-serialisable objects.
  */
 
-import { fromBinary } from "@bufbuild/protobuf";
 import { Buffer } from "node:buffer";
+
+import { fromBinary } from "@bufbuild/protobuf";
 import { Protobuf } from "@meshtastic/core";
 
 /**
@@ -20,7 +21,7 @@ export function toPlainObject(obj: unknown): unknown {
       if (typeof v === "bigint") return Number(v);
       if (v instanceof Uint8Array) return Buffer.from(v).toString("base64");
       return v;
-    })
+    }),
   );
 }
 

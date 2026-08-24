@@ -1,7 +1,8 @@
-import { Worker } from "node:worker_threads";
+import { randomUUID } from "node:crypto";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { Worker } from "node:worker_threads";
+
 import type { PGlite, Results } from "@electric-sql/pglite";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -12,23 +13,29 @@ const DATA_DIR = process.env.PGLITE_DIR ?? join(__dirname, "../../../../pglite-d
 // ---------------------------------------------------------------------------
 
 class PGliteProxy {
-  private pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
+  private pending = new Map<
+    string,
+    { resolve: (v: unknown) => void; reject: (e: unknown) => void }
+  >();
   private queue: Array<() => Promise<void>> = [];
   private draining = false;
   private dead = false;
 
   constructor(private readonly worker: Worker) {
-    worker.on("message", (msg: { id?: string; error?: { message: string; code?: string }; result?: unknown }) => {
-      if (!msg.id) return;
-      const p = this.pending.get(msg.id);
-      if (!p) return;
-      this.pending.delete(msg.id);
-      if (msg.error) {
-        p.reject(Object.assign(new Error(msg.error.message), msg.error));
-      } else {
-        p.resolve(msg.result);
-      }
-    });
+    worker.on(
+      "message",
+      (msg: { id?: string; error?: { message: string; code?: string }; result?: unknown }) => {
+        if (!msg.id) return;
+        const p = this.pending.get(msg.id);
+        if (!p) return;
+        this.pending.delete(msg.id);
+        if (msg.error) {
+          p.reject(Object.assign(new Error(msg.error.message), msg.error));
+        } else {
+          p.resolve(msg.result);
+        }
+      },
+    );
 
     worker.on("error", (err) => {
       console.error("[db] PGlite worker error:", err.message);
@@ -60,8 +67,11 @@ class PGliteProxy {
     if (this.dead) return Promise.reject(new Error("PGlite worker is not running"));
     return new Promise((resolve, reject) => {
       this.queue.push(async () => {
-        try { resolve(await fn()); }
-        catch (err) { reject(err); }
+        try {
+          resolve(await fn());
+        } catch (err) {
+          reject(err);
+        }
       });
       this._drain();
     });
@@ -77,7 +87,10 @@ class PGliteProxy {
     this.draining = false;
   }
 
-  query<T extends Record<string, unknown> = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<Results<T>> {
+  query<T extends Record<string, unknown> = Record<string, unknown>>(
+    sql: string,
+    params?: unknown[],
+  ): Promise<Results<T>> {
     return this._enqueue(() => this._send<Results<T>>("query", sql, params));
   }
 
@@ -86,13 +99,15 @@ class PGliteProxy {
   }
 
   async transaction<T>(
-    callback: (tx: { query: PGliteProxy["query"]; exec: PGliteProxy["exec"] }) => Promise<T>
+    callback: (tx: { query: PGliteProxy["query"]; exec: PGliteProxy["exec"] }) => Promise<T>,
   ): Promise<T> {
     return this._enqueue(async () => {
       await this._send("exec", "BEGIN");
       const tx = {
-        query: <R extends Record<string, unknown> = Record<string, unknown>>(s: string, p?: unknown[]) =>
-          this._send<Results<R>>("query", s, p),
+        query: <R extends Record<string, unknown> = Record<string, unknown>>(
+          s: string,
+          p?: unknown[],
+        ) => this._send<Results<R>>("query", s, p),
         exec: (s: string) => this._send<void>("exec", s),
       };
       try {
@@ -100,7 +115,11 @@ class PGliteProxy {
         await this._send("exec", "COMMIT");
         return result;
       } catch (err) {
-        try { await this._send("exec", "ROLLBACK"); } catch { /* ignore */ }
+        try {
+          await this._send("exec", "ROLLBACK");
+        } catch {
+          /* ignore */
+        }
         throw err;
       }
     });
@@ -127,14 +146,23 @@ async function createDb(): Promise<PGlite> {
   });
 
   await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("PGlite worker failed to become ready in 30s")), 30_000);
+    const timer = setTimeout(
+      () => reject(new Error("PGlite worker failed to become ready in 30s")),
+      30_000,
+    );
     worker.once("message", (msg: { type: string }) => {
       clearTimeout(timer);
       if (msg.type === "ready") resolve();
       else reject(new Error(`Unexpected init message: ${JSON.stringify(msg)}`));
     });
-    worker.once("error", (err) => { clearTimeout(timer); reject(err); });
-    worker.once("exit", (code) => { clearTimeout(timer); reject(new Error(`Worker exited during init with code ${code}`)); });
+    worker.once("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    worker.once("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`Worker exited during init with code ${code}`));
+    });
   });
 
   console.log(`[db] PGlite ready at ${DATA_DIR}`);

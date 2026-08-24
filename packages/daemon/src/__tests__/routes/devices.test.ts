@@ -5,8 +5,9 @@
  * DeviceManager is replaced with a plain vi.fn() stub.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
 import Fastify from "fastify";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
 import { registerDeviceRoutes } from "../../routes/devices.js";
 
 // ---------------------------------------------------------------------------
@@ -54,7 +55,14 @@ describe("GET /api/devices", () => {
 
   it("returns the device list from DeviceManager", async () => {
     mock.listDevices.mockResolvedValue([
-      { id: "id1", name: "Node A", port: "/dev/ttyUSB0", hw_model: null, firmware: null, last_seen: null },
+      {
+        id: "id1",
+        name: "Node A",
+        port: "/dev/ttyUSB0",
+        hw_model: null,
+        firmware: null,
+        last_seen: null,
+      },
     ]);
     const app = await buildApp(mock);
     const res = await app.inject({ method: "GET", url: "/api/devices" });
@@ -145,9 +153,7 @@ describe("DELETE /api/devices/:id", () => {
       url: "/api/devices/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     });
     expect(res.statusCode).toBe(204);
-    expect(mock.disconnect).toHaveBeenCalledWith(
-      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-    );
+    expect(mock.disconnect).toHaveBeenCalledWith("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
   });
 
   it("returns 204 even for an unknown id (graceful no-op)", async () => {

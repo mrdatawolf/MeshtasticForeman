@@ -1,6 +1,6 @@
-import type { FastifyInstance } from "fastify";
 import type { PGlite } from "@electric-sql/pglite";
 import type { CoverageProposal } from "@foreman/shared";
+import type { FastifyInstance } from "fastify";
 
 // ---------------------------------------------------------------------------
 // DB row → API response mapping
@@ -38,9 +38,9 @@ function rowToProposal(row: ProposalRow): CoverageProposal {
 
 export async function registerProposalRoutes(app: FastifyInstance, db: PGlite) {
   // GET /api/proposals — list all proposals ordered by creation time
-  app.get("/api/proposals", async (_req, reply) => {
+  app.get("/api/proposals", async (_req, _reply) => {
     const { rows } = await db.query<ProposalRow>(
-      "SELECT * FROM coverage_proposals ORDER BY created_at ASC"
+      "SELECT * FROM coverage_proposals ORDER BY created_at ASC",
     );
     return rows.map(rowToProposal);
   });
@@ -61,8 +61,7 @@ export async function registerProposalRoutes(app: FastifyInstance, db: PGlite) {
       return reply.status(400).send({ error: "invalid lat" });
     if (!isFinite(lon) || lon < -180 || lon > 180)
       return reply.status(400).send({ error: "invalid lon" });
-    if (!isFinite(altitudeM))
-      return reply.status(400).send({ error: "invalid altitudeM" });
+    if (!isFinite(altitudeM)) return reply.status(400).send({ error: "invalid altitudeM" });
     if (!isFinite(modemPreset) || modemPreset < 0 || modemPreset > 8)
       return reply.status(400).send({ error: "invalid modemPreset" });
 
@@ -70,7 +69,7 @@ export async function registerProposalRoutes(app: FastifyInstance, db: PGlite) {
       `INSERT INTO coverage_proposals (name, lat, lon, altitude_m, modem_preset, notes)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [name, lat, lon, altitudeM, modemPreset, notes]
+      [name, lat, lon, altitudeM, modemPreset, notes],
     );
 
     // Return the created proposal (Fastify sends 200; use consistent return-value pattern)
@@ -83,21 +82,17 @@ export async function registerProposalRoutes(app: FastifyInstance, db: PGlite) {
     const body = req.body as Record<string, unknown>;
 
     // Fetch existing row first
-    const existing = await db.query<ProposalRow>(
-      "SELECT * FROM coverage_proposals WHERE id = $1",
-      [id]
-    );
-    if (existing.rows.length === 0)
-      return reply.status(404).send({ error: "proposal not found" });
+    const existing = await db.query<ProposalRow>("SELECT * FROM coverage_proposals WHERE id = $1", [
+      id,
+    ]);
+    if (existing.rows.length === 0) return reply.status(404).send({ error: "proposal not found" });
 
     const current = existing.rows[0];
 
-    const name =
-      typeof body.name === "string" ? body.name.trim() || current.name : current.name;
+    const name = typeof body.name === "string" ? body.name.trim() || current.name : current.name;
     const lat = body.lat !== undefined ? Number(body.lat) : current.lat;
     const lon = body.lon !== undefined ? Number(body.lon) : current.lon;
-    const altitudeM =
-      body.altitudeM !== undefined ? Number(body.altitudeM) : current.altitude_m;
+    const altitudeM = body.altitudeM !== undefined ? Number(body.altitudeM) : current.altitude_m;
     const modemPreset =
       body.modemPreset !== undefined ? Number(body.modemPreset) : current.modem_preset;
     const notes =
@@ -106,15 +101,13 @@ export async function registerProposalRoutes(app: FastifyInstance, db: PGlite) {
           ? body.notes.trim() || null
           : null
         : current.notes;
-    const visible =
-      body.visible !== undefined ? Boolean(body.visible) : current.visible;
+    const visible = body.visible !== undefined ? Boolean(body.visible) : current.visible;
 
     if (!isFinite(lat) || lat < -90 || lat > 90)
       return reply.status(400).send({ error: "invalid lat" });
     if (!isFinite(lon) || lon < -180 || lon > 180)
       return reply.status(400).send({ error: "invalid lon" });
-    if (!isFinite(altitudeM))
-      return reply.status(400).send({ error: "invalid altitudeM" });
+    if (!isFinite(altitudeM)) return reply.status(400).send({ error: "invalid altitudeM" });
     if (!isFinite(modemPreset) || modemPreset < 0 || modemPreset > 8)
       return reply.status(400).send({ error: "invalid modemPreset" });
 
@@ -123,7 +116,7 @@ export async function registerProposalRoutes(app: FastifyInstance, db: PGlite) {
        SET name=$2, lat=$3, lon=$4, altitude_m=$5, modem_preset=$6, notes=$7, visible=$8
        WHERE id=$1
        RETURNING *`,
-      [id, name, lat, lon, altitudeM, modemPreset, notes, visible]
+      [id, name, lat, lon, altitudeM, modemPreset, notes, visible],
     );
 
     return rowToProposal(rows[0]);
@@ -135,11 +128,10 @@ export async function registerProposalRoutes(app: FastifyInstance, db: PGlite) {
 
     const { rows } = await db.query<ProposalRow>(
       "DELETE FROM coverage_proposals WHERE id = $1 RETURNING id",
-      [id]
+      [id],
     );
 
-    if (rows.length === 0)
-      return reply.status(404).send({ error: "proposal not found" });
+    if (rows.length === 0) return reply.status(404).send({ error: "proposal not found" });
 
     return reply.status(204).send();
   });
