@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 
 import regionPresetsFallback from "../../../../region-presets.json";
+import { mergeConfig } from "../lib/configMerge.js";
+import { buildWizardChanges, type ConfigChange } from "../lib/setupWizardOutput.js";
 import { foremanClient } from "../ws/client.js";
 
 import type { DeviceConfig, DeviceInfo, Channel } from "@foreman/shared";
@@ -104,76 +106,6 @@ const ROLES = [
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
-function deepMerge(
-  a: Record<string, unknown>,
-  b: Record<string, unknown>,
-): Record<string, unknown> {
-  const out = { ...a };
-  for (const [k, v] of Object.entries(b)) {
-    if (v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object") {
-      out[k] = deepMerge(out[k] as Record<string, unknown>, v as Record<string, unknown>);
-    } else {
-      out[k] = v;
-    }
-  }
-  return out;
-}
-
-interface ConfigChange {
-  namespace: "radio" | "module";
-  section: string;
-  value: Record<string, unknown>;
-}
-
-function buildWizardChanges(
-  role: number | null,
-  regionSettings: Record<string, unknown>,
-  mqtt: { enabled: boolean; address: string; user: string; pass: string },
-  neighborInfo: boolean,
-  storeForward: boolean,
-): ConfigChange[] {
-  const map = new Map<string, ConfigChange>();
-
-  function add(namespace: "radio" | "module", section: string, values: Record<string, unknown>) {
-    const key = `${namespace}.${section}`;
-    const ex = map.get(key);
-    map.set(
-      key,
-      ex
-        ? { namespace, section, value: { ...ex.value, ...values } }
-        : { namespace, section, value: values },
-    );
-  }
-
-  if (role !== null) add("radio", "device", { role });
-
-  for (const [ns, sections] of Object.entries(regionSettings)) {
-    if (!sections || typeof sections !== "object") continue;
-    for (const [section, values] of Object.entries(sections as Record<string, unknown>)) {
-      if (values && typeof values === "object" && !Array.isArray(values)) {
-        add(ns as "radio" | "module", section, values as Record<string, unknown>);
-      }
-    }
-  }
-
-  if (mqtt.enabled) {
-    const v: Record<string, unknown> = {
-      enabled: true,
-      encryptionEnabled: true,
-      proxyToClientEnabled: true,
-    };
-    if (mqtt.address) v.address = mqtt.address;
-    if (mqtt.user) v.username = mqtt.user;
-    if (mqtt.pass) v.password = mqtt.pass;
-    add("module", "mqtt", v);
-  }
-  if (neighborInfo) add("module", "neighborInfo", { enabled: true, updateInterval: 900 });
-  if (storeForward)
-    add("module", "storeForward", { enabled: true, isServer: true, heartbeat: true });
-
-  return [...map.values()];
-}
-
 function camelToLabel(key: string): string {
   return key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
 }
@@ -346,7 +278,7 @@ function SetupWizard({ deviceId, onClose }: { deviceId: string; onClose: () => v
   const mergedRegionSettings = useMemo(() => {
     return selectedRegions.reduce(
       (acc, node) => {
-        return node.settings ? deepMerge(acc, node.settings as Record<string, unknown>) : acc;
+        return node.settings ? mergeConfig(acc, node.settings as Record<string, unknown>) : acc;
       },
       {} as Record<string, unknown>,
     );

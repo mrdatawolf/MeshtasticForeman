@@ -1,5 +1,3 @@
-import { featureCollection } from "@turf/helpers";
-import { union } from "@turf/union";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import MapGL, {
@@ -11,6 +9,8 @@ import MapGL, {
   Layer,
 } from "react-map-gl/maplibre";
 
+import { mergeCoveragePolygons } from "../lib/coverageMath.js";
+import { buildCoverageCircle, clipViewshedToRadius } from "../lib/coordinateHelpers.js";
 import { foremanClient } from "../ws/client.js";
 
 import type { NodeInfo, MqttNode, DeviceConfig, CoverageProposal } from "@foreman/shared";
@@ -149,66 +149,6 @@ const TERRAIN_FETCH_RADIUS_KM = 20;
 // Viewshed clip helpers
 // ---------------------------------------------------------------------------
 
-/** Spherical destination point — mirrors the formula in coverage.ts */
-function destinationPoint(
-  lat: number,
-  lon: number,
-  bearingDeg: number,
-  distKm: number,
-): { lat: number; lon: number } {
-  const R = 6371;
-  const δ = distKm / R;
-  const φ1 = (lat * Math.PI) / 180;
-  const λ1 = (lon * Math.PI) / 180;
-  const θ = (bearingDeg * Math.PI) / 180;
-  const φ2 = Math.asin(Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ));
-  const λ2 =
-    λ1 +
-    Math.atan2(Math.sin(θ) * Math.sin(δ) * Math.cos(φ1), Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2));
-  return { lat: (φ2 * 180) / Math.PI, lon: (((λ2 * 180) / Math.PI + 540) % 360) - 180 };
-}
-
-/**
- * Trim a viewshed polygon (always fetched at TERRAIN_FETCH_RADIUS_KM) to a
- * smaller display radius.  Each vertex beyond maxRadiusKm is projected back
- * to that radius along the same bearing from the source, preserving the
- * terrain shape where it's closer than the limit.
- */
-function clipViewshedToRadius(
-  polygon: GeoJSON.Feature<GeoJSON.Polygon>,
-  sourceLat: number,
-  sourceLon: number,
-  maxRadiusKm: number,
-): GeoJSON.Feature<GeoJSON.Polygon> {
-  const R = 6371;
-  const ring = polygon.geometry.coordinates[0];
-  const clipped = ring.map(([lon, lat]): [number, number] => {
-    const dLat = ((lat - sourceLat) * Math.PI) / 180;
-    const dLon = ((lon - sourceLon) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos((sourceLat * Math.PI) / 180) *
-        Math.cos((lat * Math.PI) / 180) *
-        Math.sin(dLon / 2) ** 2;
-    const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    if (distKm <= maxRadiusKm) return [lon, lat];
-    // Bearing source → vertex, then project back to maxRadiusKm
-    const φ1 = (sourceLat * Math.PI) / 180;
-    const φ2 = (lat * Math.PI) / 180;
-    const Δλ = ((lon - sourceLon) * Math.PI) / 180;
-    const bearing =
-      (Math.atan2(
-        Math.sin(Δλ) * Math.cos(φ2),
-        Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ),
-      ) *
-        180) /
-      Math.PI;
-    const pt = destinationPoint(sourceLat, sourceLon, bearing, maxRadiusKm);
-    return [pt.lon, pt.lat];
-  });
-  return { ...polygon, geometry: { type: "Polygon", coordinates: [clipped] } };
-}
-
 function presetRadiusKm(
   deviceConfigs: Map<string, DeviceConfig>,
   deviceId: string | null | undefined,
@@ -219,33 +159,6 @@ function presetRadiusKm(
     ?.modemPreset;
   if (preset == null) return DEFAULT_RADIUS_KM;
   return MODEM_PRESET_RADIUS_KM[preset] ?? DEFAULT_RADIUS_KM;
-}
-
-/**
- * Approximate a geodesic circle as a GeoJSON Polygon.
- * Uses equirectangular projection — accurate enough for LoRa ranges (≤20 km).
- */
-function buildCoverageCircle(
-  lon: number,
-  lat: number,
-  radiusKm: number,
-  color: string,
-  steps = 64,
-  focused = false,
-): GeoJSON.Feature<GeoJSON.Polygon> {
-  const latRad = (lat * Math.PI) / 180;
-  const dLat = radiusKm / 110.574;
-  const dLon = radiusKm / (111.32 * Math.cos(latRad));
-  const coords: [number, number][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const angle = (i / steps) * 2 * Math.PI;
-    coords.push([lon + dLon * Math.cos(angle), lat + dLat * Math.sin(angle)]);
-  }
-  return {
-    type: "Feature",
-    properties: { color, focused: focused ? 1 : 0 },
-    geometry: { type: "Polygon", coordinates: [coords] },
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -830,28 +743,9 @@ export function MapPage({
     // ── Union mode: merge all polygons into one shape ─────────────────────────
     // The result is a single filled area whose outer boundary traces the combined
     // coverage footprint.  Overlapping regions disappear — no stacked outlines.
-    if (features.length === 0) return mkFeatureCollection([]);
-    if (features.length === 1) {
-      // Single polygon — set consistent fill properties and return as-is.
-      const f = features[0];
-      const isFocused = effectiveFocusedNodeId != null;
-      const color = isFocused ? nodeColor(effectiveFocusedNodeId!) : "#3b82f6";
-      return mkFeatureCollection([{ ...f, properties: { color, focused: isFocused ? 1 : 0 } }]);
-    }
-    try {
-      const unioned = union(
-        featureCollection(features as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]),
-      );
-      if (unioned) {
-        const isFocused = effectiveFocusedNodeId != null;
-        const color = isFocused ? nodeColor(effectiveFocusedNodeId!) : "#3b82f6";
-        unioned.properties = { color, focused: isFocused ? 1 : 0 };
-        return mkFeatureCollection([unioned]);
-      }
-    } catch {
-      // Union failed (e.g. invalid geometry) — fall back to individual polygons.
-    }
-    return mkFeatureCollection(features);
+    const isFocused = effectiveFocusedNodeId != null;
+    const color = isFocused ? nodeColor(effectiveFocusedNodeId!) : "#3b82f6";
+    return mergeCoveragePolygons(features, color, isFocused);
   }, [
     showCoverage,
     terrainMode,

@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import apiPromisesRaw from "../../../API_PROMISES.md?raw";
 
 import logo from "./assets/logo.png";
+import { applyNodeOverrides } from "./lib/nodeOverrides.js";
 import { ActivityPage } from "./pages/ActivityPage.js";
 import { AnalyticsPage } from "./pages/AnalyticsPage.js";
 import { DeviceConfigPage } from "./pages/DeviceConfigPage.js";
@@ -48,31 +49,6 @@ const TAG_COLORS: Record<string, string> = {
   db: "#fb923c",
   foreman: "#94a3b8",
 };
-
-/** Apply fallback lat/lon/altitude from overrides when the node has no GPS data. */
-function applyNodeOverrides<
-  T extends {
-    nodeId: number;
-    latitude: number | null;
-    longitude: number | null;
-    altitude: number | null;
-    longName?: string | null;
-    shortName?: string | null;
-  },
->(nodes: T[], overrides: Map<number, NodeOverride>): T[] {
-  return nodes.map((n) => {
-    const ov = overrides.get(n.nodeId);
-    if (!ov) return n;
-    return {
-      ...n,
-      latitude: n.latitude ?? ov.latitude,
-      longitude: n.longitude ?? ov.longitude,
-      altitude: n.altitude ?? ov.altitude,
-      longName: ("longName" in n ? n.longName : null) ?? ov.aliasName ?? null,
-      shortName: ("shortName" in n ? n.shortName : null) ?? null,
-    };
-  });
-}
 
 function formatRelative(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
