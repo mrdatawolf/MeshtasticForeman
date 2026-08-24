@@ -20,153 +20,28 @@ import {
 } from "recharts";
 
 import type { NodeInfo, MqttNode, DeviceInfo } from "@foreman/shared";
+import * as analyticsApi from "../api/analytics.js";
+import type {
+  BusiestNode,
+  ChannelBucket,
+  HardwareBucket,
+  HopBucket,
+  LatencyHistogram,
+  LinkQualityEntry,
+  MessageDeliveryStats,
+  MessageVolumePoint,
+  NeighborLink,
+  NodeActivityPoint,
+  PacketLogEntry,
+  PacketTimelinePoint,
+  PortnumCount,
+  PositionRecord,
+  SnrHistoryPoint,
+  TelemetryPoint,
+  TracerouteRecord,
+} from "../api/analytics.js";
 
 const ForceGraph2D = lazy(() => import("react-force-graph-2d"));
-
-// ---------------------------------------------------------------------------
-// API response types (match packages/daemon/src/routes/analytics.ts)
-// ---------------------------------------------------------------------------
-
-interface SnrHistoryPoint {
-  ts: string;
-  nodeId: number;
-  snr: number | null;
-  rssi: number | null;
-  count: number;
-}
-
-interface MessageVolumePoint {
-  ts: string;
-  received: number;
-  sent: number;
-  relayed: number;
-  total: number;
-}
-
-interface MessageDeliveryStats {
-  acked: number;
-  pending: number;
-  error: number;
-  total: number;
-  errorTypes: { type: string; count: number }[];
-}
-
-interface BusiestNode {
-  nodeId: number;
-  received: number;
-  sent: number;
-  relayed: number;
-  total: number;
-}
-
-interface PortnumCount {
-  portnumName: string;
-  count: number;
-}
-
-interface PacketTimelinePoint {
-  ts: string;
-  counts: Record<string, number>;
-  total: number;
-}
-
-interface HopBucket {
-  hopsAway: number;
-  count: number;
-}
-
-interface HardwareBucket {
-  hwModel: number;
-  hwModelName: string;
-  count: number;
-}
-
-interface ChannelBucket {
-  channelIndex: number;
-  channelName: string | null;
-  received: number;
-  sent: number;
-  relayed: number;
-  total: number;
-}
-
-interface LatencyHistogram {
-  buckets: { label: string; maxMs: number; count: number }[];
-  medianMs: number | null;
-  p95Ms: number | null;
-  totalSamples: number;
-}
-
-interface TracerouteRecord {
-  id: string;
-  deviceId: string;
-  fromNodeId: number;
-  toNodeId: number;
-  route: number[];
-  routeBack: number[];
-  recordedAt: string;
-}
-
-interface NeighborLink {
-  fromNodeId: number;
-  toNodeId: number;
-  snr: number | null;
-  lastSeen: string;
-}
-
-interface PacketLogEntry {
-  id: string;
-  packetId: number;
-  deviceId: string;
-  fromNodeId: number;
-  toNodeId: number;
-  portnumName: string;
-  rxTime: string;
-  rxSnr: number | null;
-  rxRssi: number | null;
-  hopLimit: number | null;
-  hopStart: number | null;
-  viaMqtt: boolean;
-}
-
-interface LinkQualityEntry {
-  fromNodeId: number;
-  toNodeId: number;
-  avgSnr: number | null;
-  messageCount: number;
-}
-
-interface NodeActivityPoint {
-  ts: string;
-  nodeId: number;
-  count: number;
-}
-
-interface PositionRecord {
-  id: string;
-  nodeId: number;
-  latitude: number;
-  longitude: number;
-  altitude: number | null;
-  speed: number | null;
-  groundTrack: number | null;
-  satsInView: number | null;
-  recordedAt: string;
-}
-
-interface TelemetryPoint {
-  ts: string;
-  nodeId: number;
-  variantCase: string | null;
-  batteryLevel: number | null;
-  voltage: number | null;
-  channelUtilization: number | null;
-  airUtilTx: number | null;
-  uptimeSeconds: number | null;
-  temperature: number | null;
-  relativeHumidity: number | null;
-  barometricPressure: number | null;
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -214,12 +89,6 @@ function formatMs(ms: number | null): string {
   if (ms === null) return "—";
   if (ms < 1000) return `${Math.round(ms)} ms`;
   return `${(ms / 1000).toFixed(1)} s`;
-}
-
-async function apiFetch<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json() as Promise<T>;
 }
 
 const MAP_STYLE = import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty";
@@ -331,7 +200,8 @@ function SignalTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNod
 
   useEffect(() => {
     setSnrData(null);
-    apiFetch<SnrHistoryPoint[]>(`/api/analytics/snr-history?since=${since}`)
+    analyticsApi
+      .snrHistory({ since })
       .then(setSnrData)
       .catch(() => setSnrData([]));
   }, [since]);
@@ -460,35 +330,40 @@ function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttN
 
   useEffect(() => {
     setVolume(null);
-    apiFetch<MessageVolumePoint[]>(`/api/analytics/message-volume?since=${since}&bucket=${bucket}`)
+    analyticsApi
+      .messageVolume({ since, bucket })
       .then(setVolume)
       .catch(() => setVolume([]));
   }, [since, bucket]);
 
   useEffect(() => {
     setDelivery(null);
-    apiFetch<MessageDeliveryStats>(`/api/analytics/message-delivery?since=${since}`)
+    analyticsApi
+      .messageDelivery({ since })
       .then(setDelivery)
       .catch(() => setDelivery({ acked: 0, pending: 0, error: 0, total: 0, errorTypes: [] }));
   }, [since]);
 
   useEffect(() => {
     setBusiest(null);
-    apiFetch<BusiestNode[]>(`/api/analytics/busiest-nodes?since=${since}`)
+    analyticsApi
+      .busiestNodes({ since })
       .then(setBusiest)
       .catch(() => setBusiest([]));
   }, [since]);
 
   useEffect(() => {
     setChannels(null);
-    apiFetch<ChannelBucket[]>(`/api/analytics/channel-utilization?since=${since}`)
+    analyticsApi
+      .channelUtilization({ since })
       .then(setChannels)
       .catch(() => setChannels([]));
   }, [since]);
 
   useEffect(() => {
     setLatency(null);
-    apiFetch<LatencyHistogram>(`/api/analytics/message-latency?since=${since}`)
+    analyticsApi
+      .messageLatency({ since })
       .then(setLatency)
       .catch(() => setLatency(null));
   }, [since]);
@@ -800,10 +675,12 @@ function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNo
   const [tracerouteWidth, setTracerouteWidth] = useState(600);
 
   useEffect(() => {
-    apiFetch<HopBucket[]>("/api/analytics/hop-distribution")
+    analyticsApi
+      .hopDistribution()
       .then(setHops)
       .catch(() => setHops([]));
-    apiFetch<HardwareBucket[]>("/api/analytics/hardware-breakdown")
+    analyticsApi
+      .hardwareBreakdown()
       .then(setHardware)
       .catch(() => setHardware([]));
   }, []);
@@ -811,11 +688,13 @@ function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNo
   useEffect(() => {
     setNeighbors(null);
     setRoutes(null);
-    const q = graphSince !== "all" ? `?since=${graphSince}` : "";
-    apiFetch<NeighborLink[]>(`/api/analytics/neighbor-graph${q}`)
+    const since = graphSince !== "all" ? graphSince : undefined;
+    analyticsApi
+      .neighborGraph({ since })
       .then(setNeighbors)
       .catch(() => setNeighbors([]));
-    apiFetch<TracerouteRecord[]>(`/api/traceroutes${q}`)
+    analyticsApi
+      .traceroutes({ since })
       .then(setRoutes)
       .catch(() => setRoutes([]));
   }, [graphSince]);
@@ -1108,7 +987,8 @@ function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
 
   useEffect(() => {
     setData(null);
-    apiFetch<TelemetryPoint[]>(`/api/analytics/telemetry-history?since=${since}`)
+    analyticsApi
+      .telemetryHistory({ since })
       .then(setData)
       .catch(() => setData([]));
   }, [since]);
@@ -1307,25 +1187,24 @@ function PacketsTab() {
 
   useEffect(() => {
     setPortnum(null);
-    apiFetch<PortnumCount[]>(`/api/analytics/portnum-breakdown?since=${since}`)
+    analyticsApi
+      .portnumBreakdown({ since })
       .then(setPortnum)
       .catch(() => setPortnum([]));
   }, [since]);
 
   useEffect(() => {
     setTimeline(null);
-    apiFetch<PacketTimelinePoint[]>(
-      `/api/analytics/packet-timeline?since=${since}&bucket=${bucket}`,
-    )
+    analyticsApi
+      .packetTimeline({ since, bucket })
       .then(setTimeline)
       .catch(() => setTimeline([]));
   }, [since, bucket]);
 
   useEffect(() => {
     setPacketLog(null);
-    const params = new URLSearchParams({ since, limit: "200" });
-    if (logFilter) params.set("portnum", logFilter);
-    apiFetch<PacketLogEntry[]>(`/api/analytics/packet-log?${params}`)
+    analyticsApi
+      .packetLog({ since, limit: 200, portnum: logFilter || undefined })
       .then(setPacketLog)
       .catch(() => setPacketLog([]));
   }, [since, logFilter]);
@@ -1591,7 +1470,8 @@ function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mq
 
   useEffect(() => {
     setData(null);
-    apiFetch<LinkQualityEntry[]>(`/api/analytics/link-quality?since=${since}`)
+    analyticsApi
+      .linkQuality({ since })
       .then(setData)
       .catch(() => setData([]));
   }, [since]);
@@ -1776,7 +1656,8 @@ function ActivityTimelineTab({
 
   useEffect(() => {
     setData(null);
-    apiFetch<NodeActivityPoint[]>(`/api/analytics/node-activity?since=${since}&bucket=${bucket}`)
+    analyticsApi
+      .nodeActivity({ since, bucket })
       .then(setData)
       .catch(() => setData([]));
   }, [since, bucket]);
@@ -1922,10 +1803,8 @@ function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mqtt
 
   useEffect(() => {
     setData(null);
-    const nodeParam = selectedNodeId != null ? `&nodeId=${selectedNodeId}` : "";
-    apiFetch<PositionRecord[]>(
-      `/api/analytics/position-history?since=${since}${nodeParam}&limit=5000`,
-    )
+    analyticsApi
+      .positionHistory({ since, nodeId: selectedNodeId ?? undefined, limit: 5000 })
       .then(setData)
       .catch(() => setData([]));
   }, [since, selectedNodeId]);
