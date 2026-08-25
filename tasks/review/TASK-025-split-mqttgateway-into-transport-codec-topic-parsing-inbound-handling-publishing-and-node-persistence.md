@@ -53,7 +53,29 @@ None.
 
 ## Implementation handoff
 
-Not started.
+Implemented the CONTRACT-006 split into `codec.ts`, `topic-parsing.ts`,
+`transport.ts`, `inbound-handling.ts`, `publishing.ts`, and
+`node-persistence.ts`, with `gateway.ts` reduced to orchestration and frozen-test
+compatibility wrappers. The gateway retains live `client`, `connected`, and
+`devices` fields; inbound dispatch calls the gateway's instance methods so test
+monkey-patches remain effective. Geo ownership remains local to MQTT: the pure
+haversine function is in node persistence, while device-map access and bulk
+distance recalculation remain in the gateway.
+
+Validation:
+
+- `packages/daemon/node_modules/.bin/vitest run packages/daemon/src/mqtt/__tests__/gateway.test.ts`
+  — 1 file passed, 10 tests passed.
+- ESLint over all seven MQTT implementation files — passed with no findings.
+- `./node_modules/.bin/tsc --noEmit -p packages/daemon/tsconfig.json` — passed
+  with exit code 0 and no output.
+
+Deviations/assumptions: no public-broker smoke test was performed because the
+sandbox has restricted network access and this structural validation must not
+publish synthetic traffic to the public broker. The required pnpm/Node toolchain
+was unavailable (Node v20.19.2; pnpm could not run under that Node), so installed
+workspace binaries were used directly. Remaining risk is concentrated in the
+untested paths already listed in CONTRACT-006's Gaps section.
 
 ## Review
 
