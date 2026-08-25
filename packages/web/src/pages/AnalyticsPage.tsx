@@ -1,4 +1,5 @@
 import "maplibre-gl/dist/maplibre-gl.css";
+import { formatNodeId as nodeHex, resolveNodeName } from "@foreman/shared";
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import MapGL, { Source, Layer, NavigationControl } from "react-map-gl/maplibre";
 import {
@@ -48,14 +49,9 @@ const ForceGraph2D = lazy(() => import("react-force-graph-2d"));
 // Helpers
 // ---------------------------------------------------------------------------
 
-function nodeHex(id: number): string {
-  return `!${id.toString(16).padStart(8, "0")}`;
-}
-
 function nodeName(id: number, nodes: NodeInfo[], mqttNodes: MqttNode[]): string {
   const n = (nodes as Array<NodeInfo | MqttNode>).concat(mqttNodes).find((x) => x.nodeId === id);
-  if (!n) return nodeHex(id);
-  return n.longName ?? n.shortName ?? nodeHex(id);
+  return resolveNodeName(id, n ?? {});
 }
 
 /** Deterministic HSL colour from a node ID — same hashing as MapPage. */
@@ -1210,10 +1206,6 @@ function PacketsTab() {
       .catch(() => setPacketLog([]));
   }, [since, logFilter]);
 
-  function nodeHex(id: number) {
-    return `!${id.toString(16).padStart(8, "0")}`;
-  }
-
   function handleCsvExport() {
     const params = new URLSearchParams({ since });
     if (logFilter) params.set("portnum", logFilter);
@@ -1519,7 +1511,10 @@ function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: Mq
 
   const shortName = (id: number) => {
     const n = (nodes as Array<NodeInfo | MqttNode>).concat(mqttNodes).find((x) => x.nodeId === id);
-    return n?.shortName ?? nodeHex(id).slice(-4);
+    return resolveNodeName(id, n ?? {}, {
+      preference: ["shortName"],
+      fallback: nodeHex(id).slice(-4),
+    });
   };
 
   return (

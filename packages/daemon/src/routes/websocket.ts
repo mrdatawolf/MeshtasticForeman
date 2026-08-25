@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { clientCommandSchema } from "@foreman/shared";
+import { clientCommandSchema, formatNodeId } from "@foreman/shared";
 import { Types } from "@meshtastic/core";
 
 import { consoleLog } from "../activity/console-log.js";
@@ -347,12 +347,12 @@ async function handleClientCommand(
         .requestPosition(nodeId)
         .then(() => {
           console.log(
-            `[ws] node:request-position → ${device.name} for node !${nodeId.toString(16).padStart(8, "0")}`,
+            `[ws] node:request-position → ${device.name} for node ${formatNodeId(nodeId)}`,
           );
         })
         .catch((err: unknown) => {
           console.log(
-            `[ws] node:request-position failed for !${nodeId.toString(16).padStart(8, "0")}: ${err instanceof Error ? err.message : String(err)}`,
+            `[ws] node:request-position failed for ${formatNodeId(nodeId)}: ${err instanceof Error ? err.message : String(err)}`,
           );
         });
       break;
@@ -372,14 +372,10 @@ async function handleClientCommand(
       }
       try {
         await device.meshDevice.traceRoute(nodeId);
-        console.log(
-          `[ws] node:traceroute → ${device.name} for node !${nodeId.toString(16).padStart(8, "0")}`,
-        );
+        console.log(`[ws] node:traceroute → ${device.name} for node ${formatNodeId(nodeId)}`);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.log(
-          `[ws] node:traceroute failed for !${nodeId.toString(16).padStart(8, "0")}: ${msg}`,
-        );
+        console.log(`[ws] node:traceroute failed for ${formatNodeId(nodeId)}: ${msg}`);
         socket.send(
           JSON.stringify({
             type: "error",
@@ -406,13 +402,11 @@ async function handleClientCommand(
         // Tell the radio to wipe this node from its nodeDB via AdminMessage over serial
         await device.meshDevice.removeNodeByNum(nodeId);
         console.log(
-          `[ws] node:remove → ${device.name} removed !${nodeId.toString(16).padStart(8, "0")} from device nodeDB`,
+          `[ws] node:remove → ${device.name} removed ${formatNodeId(nodeId)} from device nodeDB`,
         );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(
-          `[ws] node:remove serial failed for !${nodeId.toString(16).padStart(8, "0")}: ${msg}`,
-        );
+        console.warn(`[ws] node:remove serial failed for ${formatNodeId(nodeId)}: ${msg}`);
         // Don't abort — still clear our local cache below so the UI refreshes
       }
       // Always clear from daemon's local DB so stale data doesn't linger
@@ -421,9 +415,7 @@ async function handleClientCommand(
           deviceId,
           nodeId,
         ]);
-        console.log(
-          `[ws] node:remove cleared !${nodeId.toString(16).padStart(8, "0")} from local DB`,
-        );
+        console.log(`[ws] node:remove cleared ${formatNodeId(nodeId)} from local DB`);
       }
       socket.send(
         JSON.stringify({

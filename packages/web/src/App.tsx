@@ -6,6 +6,7 @@ import apiPromisesRaw from "../../../API_PROMISES.md?raw";
 
 import logo from "./assets/logo.png";
 import { applyNodeOverrides } from "./lib/nodeOverrides.js";
+import { formatRelativeTime } from "./lib/relativeTime.js";
 import { ActivityPage } from "./pages/ActivityPage.js";
 import { AnalyticsPage } from "./pages/AnalyticsPage.js";
 import { DeviceConfigPage } from "./pages/DeviceConfigPage.js";
@@ -49,14 +50,6 @@ const TAG_COLORS: Record<string, string> = {
   db: "#fb923c",
   foreman: "#94a3b8",
 };
-
-function formatRelative(iso: string): string {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
 
 function batteryColor(level: number): string {
   if (level <= 20) return "#ef4444";
@@ -711,7 +704,9 @@ export function App() {
                           <span style={{ color: "#475569" }}>fw {d.firmwareVersion}</span>
                         )}
                         {d.lastSeenAt && (
-                          <span style={{ color: "#475569" }}>{formatRelative(d.lastSeenAt)}</span>
+                          <span style={{ color: "#475569" }}>
+                            {formatRelativeTime(d.lastSeenAt)}
+                          </span>
                         )}
                         {d.batteryLevel != null && <BatteryBar level={d.batteryLevel} />}
                       </div>

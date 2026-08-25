@@ -1,3 +1,4 @@
+import { formatNodeId as nodeHex, resolveNodeName } from "@foreman/shared";
 import { useState } from "react";
 
 import type { NodeOverride } from "@foreman/shared";
@@ -11,10 +12,6 @@ function parseNodeId(raw: string): number | null {
   }
   const n = parseInt(s, 10);
   return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-function nodeHex(nodeId: number): string {
-  return `!${nodeId.toString(16).padStart(8, "0")}`;
 }
 
 const API = "/api/node-overrides";
@@ -141,7 +138,7 @@ export function NodeOverridesPage({ overrides, noLocationNodes, onChanged }: Pro
                   setEditing(null);
                   setForm({
                     rawId: nodeHex(n.nodeId),
-                    aliasName: n.longName ?? n.shortName ?? "",
+                    aliasName: resolveNodeName(n.nodeId, n, { fallback: "" }),
                     latitude: "",
                     longitude: "",
                     altitude: "",
@@ -152,7 +149,9 @@ export function NodeOverridesPage({ overrides, noLocationNodes, onChanged }: Pro
               >
                 <span style={s.candidateHex}>{nodeHex(n.nodeId)}</span>
                 <span style={s.candidateName}>
-                  {n.longName ?? n.shortName ?? <span style={s.muted}>unnamed</span>}
+                  {resolveNodeName(n.nodeId, n, { fallback: "" }) || (
+                    <span style={s.muted}>unnamed</span>
+                  )}
                 </span>
               </button>
             ))}

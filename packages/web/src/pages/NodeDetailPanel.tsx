@@ -1,5 +1,7 @@
+import { formatNodeId, resolveNodeName } from "@foreman/shared";
 import { useState, useEffect, useRef } from "react";
 
+import { formatRelativeTime } from "../lib/relativeTime.js";
 import { useConversation, loadConversation, addOptimisticMessage } from "../store/messages.js";
 import { foremanClient } from "../ws/client.js";
 
@@ -47,17 +49,8 @@ const HW_MODEL: Record<number, string> = {
   255: "PRIVATE_HW",
 };
 
-function nodeHex(nodeId: number) {
-  return `!${nodeId.toString(16).padStart(8, "0")}`;
-}
-
 function formatLastHeard(iso: string | null) {
-  if (!iso) return "—";
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+  return formatRelativeTime(iso);
 }
 
 function formatTime(iso: string) {
@@ -186,10 +179,10 @@ export function NodeDetailPanel({
         <div style={styles.header}>
           <div>
             <div style={styles.headerName}>
-              {primary.longName ?? primary.shortName ?? "Unknown"}
+              {resolveNodeName(nodeId, primary, { fallback: "Unknown" })}
             </div>
             <div style={styles.headerSub}>
-              <span style={styles.mono}>{nodeHex(nodeId)}</span>
+              <span style={styles.mono}>{formatNodeId(nodeId)}</span>
               {primary.shortName && primary.longName && (
                 <span style={{ color: "#64748b", marginLeft: "0.5rem" }}>
                   ({primary.shortName})
@@ -205,7 +198,7 @@ export function NodeDetailPanel({
         <div style={styles.body}>
           {/* Details grid */}
           <div style={styles.detailGrid}>
-            <Detail label="Node ID" value={nodeHex(nodeId)} mono />
+            <Detail label="Node ID" value={formatNodeId(nodeId)} mono />
             <Detail
               label="Hardware"
               value={
@@ -330,10 +323,10 @@ export function NodeDetailPanel({
               <span style={{ color: "#60a5fa", fontWeight: "bold" }}>Route: </span>
               {traceroute.route.length === 0
                 ? "Direct"
-                : traceroute.route.map((id) => nodeHex(id)).join(" → ")}
+                : traceroute.route.map((id) => formatNodeId(id)).join(" → ")}
               {traceroute.routeBack.length > 0 && (
                 <span style={{ color: "#64748b", marginLeft: "0.75rem" }}>
-                  ← {traceroute.routeBack.map((id) => nodeHex(id)).join(" ← ")}
+                  ← {traceroute.routeBack.map((id) => formatNodeId(id)).join(" ← ")}
                 </span>
               )}
             </div>

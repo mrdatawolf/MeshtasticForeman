@@ -1,4 +1,9 @@
 import "maplibre-gl/dist/maplibre-gl.css";
+import {
+  formatNodeId as nodeHex,
+  MODEM_PRESET_LABELS as MODEM_PRESET_LABEL,
+  resolveNodeName,
+} from "@foreman/shared";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import MapGL, {
   type MapRef,
@@ -11,6 +16,7 @@ import MapGL, {
 
 import { buildCoverageCircle, clipViewshedToRadius } from "../lib/coordinateHelpers.js";
 import { mergeCoveragePolygons } from "../lib/coverageMath.js";
+import { formatRelativeTime } from "../lib/relativeTime.js";
 import { foremanClient } from "../ws/client.js";
 
 import type { NodeInfo, MqttNode, DeviceConfig, CoverageProposal } from "@foreman/shared";
@@ -39,17 +45,8 @@ const HW_MODEL: Record<number, string> = {
   255: "PRIVATE_HW",
 };
 
-function nodeHex(nodeId: number): string {
-  return `!${nodeId.toString(16).padStart(8, "0")}`;
-}
-
 function formatLastHeard(iso: string | null): string {
-  if (!iso) return "never";
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+  return formatRelativeTime(iso, "never");
 }
 
 function nodeColor(nodeId: number): string {
@@ -108,17 +105,6 @@ const MODEM_PRESET_RADIUS_KM: Record<number, number> = {
   6: 2, // SHORT_FAST
   7: 12, // LONG_MODERATE
   8: 1, // SHORT_TURBO
-};
-export const MODEM_PRESET_LABEL: Record<number, string> = {
-  0: "LONG_FAST",
-  1: "LONG_SLOW",
-  2: "VERY_LONG_SLOW",
-  3: "MEDIUM_SLOW",
-  4: "MEDIUM_FAST",
-  5: "SHORT_SLOW",
-  6: "SHORT_FAST",
-  7: "LONG_MODERATE",
-  8: "SHORT_TURBO",
 };
 const DEFAULT_RADIUS_KM = 10; // LONG_FAST fallback
 
@@ -500,9 +486,7 @@ export function MapPage({
       ? allMappable.find((n) => n.nodeId === effectiveFocusedNodeId)
       : undefined;
   const effectiveFocusedNodeName = effectiveFocusedNode
-    ? (effectiveFocusedNode.longName ??
-      effectiveFocusedNode.shortName ??
-      nodeHex(effectiveFocusedNode.nodeId))
+    ? resolveNodeName(effectiveFocusedNode.nodeId, effectiveFocusedNode)
     : null;
 
   // Fetch terrain viewsheds for all mappable nodes when terrain mode is active.
@@ -953,7 +937,7 @@ export function MapPage({
                 onClick={(e) => handleMeshClick(node, e)}
               >
                 <div
-                  title={node.longName ?? nodeHex(node.nodeId)}
+                  title={resolveNodeName(node.nodeId, node, { preference: ["longName"] })}
                   style={{
                     ...styles.markerOuter,
                     borderColor: color,
@@ -971,7 +955,10 @@ export function MapPage({
                       border: `2px solid ${color}`,
                     }}
                   >
-                    {(node.shortName ?? nodeHex(node.nodeId).slice(-4)).slice(0, 4)}
+                    {resolveNodeName(node.nodeId, node, {
+                      preference: ["shortName"],
+                      fallback: nodeHex(node.nodeId).slice(-4),
+                    }).slice(0, 4)}
                   </div>
                   {isLocal && <div style={styles.localRing} />}
                   {hasStack && <div style={styles.stackBadge}>+{stackCount}</div>}
@@ -996,7 +983,7 @@ export function MapPage({
                 onClick={(e) => handleMqttClick(node, e)}
               >
                 <div
-                  title={`[MQTT] ${node.longName ?? nodeHex(node.nodeId)}`}
+                  title={`[MQTT] ${resolveNodeName(node.nodeId, node, { preference: ["longName"] })}`}
                   style={{ ...styles.markerOuter, cursor: "pointer" }}
                 >
                   <div
@@ -1010,7 +997,10 @@ export function MapPage({
                       boxShadow: `0 0 0 2px ${color}22`,
                     }}
                   >
-                    {(node.shortName ?? nodeHex(node.nodeId).slice(-4)).slice(0, 4)}
+                    {resolveNodeName(node.nodeId, node, {
+                      preference: ["shortName"],
+                      fallback: nodeHex(node.nodeId).slice(-4),
+                    }).slice(0, 4)}
                   </div>
                   {hasStack && <div style={styles.stackBadge}>+{stackCount}</div>}
                 </div>
@@ -1224,10 +1214,10 @@ export function MapPage({
                     </span>
                     {stackedNodes.map((sn) => {
                       const isActive = selected.node.nodeId === sn.node.nodeId;
-                      const label = (sn.node.shortName ?? nodeHex(sn.node.nodeId).slice(-4)).slice(
-                        0,
-                        6,
-                      );
+                      const label = resolveNodeName(sn.node.nodeId, sn.node, {
+                        preference: ["shortName"],
+                        fallback: nodeHex(sn.node.nodeId).slice(-4),
+                      }).slice(0, 6);
                       return (
                         <button
                           key={`${sn.source}-${sn.node.nodeId}`}
@@ -1242,7 +1232,9 @@ export function MapPage({
                             color: isActive ? nodeColor(sn.node.nodeId) : "#94a3b8",
                             cursor: "pointer",
                           }}
-                          title={sn.node.longName ?? nodeHex(sn.node.nodeId)}
+                          title={resolveNodeName(sn.node.nodeId, sn.node, {
+                            preference: ["longName"],
+                          })}
                         >
                           {label}
                           {sn.source === "mqtt" ? "*" : ""}
@@ -2053,7 +2045,9 @@ function MeshPopup({
 }: MeshPopupProps) {
   return (
     <div style={popupStyles.popup}>
-      <div style={popupStyles.name}>{node.longName ?? nodeHex(node.nodeId)}</div>
+      <div style={popupStyles.name}>
+        {resolveNodeName(node.nodeId, node, { preference: ["longName"] })}
+      </div>
       {node.shortName && node.longName && <div style={popupStyles.muted}>{node.shortName}</div>}
       <div style={popupStyles.grid}>
         <span style={popupStyles.label}>ID</span>
@@ -2148,7 +2142,9 @@ function MqttPopup({
 }) {
   return (
     <div style={popupStyles.popup}>
-      <div style={popupStyles.name}>{node.longName ?? nodeHex(node.nodeId)}</div>
+      <div style={popupStyles.name}>
+        {resolveNodeName(node.nodeId, node, { preference: ["longName"] })}
+      </div>
       {node.shortName && node.longName && <div style={popupStyles.muted}>{node.shortName}</div>}
       <div style={popupStyles.tag}>MQTT</div>
       <div style={popupStyles.grid}>

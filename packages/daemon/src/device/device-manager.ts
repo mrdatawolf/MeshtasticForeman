@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 
 import { fromBinary } from "@bufbuild/protobuf";
+import { formatNodeId, resolveNodeName } from "@foreman/shared";
 import { MeshDevice, Types, Protobuf } from "@meshtastic/core";
 import { TransportNodeSerial } from "@meshtastic/transport-node-serial";
 
@@ -226,7 +227,7 @@ export class DeviceManager extends EventEmitter {
       };
       this.emit("event", event);
       console.log(
-        `[devices] traceroute result from !${nodeId.toString(16).padStart(8, "0")} route=[${route.map((n) => "!" + n.toString(16)).join(",")}]`,
+        `[devices] traceroute result from ${formatNodeId(nodeId)} route=[${route.map((n) => formatNodeId(n, 0)).join(",")}]`,
       );
       // Persist to DB asynchronously
       this._saveTraceroute(id, fromNodeId, nodeId, route, routeBack).catch((err) =>
@@ -267,9 +268,7 @@ export class DeviceManager extends EventEmitter {
       const nodeNum: number = info?.myNodeNum ?? 0;
       if (nodeNum !== 0) {
         this.myNodeIds.set(id, nodeNum);
-        console.log(
-          `[devices] myNodeInfo ${name} nodeNum=!${nodeNum.toString(16).padStart(8, "0")}`,
-        );
+        console.log(`[devices] myNodeInfo ${name} nodeNum=${formatNodeId(nodeNum)}`);
       }
     });
 
@@ -727,7 +726,7 @@ export class DeviceManager extends EventEmitter {
         );
         const nodeCount = rows[0]?.cnt ?? 0;
         const myNodeId = this.myNodeIds.get(deviceId);
-        reply = `Foreman OK · ${nodeCount} nodes · me: !${(myNodeId ?? 0).toString(16).padStart(8, "0")}`;
+        reply = `Foreman OK · ${nodeCount} nodes · me: ${formatNodeId(myNodeId ?? 0)}`;
         break;
       }
 
@@ -785,9 +784,7 @@ export class DeviceManager extends EventEmitter {
       },
     };
     this.emit("event", botEvent);
-    console.log(
-      `[bot] replied to !${cmd} → "${reply}" → !${toNodeId.toString(16).padStart(8, "0")}`,
-    );
+    console.log(`[bot] replied to !${cmd} → "${reply}" → ${formatNodeId(toNodeId)}`);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -830,14 +827,14 @@ export class DeviceManager extends EventEmitter {
     // Update watchdog timestamp so it knows the stream is alive
     this.lastPacketMs.set(deviceId, Date.now());
     console.log(
-      `[devices] raw pkt from=!${fromNodeId.toString(16).padStart(8, "0")} portnum=${portnumName} viaMqtt=${isMqttEcho}`,
+      `[devices] raw pkt from=${formatNodeId(fromNodeId)} portnum=${portnumName} viaMqtt=${isMqttEcho}`,
     );
     if (fromNodeId !== 0) {
       activityLog.add({
         ts: rxTime,
         source: "mesh",
         portnum: portnumName,
-        fromHex: `!${fromNodeId.toString(16).padStart(8, "0")}`,
+        fromHex: formatNodeId(fromNodeId),
         region: null,
         gateway: null,
         viaMqtt: isMqttEcho,
@@ -1038,7 +1035,7 @@ export class DeviceManager extends EventEmitter {
     const nodeId: number = n.num ?? 0;
     if (nodeId === 0) return;
     console.log(
-      `[devices] nodeInfo !${nodeId.toString(16).padStart(8, "0")} "${n.user?.longName ?? n.user?.shortName ?? "?"}"`,
+      `[devices] nodeInfo ${formatNodeId(nodeId)} "${resolveNodeName(nodeId, n.user ?? {}, { fallback: "?" })}"`,
     );
 
     const macBytes: Uint8Array | undefined = n.user?.macaddr;

@@ -1,3 +1,4 @@
+import { MODEM_PRESET_LABELS } from "@foreman/shared";
 import { useState, useEffect, useRef, useMemo } from "react";
 
 import regionPresetsFallback from "../../../../region-presets.json";
@@ -67,21 +68,10 @@ const LORA_REGION: Record<number, string> = {
   17: "MY_919",
   18: "SG_923",
 };
-const MODEM_PRESET: Record<number, string> = {
-  0: "LONG_FAST",
-  1: "LONG_SLOW",
-  2: "VERY_LONG_SLOW",
-  3: "MEDIUM_SLOW",
-  4: "MEDIUM_FAST",
-  5: "SHORT_SLOW",
-  6: "SHORT_FAST",
-  7: "LONG_MODERATE",
-  8: "SHORT_TURBO",
-};
 const CHANNEL_ROLE: Record<number, string> = { 0: "DISABLED", 1: "PRIMARY", 2: "SECONDARY" };
 const ENUM_LOOKUPS: Record<string, Record<string, Record<number, string>>> = {
   device: { role: DEVICE_ROLE },
-  lora: { region: LORA_REGION, modemPreset: MODEM_PRESET },
+  lora: { region: LORA_REGION, modemPreset: MODEM_PRESET_LABELS },
 };
 
 const SENSITIVE_KEYS = new Set([
