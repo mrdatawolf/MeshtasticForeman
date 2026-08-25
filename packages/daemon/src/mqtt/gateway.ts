@@ -105,6 +105,18 @@ export class MqttGateway extends EventEmitter {
     console.log("[mqtt] stopped");
   }
 
+  /**
+   * Process-shutdown hook. Safe to call before the gateway has been started
+   * and contains teardown errors so the process coordinator can continue.
+   */
+  async shutdown(): Promise<void> {
+    try {
+      this.stop();
+    } catch (err) {
+      console.error("[mqtt] shutdown failed:", err);
+    }
+  }
+
   get isRunning(): boolean {
     return this.client !== null;
   }

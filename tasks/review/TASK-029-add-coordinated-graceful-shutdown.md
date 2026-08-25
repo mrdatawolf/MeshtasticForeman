@@ -53,7 +53,48 @@ None.
 
 ## Implementation handoff
 
-Not started.
+Implemented coordinated SIGTERM/SIGINT shutdown per CONTRACT-008.
+
+### Changes
+
+- Added the synchronously-registered coordinator and module-level subsystem
+  references in `packages/daemon/src/index.ts`.
+- Added `WsRouteHandle.closeAll()`, `MqttGateway.shutdown()`, and
+  `DeviceManager.shutdown()` with defensive timer cleanup and reconnect
+  suppression.
+- Reused `PGliteProxy.close()` and `clearDbLock()` unchanged.
+- Added unit coverage for shutdown order, step failure continuation, timeout,
+  second-signal behavior, WS close semantics, MQTT error containment, and a
+  reconnect timer whose dropped port has no live device entry.
+
+### Validation
+
+- Focused shutdown tests: 17 passed (coordinator 4, WS 1, MQTT file 11,
+  dropped-port reconnect 1).
+- Daemon TypeScript build (`tsc --noEmit`): passed.
+- Daemon ESLint: passed.
+- Changed-file Prettier check: passed.
+- Full daemon suite: 199 passed, 7 failed only in the existing PGlite worker
+  tests because the sandbox runs Node 20.19.2 and cannot load the TypeScript
+  worker; the project requires Node >=22.13.0. Pinned pnpm 11.21.0 likewise
+  cannot start under the sandbox Node version.
+- Daemon-wide Prettier check found one pre-existing unrelated formatting issue
+  in `src/device/configuration-handler.ts`; it was left untouched.
+- Manual real-process/resource shutdown checks were not run because the
+  required Node runtime and hardware-backed serial/MQTT environment were not
+  available.
+
+### Assumptions and deviations
+
+No contract design deviation was needed. The current post-split gateway still
+owns both its MQTT transport and self-announce timers, and DeviceManager still
+owns device lifecycle plus watchdog/reconnect state. The production timeout is
+10,000 ms; only the coordinator unit test injects a shorter timeout.
+
+### Unresolved risks
+
+Manual normal/mid-request/active-serial/active-MQTT shutdown and lock/resource
+inspection remain for validation in the supported Node 22+ runtime.
 
 ## Review
 

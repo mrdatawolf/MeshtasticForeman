@@ -58,6 +58,7 @@ export class DeviceManager extends EventEmitter {
   private lastPacketMs = new Map<string, number>();
   /** Active watchdog timers */
   private watchdogTimers = new Map<string, NodeJS.Timeout>();
+  private shuttingDown = false;
   /** Self node number for each device (populated from onMyNodeInfo) */
   private myNodeIds = new Map<string, number>();
   /** Most recent battery level (0–100) for each device */
@@ -381,6 +382,30 @@ export class DeviceManager extends EventEmitter {
     console.log(`[devices] disconnected ${device.name}`);
   }
 
+  /**
+   * Process-shutdown hook. Stops future reconnect scheduling, clears timer
+   * state that may not belong to a currently-connected device, and disconnects
+   * all current devices without allowing one failure to block another.
+   */
+  async shutdown(): Promise<void> {
+    this.shuttingDown = true;
+
+    for (const timer of this.watchdogTimers.values()) clearInterval(timer);
+    this.watchdogTimers.clear();
+    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
+    this.reconnectTimers.clear();
+    this.reconnectingPorts.clear();
+
+    const results = await Promise.allSettled(
+      Array.from(this.devices.keys(), (deviceId) => this.disconnect(deviceId)),
+    );
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.error("[devices] shutdown disconnect failed:", result.reason);
+      }
+    }
+  }
+
   getDevice(id: string) {
     return this.devices.get(id);
   }
@@ -630,6 +655,7 @@ export class DeviceManager extends EventEmitter {
   }
 
   private _scheduleReconnect(deviceId: string, port: string, name: string) {
+    if (this.shuttingDown) return;
     if (this.reconnectingPorts.has(port)) return;
     this.reconnectingPorts.add(port);
 

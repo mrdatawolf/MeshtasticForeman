@@ -7,6 +7,7 @@ import { consoleLog } from "./activity/console-log.js";
 import { loadConfig } from "./config.js";
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrations.js";
+import { clearDbLock } from "./db/open.js";
 import { DeviceManager } from "./device/device-manager.js";
 import { syncHwModels } from "./hw-models.js";
 import { MqttGateway } from "./mqtt/gateway.js";
@@ -14,7 +15,72 @@ import { registerAnalyticsRoutes } from "./routes/analytics.js";
 import { registerCoverageRoutes } from "./routes/coverage.js";
 import { registerDeviceRoutes } from "./routes/devices.js";
 import { registerProposalRoutes } from "./routes/proposals.js";
-import { registerWsRoute } from "./routes/websocket.js";
+import { registerWsRoute, type WsRouteHandle } from "./routes/websocket.js";
+
+import type { FastifyInstance } from "fastify";
+
+let app: FastifyInstance | undefined;
+let deviceManager: DeviceManager | undefined;
+let mqttGateway: MqttGateway | null | undefined;
+let wsHandle: WsRouteHandle | undefined;
+
+type ShutdownSignal = "SIGTERM" | "SIGINT";
+type ShutdownStep =
+  | "websocket clients"
+  | "HTTP server"
+  | "MQTT gateway"
+  | "serial devices"
+  | "PGlite worker"
+  | "database lock";
+
+interface ShutdownDependencies {
+  getApp(): { close(): Promise<void> } | undefined;
+  getDeviceManager(): Pick<DeviceManager, "shutdown"> | undefined;
+  getMqttGateway(): Pick<MqttGateway, "shutdown"> | null | undefined;
+  getWsHandle(): WsRouteHandle | undefined;
+  db: { close(): Promise<void> };
+  clearDbLock(): void;
+}
+
+export function createShutdownCoordinator(
+  dependencies: ShutdownDependencies,
+  timeoutMs = 10_000,
+): (signal: ShutdownSignal) => Promise<never> {
+  return async (signal: ShutdownSignal): Promise<never> => {
+    let currentStep: ShutdownStep = "websocket clients";
+    const startedAt = new Date();
+    console.log(`[shutdown] begun signal=${signal} timestamp=${startedAt.toISOString()}`);
+
+    const timeout = setTimeout(() => {
+      console.error(`[shutdown] timed out during ${currentStep}, forcing exit`);
+      process.exit(124);
+    }, timeoutMs);
+    timeout.unref();
+
+    const runStep = async (step: ShutdownStep, action: () => void | Promise<void>) => {
+      currentStep = step;
+      try {
+        await action();
+        console.log(`[shutdown] ${step} complete`);
+      } catch (err) {
+        console.error(`[shutdown] ${step} failed:`, err);
+      }
+    };
+
+    await runStep("websocket clients", () =>
+      dependencies.getWsHandle()?.closeAll(1001, "server shutting down"),
+    );
+    await runStep("HTTP server", async () => dependencies.getApp()?.close());
+    await runStep("MQTT gateway", async () => dependencies.getMqttGateway()?.shutdown());
+    await runStep("serial devices", async () => dependencies.getDeviceManager()?.shutdown());
+    await runStep("PGlite worker", () => dependencies.db.close());
+    await runStep("database lock", () => dependencies.clearDbLock());
+
+    clearTimeout(timeout);
+    console.log(`[shutdown] complete durationMs=${Date.now() - startedAt.getTime()}`);
+    process.exit(0);
+  };
+}
 
 /**
  * Pause the terminal, show an error, and wait for any keypress before
@@ -72,6 +138,26 @@ process.on("uncaughtException", (err) => {
   fatalError("uncaught exception", err);
 });
 
+const shutdown = createShutdownCoordinator({
+  getApp: () => app,
+  getDeviceManager: () => deviceManager,
+  getMqttGateway: () => mqttGateway,
+  getWsHandle: () => wsHandle,
+  db,
+  clearDbLock,
+});
+let shuttingDown = false;
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(signal, () => {
+    if (shuttingDown) {
+      process.exit(1);
+      return;
+    }
+    shuttingDown = true;
+    void shutdown(signal);
+  });
+}
+
 async function main() {
   const config = loadConfig();
 
@@ -84,7 +170,7 @@ async function main() {
   console.log("[db] migrations complete");
 
   // 2. HTTP + WebSocket server
-  const app = Fastify({ logger: { level: "info" } });
+  app = Fastify({ logger: { level: "info" } });
 
   await app.register(fastifyCors, { origin: "*" });
   await app.register(fastifyWebsocket);
@@ -97,11 +183,11 @@ async function main() {
   });
 
   // 3. Device manager (owns all serial/TCP connections)
-  const deviceManager = new DeviceManager(db, { bot: config.bot });
+  deviceManager = new DeviceManager(db, { bot: config.bot });
 
   // 4. MQTT gateway (optional — configured when MQTT_BROKER is set; only
   //    auto-started when ENABLE_MQTT=true so the system is lightweight by default)
-  let mqttGateway: MqttGateway | null = null;
+  mqttGateway = null;
   if (config.mqtt.broker) {
     mqttGateway = new MqttGateway(
       {
@@ -141,7 +227,7 @@ async function main() {
   await registerAnalyticsRoutes(app, db);
   await registerCoverageRoutes(app, db, { coverage: config.coverage });
   await registerProposalRoutes(app, db);
-  await registerWsRoute(app, deviceManager, mqttGateway, db);
+  wsHandle = await registerWsRoute(app, deviceManager, mqttGateway, db);
 
   // Fallback to index.html for SPA routing
   app.setNotFoundHandler((_req, reply) => {
@@ -156,4 +242,6 @@ async function main() {
   syncHwModels(db).catch((err) => console.warn("[hw-models] unexpected error during sync:", err));
 }
 
-main().catch((err) => fatalError("startup failure", err));
+if (!process.env.VITEST) {
+  main().catch((err) => fatalError("startup failure", err));
+}

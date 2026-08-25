@@ -22,6 +22,11 @@ import type {
 import type { FastifyInstance } from "fastify";
 import type { WebSocket, RawData } from "ws";
 
+export interface WsRouteHandle {
+  /** Closes every currently-connected WebSocket client. */
+  closeAll(code: number, reason: string): void;
+}
+
 /**
  * Updates a key=value pair in the root .env file.
  * If the key exists, its value is replaced in-place; if not, it is appended.
@@ -49,7 +54,7 @@ export async function registerWsRoute(
   deviceManager: DeviceManager,
   mqttGateway?: MqttGateway | null,
   db?: PGlite,
-) {
+): Promise<WsRouteHandle> {
   const clients = new Set<WebSocket>();
   /** Sockets that have opted in to raw packet streaming */
   const packetSubscriptions = new Set<WebSocket>();
@@ -200,6 +205,14 @@ export async function registerWsRoute(
       console.log(`[ws] client disconnected (total=${clients.size})`);
     });
   });
+
+  return {
+    closeAll(code: number, reason: string): void {
+      for (const client of Array.from(clients)) {
+        if (client.readyState === 1 /* OPEN */) client.close(code, reason);
+      }
+    },
+  };
 }
 
 async function handleClientCommand(

@@ -330,3 +330,19 @@ describe("MqttGateway MQTT publication", () => {
     );
   });
 });
+
+describe("MqttGateway shutdown", () => {
+  it("reuses stop and contains teardown errors", async () => {
+    const { gateway } = makeGateway();
+    const stop = vi.spyOn(gateway, "stop").mockImplementation(() => {
+      throw new Error("transport failed");
+    });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(gateway.shutdown()).resolves.toBeUndefined();
+
+    expect(stop).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledWith("[mqtt] shutdown failed:", expect.any(Error));
+    error.mockRestore();
+  });
+});

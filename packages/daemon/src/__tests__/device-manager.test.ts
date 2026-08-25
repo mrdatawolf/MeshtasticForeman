@@ -95,6 +95,35 @@ vi.mock("@meshtastic/core", async (importOriginal) => {
   };
 });
 
+describe("DeviceManager shutdown", () => {
+  it("clears a reconnect timer for a dropped port with no connected device", async () => {
+    vi.useFakeTimers();
+    const db = await createTestDb();
+    const manager = new DeviceManager(db, { bot: { enabled: false } });
+    const connectSpy = vi.spyOn(manager, "connect");
+    const internals = manager as unknown as {
+      _scheduleReconnect(deviceId: string, port: string, name: string): void;
+      devices: Map<string, unknown>;
+      reconnectTimers: Map<string, NodeJS.Timeout>;
+      reconnectingPorts: Set<string>;
+    };
+
+    internals._scheduleReconnect("dropped-device", "/dev/ttyUSB77", "Dropped Node");
+    expect(internals.devices.size).toBe(0);
+    expect(internals.reconnectTimers.size).toBe(1);
+    expect(internals.reconnectingPorts.has("/dev/ttyUSB77")).toBe(true);
+
+    await manager.shutdown();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(internals.reconnectTimers.size).toBe(0);
+    expect(internals.reconnectingPorts.size).toBe(0);
+    expect(connectSpy).not.toHaveBeenCalled();
+    await db.close();
+    vi.useRealTimers();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Test utilities
 // ---------------------------------------------------------------------------
