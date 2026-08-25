@@ -1,8 +1,8 @@
 # CONTRACT-009: Data Retention and Pruning Policy
 
-Status: Proposed
-Approved by:
-Approved date:
+Status: Accepted
+Approved by: Patrick
+Approved date: 08/24/26
 Related tasks: TASK-032 (Dependencies: TASK-012 — completed; TASK-028 —
 approved, not yet implemented; retention config surfaced through TASK-014's
 config module — implemented as `packages/daemon/src/config.ts`, currently in

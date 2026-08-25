@@ -1,8 +1,8 @@
 # CONTRACT-008: Coordinated Shutdown Sequence
 
-Status: Proposed
-Approved by:
-Approved date:
+Status: Accepted
+Approved by: Patrick
+Approved date: 08/24/26
 Related tasks: TASK-029
 
 ## Rework-risk note — read before approving

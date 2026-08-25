@@ -1,8 +1,8 @@
 # CONTRACT-010: Health and Readiness Endpoints
 
-Status: Proposed
-Approved by:
-Approved date:
+Status: Accepted
+Approved by: Patrick
+Approved date: 08/24/26
 Related tasks: TASK-033
 Related ADRs: None
 Depends on: TASK-014's config module (`packages/daemon/src/config.ts`, Accepted

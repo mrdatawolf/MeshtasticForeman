@@ -1,8 +1,8 @@
 # CONTRACT-004: DeviceManager Extraction Boundaries
 
-Status: Proposed
-Approved by:
-Approved date:
+Status: Accepted
+Approved by: Patrick
+Approved date: 08/24/26
 Related tasks: TASK-024 (blocked on TASK-023, approved but not yet
 implemented — see Open questions)
 

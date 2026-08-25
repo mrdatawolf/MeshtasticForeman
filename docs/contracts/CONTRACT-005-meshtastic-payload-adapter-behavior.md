@@ -1,8 +1,8 @@
 # CONTRACT-005: Meshtastic Payload Adapter Behavior
 
-Status: Proposed
-Approved by:
-Approved date:
+Status: Accepted
+Approved by: Patrick
+Approved date: 08/24/26
 Related tasks: TASK-023
 
 ## Purpose

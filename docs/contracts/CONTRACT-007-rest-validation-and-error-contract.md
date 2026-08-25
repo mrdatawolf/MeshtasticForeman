@@ -1,8 +1,8 @@
 # CONTRACT-007: REST Validation and Error Contract
 
-Status: Proposed
-Approved by:
-Approved date:
+Status: Accepted
+Approved by: Patrick
+Approved date: 08/24/26
 Related tasks: TASK-027 (depends on TASK-026, TASK-014)
 
 ## Purpose
