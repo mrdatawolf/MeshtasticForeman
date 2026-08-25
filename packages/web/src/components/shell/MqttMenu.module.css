@@ -1,0 +1,59 @@
+.mqttDotOn {
+  color: #4ade80;
+  font-size: 0.65rem;
+}
+
+.mqttDotOff {
+  color: #ef4444;
+  font-size: 0.65rem;
+}
+
+.mqttScopeLabel {
+  color: #94a3b8;
+  font-size: 0.7rem;
+}
+
+/* The broker on/off toggle historically overrode menuNavBtn's own
+   active-derived background/border/color outright, so it's expressed here as
+   a standalone, fully-resolved button rather than composed with menuNavBtn. */
+.mqttToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.mqttToggleBtn.mqttToggleOn {
+  background: #166534;
+  border: 1px solid #16a34a;
+  color: #4ade80;
+}
+
+.mqttToggleBtn.mqttToggleOff {
+  background: #1e293b;
+  border: 1px solid #ef4444;
+  color: #f87171;
+}
+
+.mqttNoRegionWarning {
+  color: #f59e0b;
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+}
+
+.mqttGatewayRegion {
+  color: #475569;
+  font-size: 0.65rem;
+  font-family: monospace;
+  margin-bottom: 0.25rem;
+}
+
+.mqttNodeCount {
+  color: #475569;
+  font-size: 0.65rem;
+  margin-top: 0.2rem;
+}

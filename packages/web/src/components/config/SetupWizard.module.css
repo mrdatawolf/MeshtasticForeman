@@ -1,0 +1,32 @@
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.wizardLabel {
+  color: #94a3b8;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pipsRow {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.pipCurrent {
+  background: #3b82f6;
+  color: #e2e8f0;
+}
+
+.pipDone {
+  background: #1e3a5f;
+  color: #e2e8f0;
+}
+
+.pipUpcoming {
+  background: #1e293b;
+  color: #475569;
+}

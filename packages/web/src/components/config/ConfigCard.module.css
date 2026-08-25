@@ -1,0 +1,30 @@
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sectionLabel {
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  font-weight: bold;
+}
+
+.headerRight {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.statusBanner {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.72rem;
+  border-top: 1px solid #1e293b;
+}
+.statusBannerOk {
+  background: #052e16;
+  color: #4ade80;
+}
+.statusBannerError {
+  background: #2d0f0f;
+  color: #f87171;
+}

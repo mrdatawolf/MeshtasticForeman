@@ -26,7 +26,7 @@ vi.mock("mqtt", () => ({ default: { connect: mqttConnect } }));
 
 interface GatewayInternals {
   client: typeof mqttClient | null;
-  connected: boolean;
+  _connected: boolean;
   devices: Map<string, DeviceStateFixture>;
   _expandPsk(psk: Uint8Array): Buffer;
   _encrypt(key: Buffer, packetId: number, fromNode: number, plaintext: Buffer): Buffer;
@@ -276,7 +276,7 @@ describe("MqttGateway MQTT publication", () => {
     // Synthetic test-only key.
     const key = Buffer.from(Array.from({ length: 16 }, (_, i) => i + 32));
     internals.client = mqttClient;
-    internals.connected = true;
+    internals._connected = true;
     internals.devices.set("device-1", makeState(key));
 
     const passthrough = Uint8Array.of(9, 8, 7, 6);
@@ -328,5 +328,23 @@ describe("MqttGateway MQTT publication", () => {
       "msh/US/CA/CentralCoast/2/e/TestChannel/!12345678",
       expect.any(Buffer),
     );
+  });
+});
+
+describe("MqttGateway shutdown", () => {
+  it("reuses stop and contains teardown errors", async () => {
+    const { gateway } = makeGateway();
+    const stop = vi.spyOn(gateway, "stop").mockImplementation(() => {
+      throw new Error("transport failed");
+    });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(gateway.shutdown()).resolves.toBeUndefined();
+
+    expect(stop).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledWith(
+      '[mqtt] gateway shutdown failed {"operation":"shutdown","err":{"name":"Error"}}',
+    );
+    error.mockRestore();
   });
 });

@@ -1,0 +1,39 @@
+.fieldRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.fieldLabel {
+  color: #64748b;
+  font-size: 0.75rem;
+  width: 9rem;
+  flex-shrink: 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.featureTitle {
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.featureDesc {
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+.mqttFields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid #1e293b;
+}

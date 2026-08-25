@@ -1,0 +1,19 @@
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.label {
+  color: #e2e8f0;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.sub {
+  color: #64748b;
+  font-size: 0.75rem;
+  margin-top: 0.2rem;
+  line-height: 1.4;
+}

@@ -1,4 +1,8 @@
+import { createLogger } from "./logger.js";
+
 import type { PGlite } from "@electric-sql/pglite";
+
+const log = createLogger("hw-models");
 
 const PROTO_URL =
   "https://raw.githubusercontent.com/meshtastic/protobufs/master/meshtastic/mesh.proto";
@@ -22,11 +26,14 @@ export async function syncHwModels(db: PGlite): Promise<void> {
 
   if (ageMs < REFRESH_MS) {
     const ageH = Math.round(ageMs / 3_600_000);
-    console.log(`[hw-models] table is ${ageH}h old — skipping fetch (refresh window: 72h)`);
+    log.info(
+      { operation: "sync", tableAgeHours: ageH, refreshWindowHours: 72 },
+      "hardware model table is fresh; skipping fetch",
+    );
     return;
   }
 
-  console.log("[hw-models] fetching HardwareModel enum from protobufs repo...");
+  log.info({ operation: "fetch" }, "fetching hardware models");
   try {
     const res = await fetch(PROTO_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -55,12 +62,9 @@ export async function syncHwModels(db: PGlite): Promise<void> {
       }
     });
 
-    console.log(`[hw-models] synced ${entries.length} models from protobufs repo`);
+    log.info({ operation: "sync", modelCount: entries.length }, "hardware models synced");
   } catch (err: unknown) {
-    console.warn(
-      "[hw-models] sync failed (will retry at next startup if still stale):",
-      err instanceof Error ? err.message : err,
-    );
+    log.warn({ operation: "sync", err }, "hardware model sync failed; will retry when stale");
   }
 }
 

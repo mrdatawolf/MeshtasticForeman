@@ -4,7 +4,7 @@
 > An API promise is a contract: given valid input, the server commits to a specific output.
 > This document covers every REST endpoint and WebSocket command in the daemon.
 > It is the authoritative reference for frontend developers and contributors.
-> *Note* - This is still alpha... these are not so much promises as intents at this point.
+> _Note_ - This is still alpha... these are not so much promises as intents at this point.
 
 **Base URL (REST):** `http://localhost:<PORT>/api`  
 **WebSocket:** `ws://localhost:<PORT>/ws`  
@@ -16,6 +16,7 @@
 ## Table of Contents
 
 ### REST — Device Management
+
 - [GET /api/devices](#get-apidevices)
 - [POST /api/devices/connect](#post-apidevicesconnect)
 - [GET /api/devices/:id](#get-apidevicesid)
@@ -24,20 +25,25 @@
 - [DELETE /api/devices/:id](#delete-apidevicesid)
 
 ### REST — Node Overrides
+
 - [GET /api/node-overrides](#get-apinode-overrides)
 - [PUT /api/node-overrides/:nodeId](#put-apinode-overridesnodeid)
 - [DELETE /api/node-overrides/:nodeId](#delete-apinode-overridesnodeid)
 
 ### REST — MQTT Nodes
+
 - [GET /api/mqtt-nodes](#get-apimqtt-nodes)
 
 ### REST — Hardware Models
+
 - [GET /api/hw-models](#get-apihw-models)
 
 ### REST — Traceroutes
+
 - [GET /api/traceroutes](#get-apitraceroutes)
 
 ### REST — Analytics
+
 - [GET /api/analytics/snr-history](#get-apianalyticssnr-history)
 - [GET /api/analytics/message-volume](#get-apianalyticsmessage-volume)
 - [GET /api/analytics/message-delivery](#get-apianalyticsmessage-delivery)
@@ -55,6 +61,7 @@
 - [GET /api/analytics/position-history](#get-apianalyticsposition-history)
 
 ### WebSocket
+
 - [Connection & Lifecycle](#websocket-connection--lifecycle)
 - [Client → Server Commands](#client--server-commands)
   - [message:send](#messagesend)
@@ -71,6 +78,7 @@
 - [Server → Client Events](#server--client-events)
 
 ### Reference
+
 - [Shared Types](#shared-types)
 - [The `since` Query Parameter](#the-since-query-parameter)
 - [Error Responses](#error-responses)
@@ -87,9 +95,11 @@ Returns all currently connected devices.
 **Parameters:** None
 
 **Returns:** `200 OK`
+
 ```ts
 DeviceInfo[]
 ```
+
 ```json
 [
   {
@@ -112,17 +122,20 @@ DeviceInfo[]
 Connect to a Meshtastic device on a serial port.
 
 **Request Body:** `application/json` — Zod validated
+
 ```ts
 {
-  port: string   // Serial port path, e.g. "/dev/ttyUSB0" or "COM3"
-  name: string   // Human-readable label for this device
+  port: string; // Serial port path, e.g. "/dev/ttyUSB0" or "COM3"
+  name: string; // Human-readable label for this device
 }
 ```
 
 **Returns:** `200 OK`
+
 ```ts
-DeviceInfo
+DeviceInfo;
 ```
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -133,10 +146,11 @@ DeviceInfo
 ```
 
 **Errors:**
-| Status | Condition |
-|--------|-----------|
-| `400` | Missing or invalid `port` / `name` |
-| `503` | Port already in use or device unreachable |
+
+| Status | Condition                                 |
+| ------ | ----------------------------------------- |
+| `400`  | Missing or invalid `port` / `name`        |
+| `503`  | Port already in use or device unreachable |
 
 **Source:** [routes/devices.ts](packages/daemon/src/routes/devices.ts)
 
@@ -147,19 +161,22 @@ DeviceInfo
 Returns a single connected device by its UUID.
 
 **Path Parameters:**
-| Param | Type | Description |
-|-------|------|-------------|
+
+| Param | Type | Description                             |
+| ----- | ---- | --------------------------------------- |
 | `id`  | UUID | Device identifier returned from connect |
 
 **Returns:** `200 OK`
+
 ```ts
-DeviceInfo
+DeviceInfo;
 ```
 
 **Errors:**
-| Status | Condition |
-|--------|-----------|
-| `404` | No device with that ID |
+
+| Status | Condition              |
+| ------ | ---------------------- |
+| `404`  | No device with that ID |
 
 **Source:** [routes/devices.ts](packages/daemon/src/routes/devices.ts)
 
@@ -170,14 +187,17 @@ DeviceInfo
 Returns all nodes seen by a specific device.
 
 **Path Parameters:**
-| Param | Type | Description |
-|-------|------|-------------|
+
+| Param | Type | Description       |
+| ----- | ---- | ----------------- |
 | `id`  | UUID | Device identifier |
 
 **Returns:** `200 OK`
+
 ```ts
 NodeInfo[]
 ```
+
 ```json
 [
   {
@@ -197,9 +217,10 @@ NodeInfo[]
 ```
 
 **Errors:**
-| Status | Condition |
-|--------|-----------|
-| `404` | No device with that ID |
+
+| Status | Condition              |
+| ------ | ---------------------- |
+| `404`  | No device with that ID |
 
 **Source:** [routes/devices.ts](packages/daemon/src/routes/devices.ts)
 
@@ -210,14 +231,17 @@ NodeInfo[]
 Returns the full configuration snapshot for a device.
 
 **Path Parameters:**
-| Param | Type | Description |
-|-------|------|-------------|
+
+| Param | Type | Description       |
+| ----- | ---- | ----------------- |
 | `id`  | UUID | Device identifier |
 
 **Returns:** `200 OK`
+
 ```ts
-DeviceConfig
+DeviceConfig;
 ```
+
 ```json
 {
   "radio": { ... },
@@ -226,9 +250,10 @@ DeviceConfig
 ```
 
 **Errors:**
-| Status | Condition |
-|--------|-----------|
-| `404` | No device with that ID |
+
+| Status | Condition              |
+| ------ | ---------------------- |
+| `404`  | No device with that ID |
 
 **Source:** [routes/devices.ts](packages/daemon/src/routes/devices.ts)
 
@@ -239,16 +264,18 @@ DeviceConfig
 Disconnect and remove a device.
 
 **Path Parameters:**
-| Param | Type | Description |
-|-------|------|-------------|
+
+| Param | Type | Description       |
+| ----- | ---- | ----------------- |
 | `id`  | UUID | Device identifier |
 
 **Returns:** `204 No Content`
 
 **Errors:**
-| Status | Condition |
-|--------|-----------|
-| `404` | No device with that ID |
+
+| Status | Condition              |
+| ------ | ---------------------- |
+| `404`  | No device with that ID |
 
 **Source:** [routes/devices.ts](packages/daemon/src/routes/devices.ts)
 
@@ -265,9 +292,11 @@ Returns all stored node overrides across all devices.
 **Parameters:** None
 
 **Returns:** `200 OK`
+
 ```ts
 NodeOverride[]
 ```
+
 ```json
 [
   {
@@ -290,11 +319,13 @@ NodeOverride[]
 Create or update the override for a specific node. All body fields are optional — only supplied fields are updated (patch semantics).
 
 **Path Parameters:**
-| Param    | Type   | Description |
-|----------|--------|-------------|
+
+| Param    | Type   | Description            |
+| -------- | ------ | ---------------------- |
 | `nodeId` | number | Meshtastic node number |
 
 **Request Body:** `application/json` — all fields optional, Zod validated
+
 ```ts
 {
   aliasName?: string   // Display name to show instead of broadcast name
@@ -306,14 +337,16 @@ Create or update the override for a specific node. All body fields are optional 
 ```
 
 **Returns:** `200 OK`
+
 ```ts
-NodeOverride   // The full override record after update
+NodeOverride; // The full override record after update
 ```
 
 **Errors:**
-| Status | Condition |
-|--------|-----------|
-| `400` | Invalid body shape |
+
+| Status | Condition          |
+| ------ | ------------------ |
+| `400`  | Invalid body shape |
 
 **Source:** [routes/devices.ts](packages/daemon/src/routes/devices.ts)
 
@@ -324,16 +357,18 @@ NodeOverride   // The full override record after update
 Remove an override, reverting to broadcast values.
 
 **Path Parameters:**
-| Param    | Type   | Description |
-|----------|--------|-------------|
+
+| Param    | Type   | Description            |
+| -------- | ------ | ---------------------- |
 | `nodeId` | number | Meshtastic node number |
 
 **Returns:** `204 No Content`
 
 **Errors:**
-| Status | Condition |
-|--------|-----------|
-| `404` | No override exists for that node |
+
+| Status | Condition                        |
+| ------ | -------------------------------- |
+| `404`  | No override exists for that node |
 
 **Source:** [routes/devices.ts](packages/daemon/src/routes/devices.ts)
 
@@ -348,6 +383,7 @@ Returns nodes received via the MQTT gateway (rather than direct serial connectio
 **Parameters:** None
 
 **Returns:** `200 OK`
+
 ```ts
 MqttNode[]
 ```
@@ -365,13 +401,19 @@ Returns the list of known Meshtastic hardware model numbers and their human-read
 **Parameters:** None
 
 **Returns:** `200 OK`
+
 ```ts
-{ model_num: number; name: string }[]
+{
+  model_num: number;
+  name: string;
+}
+[];
 ```
+
 ```json
 [
   { "model_num": 43, "name": "TLORA_V2_1_1P6" },
-  { "model_num": 6,  "name": "TBEAM" }
+  { "model_num": 6, "name": "TBEAM" }
 ]
 ```
 
@@ -386,12 +428,14 @@ Returns the list of known Meshtastic hardware model numbers and their human-read
 Returns recorded traceroute results, optionally filtered.
 
 **Query Parameters:**
-| Param      | Type   | Required | Description |
-|------------|--------|----------|-------------|
+
+| Param      | Type   | Required | Description                                                           |
+| ---------- | ------ | -------- | --------------------------------------------------------------------- |
 | `since`    | string | No       | Time filter — see [The `since` parameter](#the-since-query-parameter) |
-| `deviceId` | UUID   | No       | Filter to a single device |
+| `deviceId` | UUID   | No       | Filter to a single device                                             |
 
 **Returns:** `200 OK`
+
 ```ts
 {
   id:          string
@@ -411,6 +455,7 @@ Returns recorded traceroute results, optionally filtered.
 ## REST — Analytics
 
 All analytics endpoints share these conventions:
+
 - **Method:** `GET`
 - **Auth:** None
 - **`since` param:** Accepts shorthand (`1h`, `6h`, `24h`, `7d`, `30d`, `all`) or ISO 8601 — see [The `since` parameter](#the-since-query-parameter)
@@ -425,21 +470,24 @@ All analytics endpoints share these conventions:
 Signal quality over time, bucketed into 5-minute averages per node.
 
 **Query Parameters:**
-| Param      | Type   | Required | Description |
-|------------|--------|----------|-------------|
-| `since`    | string | No       | Time window |
-| `nodeId`   | number | No       | Filter to one node |
+
+| Param      | Type   | Required | Description          |
+| ---------- | ------ | -------- | -------------------- |
+| `since`    | string | No       | Time window          |
+| `nodeId`   | number | No       | Filter to one node   |
 | `deviceId` | UUID   | No       | Filter to one device |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  ts:     string   // Bucket start (ISO 8601)
-  nodeId: number
-  snr:    number   // Average SNR (dB)
-  rssi:   number   // Average RSSI (dBm)
-  count:  number   // Packets in this bucket
-}[]
+  ts: string; // Bucket start (ISO 8601)
+  nodeId: number;
+  snr: number; // Average SNR (dB)
+  rssi: number; // Average RSSI (dBm)
+  count: number; // Packets in this bucket
+}
+[];
 ```
 
 ---
@@ -449,21 +497,24 @@ Signal quality over time, bucketed into 5-minute averages per node.
 Message counts grouped by time bucket and direction (received / sent / relayed).
 
 **Query Parameters:**
-| Param      | Type             | Required | Description |
-|------------|------------------|----------|-------------|
-| `since`    | string           | No       | Time window |
-| `bucket`   | `"hour"` \| `"day"` | No    | Aggregation granularity (default: `"hour"`) |
-| `deviceId` | UUID             | No       | Filter to one device |
+
+| Param      | Type                | Required | Description                                 |
+| ---------- | ------------------- | -------- | ------------------------------------------- |
+| `since`    | string              | No       | Time window                                 |
+| `bucket`   | `"hour"` \| `"day"` | No       | Aggregation granularity (default: `"hour"`) |
+| `deviceId` | UUID                | No       | Filter to one device                        |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  ts:      string   // Bucket start (ISO 8601)
-  received: number
-  sent:     number
-  relayed:  number
-  total:    number
-}[]
+  ts: string; // Bucket start (ISO 8601)
+  received: number;
+  sent: number;
+  relayed: number;
+  total: number;
+}
+[];
 ```
 
 ---
@@ -473,12 +524,14 @@ Message counts grouped by time bucket and direction (received / sent / relayed).
 Delivery success breakdown for messages that requested an ACK.
 
 **Query Parameters:**
-| Param      | Type   | Required | Description |
-|------------|--------|----------|-------------|
-| `since`    | string | No       | Time window |
+
+| Param      | Type   | Required | Description          |
+| ---------- | ------ | -------- | -------------------- |
+| `since`    | string | No       | Time window          |
 | `deviceId` | UUID   | No       | Filter to one device |
 
 **Returns:** `200 OK`
+
 ```ts
 {
   acked:      number
@@ -496,21 +549,24 @@ Delivery success breakdown for messages that requested an ACK.
 Top nodes by total message activity.
 
 **Query Parameters:**
-| Param      | Type   | Required | Description |
-|------------|--------|----------|-------------|
-| `since`    | string | No       | Time window |
+
+| Param      | Type   | Required | Description                               |
+| ---------- | ------ | -------- | ----------------------------------------- |
+| `since`    | string | No       | Time window                               |
 | `limit`    | number | No       | Max nodes to return (1–100, default `20`) |
-| `deviceId` | UUID   | No       | Filter to one device |
+| `deviceId` | UUID   | No       | Filter to one device                      |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  nodeId:   number
-  received: number
-  sent:     number
-  relayed:  number
-  total:    number
-}[]
+  nodeId: number;
+  received: number;
+  sent: number;
+  relayed: number;
+  total: number;
+}
+[];
 ```
 
 ---
@@ -520,17 +576,20 @@ Top nodes by total message activity.
 Packet counts by Meshtastic application layer (PortNum).
 
 **Query Parameters:**
-| Param      | Type   | Required | Description |
-|------------|--------|----------|-------------|
-| `since`    | string | No       | Time window |
+
+| Param      | Type   | Required | Description          |
+| ---------- | ------ | -------- | -------------------- |
+| `since`    | string | No       | Time window          |
 | `deviceId` | UUID   | No       | Filter to one device |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  portnumName: string   // e.g. "TEXT_MESSAGE_APP", "TELEMETRY_APP"
-  count:       number
-}[]
+  portnumName: string; // e.g. "TEXT_MESSAGE_APP", "TELEMETRY_APP"
+  count: number;
+}
+[];
 ```
 
 ---
@@ -540,13 +599,15 @@ Packet counts by Meshtastic application layer (PortNum).
 Stacked packet counts over time, broken down by PortNum.
 
 **Query Parameters:**
-| Param      | Type                   | Required | Description |
-|------------|------------------------|----------|-------------|
-| `since`    | string                 | No       | Time window |
+
+| Param      | Type                   | Required | Description                       |
+| ---------- | ---------------------- | -------- | --------------------------------- |
+| `since`    | string                 | No       | Time window                       |
 | `bucket`   | `"minute"` \| `"hour"` | No       | Granularity (default: `"minute"`) |
-| `deviceId` | UUID                   | No       | Filter to one device |
+| `deviceId` | UUID                   | No       | Filter to one device              |
 
 **Returns:** `200 OK`
+
 ```ts
 {
   ts:     string                    // Bucket start (ISO 8601)
@@ -562,16 +623,19 @@ Stacked packet counts over time, broken down by PortNum.
 How many nodes are at each hop distance from the device.
 
 **Query Parameters:**
-| Param      | Type | Required | Description |
-|------------|------|----------|-------------|
+
+| Param      | Type | Required | Description          |
+| ---------- | ---- | -------- | -------------------- |
 | `deviceId` | UUID | No       | Filter to one device |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  hopsAway: number
-  count:    number
-}[]
+  hopsAway: number;
+  count: number;
+}
+[];
 ```
 
 ---
@@ -581,17 +645,20 @@ How many nodes are at each hop distance from the device.
 Nodes grouped by hardware model.
 
 **Query Parameters:**
-| Param      | Type | Required | Description |
-|------------|------|----------|-------------|
+
+| Param      | Type | Required | Description          |
+| ---------- | ---- | -------- | -------------------- |
 | `deviceId` | UUID | No       | Filter to one device |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  hwModel:     number
-  hwModelName: string
-  count:       number
-}[]
+  hwModel: number;
+  hwModelName: string;
+  count: number;
+}
+[];
 ```
 
 ---
@@ -601,21 +668,24 @@ Nodes grouped by hardware model.
 Message counts broken down by channel.
 
 **Query Parameters:**
-| Param      | Type   | Required | Description |
-|------------|--------|----------|-------------|
-| `since`    | string | No       | Time window |
+
+| Param      | Type   | Required | Description          |
+| ---------- | ------ | -------- | -------------------- |
+| `since`    | string | No       | Time window          |
 | `deviceId` | UUID   | No       | Filter to one device |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  channelIndex: number   // 0–7
-  channelName:  string
-  received:     number
-  sent:         number
-  relayed:      number
-  total:        number
-}[]
+  channelIndex: number; // 0–7
+  channelName: string;
+  received: number;
+  sent: number;
+  relayed: number;
+  total: number;
+}
+[];
 ```
 
 ---
@@ -625,22 +695,25 @@ Message counts broken down by channel.
 ACK round-trip latency distribution for messages that requested acknowledgement.
 
 **Query Parameters:**
-| Param      | Type   | Required | Description |
-|------------|--------|----------|-------------|
-| `since`    | string | No       | Time window |
+
+| Param      | Type   | Required | Description          |
+| ---------- | ------ | -------- | -------------------- |
+| `since`    | string | No       | Time window          |
 | `deviceId` | UUID   | No       | Filter to one device |
 
 **Returns:** `200 OK`
+
 ```ts
 {
   buckets: {
-    label: string   // e.g. "< 1s", "1–5s", "> 30s"
-    maxMs: number
-    count: number
-  }[]
-  medianMs:     number
-  p95Ms:        number
-  totalSamples: number
+    label: string; // e.g. "< 1s", "1–5s", "> 30s"
+    maxMs: number;
+    count: number;
+  }
+  [];
+  medianMs: number;
+  p95Ms: number;
+  totalSamples: number;
 }
 ```
 
@@ -651,27 +724,30 @@ ACK round-trip latency distribution for messages that requested acknowledgement.
 Device and environment telemetry, bucketed into 5-minute averages per node.
 
 **Query Parameters:**
-| Param      | Type   | Required | Description |
-|------------|--------|----------|-------------|
-| `since`    | string | No       | Time window |
-| `nodeId`   | number | No       | Filter to one node |
+
+| Param      | Type   | Required | Description          |
+| ---------- | ------ | -------- | -------------------- |
+| `since`    | string | No       | Time window          |
+| `nodeId`   | number | No       | Filter to one node   |
 | `deviceId` | UUID   | No       | Filter to one device |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  ts:                   string   // Bucket start (ISO 8601)
-  nodeId:               number
-  variantCase:          string   // "deviceMetrics" | "environmentMetrics"
-  batteryLevel:         number | null   // 0–100 %
-  voltage:              number | null   // Volts
-  channelUtilization:   number | null   // %
-  airUtilTx:            number | null   // %
-  uptimeSeconds:        number | null
-  temperature:          number | null   // °C
-  relativeHumidity:     number | null   // %
-  barometricPressure:   number | null   // hPa
-}[]
+  ts: string; // Bucket start (ISO 8601)
+  nodeId: number;
+  variantCase: string; // "deviceMetrics" | "environmentMetrics"
+  batteryLevel: number | null; // 0–100 %
+  voltage: number | null; // Volts
+  channelUtilization: number | null; // %
+  airUtilTx: number | null; // %
+  uptimeSeconds: number | null;
+  temperature: number | null; // °C
+  relativeHumidity: number | null; // %
+  barometricPressure: number | null; // hPa
+}
+[];
 ```
 
 ---
@@ -681,19 +757,22 @@ Device and environment telemetry, bucketed into 5-minute averages per node.
 Per-pair SNR matrix — useful for rendering a link quality heatmap.
 
 **Query Parameters:**
-| Param      | Type   | Required | Description |
-|------------|--------|----------|-------------|
-| `since`    | string | No       | Time window |
+
+| Param      | Type   | Required | Description          |
+| ---------- | ------ | -------- | -------------------- |
+| `since`    | string | No       | Time window          |
 | `deviceId` | UUID   | No       | Filter to one device |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  fromNodeId:   number
-  toNodeId:     number
-  avgSnr:       number   // dB
-  messageCount: number
-}[]
+  fromNodeId: number;
+  toNodeId: number;
+  avgSnr: number; // dB
+  messageCount: number;
+}
+[];
 ```
 
 ---
@@ -703,19 +782,22 @@ Per-pair SNR matrix — useful for rendering a link quality heatmap.
 Per-node message counts over time — suitable for a Gantt-style activity chart.
 
 **Query Parameters:**
-| Param      | Type             | Required | Description |
-|------------|------------------|----------|-------------|
-| `since`    | string           | No       | Time window |
-| `bucket`   | `"hour"` \| `"day"` | No    | Granularity |
-| `deviceId` | UUID             | No       | Filter to one device |
+
+| Param      | Type                | Required | Description          |
+| ---------- | ------------------- | -------- | -------------------- |
+| `since`    | string              | No       | Time window          |
+| `bucket`   | `"hour"` \| `"day"` | No       | Granularity          |
+| `deviceId` | UUID                | No       | Filter to one device |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  ts:     string   // Bucket start (ISO 8601)
-  nodeId: number
-  count:  number
-}[]
+  ts: string; // Bucket start (ISO 8601)
+  nodeId: number;
+  count: number;
+}
+[];
 ```
 
 ---
@@ -725,19 +807,22 @@ Per-node message counts over time — suitable for a Gantt-style activity chart.
 Most recent heard-neighbor relationships between nodes (for graph visualizations).
 
 **Query Parameters:**
-| Param      | Type   | Required | Description |
-|------------|--------|----------|-------------|
-| `since`    | string | No       | Time window |
+
+| Param      | Type   | Required | Description          |
+| ---------- | ------ | -------- | -------------------- |
+| `since`    | string | No       | Time window          |
 | `deviceId` | UUID   | No       | Filter to one device |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  fromNodeId: number
-  toNodeId:   number
-  snr:        number   // Most recent SNR (dB)
-  lastSeen:   string   // ISO 8601
-}[]
+  fromNodeId: number;
+  toNodeId: number;
+  snr: number; // Most recent SNR (dB)
+  lastSeen: string; // ISO 8601
+}
+[];
 ```
 
 ---
@@ -747,26 +832,29 @@ Most recent heard-neighbor relationships between nodes (for graph visualizations
 GPS position fixes, newest first.
 
 **Query Parameters:**
-| Param      | Type   | Required | Description |
-|------------|--------|----------|-------------|
-| `since`    | string | No       | Time window |
-| `nodeId`   | number | No       | Filter to one node |
-| `deviceId` | UUID   | No       | Filter to one device |
+
+| Param      | Type   | Required | Description                        |
+| ---------- | ------ | -------- | ---------------------------------- |
+| `since`    | string | No       | Time window                        |
+| `nodeId`   | number | No       | Filter to one node                 |
+| `deviceId` | UUID   | No       | Filter to one device               |
 | `limit`    | number | No       | Max rows (1–10000, default `2000`) |
 
 **Returns:** `200 OK`
+
 ```ts
 {
-  id:          string
-  nodeId:      number
-  latitude:    number   // Decimal degrees
-  longitude:   number   // Decimal degrees
-  altitude:    number   // Meters
-  speed:       number | null   // km/h
-  groundTrack: number | null   // Degrees
-  satsInView:  number | null
-  recordedAt:  string   // ISO 8601
-}[]
+  id: string;
+  nodeId: number;
+  latitude: number; // Decimal degrees
+  longitude: number; // Decimal degrees
+  altitude: number; // Meters
+  speed: number | null; // km/h
+  groundTrack: number | null; // Degrees
+  satsInView: number | null;
+  recordedAt: string; // ISO 8601
+}
+[];
 ```
 
 ---
@@ -778,6 +866,7 @@ GPS position fixes, newest first.
 **Endpoint:** `ws://localhost:<PORT>/ws`
 
 **On connection, the server immediately pushes:**
+
 1. `device:list` — all connected devices
 2. `node:list` — nodes for each device
 3. `device:config` — config snapshot for each device
@@ -787,12 +876,19 @@ GPS position fixes, newest first.
 7. `log:snapshot` — recent console log
 
 **All messages use this envelope:**
+
 ```ts
 // Outbound (server → client)
-{ type: string; payload: unknown }
+{
+  type: string;
+  payload: unknown;
+}
 
 // Inbound (client → server)
-{ type: string; payload: unknown }
+{
+  type: string;
+  payload: unknown;
+}
 ```
 
 Messages are JSON strings. Validation failures return an `error` event.
@@ -802,6 +898,7 @@ Messages are JSON strings. Validation failures return an `error` event.
 ## Client → Server Commands
 
 All commands are Zod-validated on the server. Invalid payloads return:
+
 ```json
 { "type": "error", "payload": { "code": "VALIDATION_ERROR", "message": "..." } }
 ```
@@ -815,6 +912,7 @@ All commands are Zod-validated on the server. Invalid payloads return:
 Send a text message from the device to the mesh.
 
 **Payload:**
+
 ```ts
 {
   deviceId:     string   // UUID of the connected device
@@ -826,6 +924,7 @@ Send a text message from the device to the mesh.
 ```
 
 **Server responds with:**
+
 - `message:sent` event when the packet is queued
 - `message:ack` event when acknowledgement is received (if `wantAck: true`)
 
@@ -836,6 +935,7 @@ Send a text message from the device to the mesh.
 Fetch paginated message history for a channel or DM thread.
 
 **Payload:**
+
 ```ts
 {
   deviceId:      string    // UUID
@@ -855,10 +955,11 @@ Fetch paginated message history for a channel or DM thread.
 Toggle raw packet streaming for this WebSocket client. Only subscribed clients receive `packet:raw` events.
 
 **Payload:**
+
 ```ts
 {
-  deviceId: string    // UUID
-  enabled:  boolean
+  deviceId: string; // UUID
+  enabled: boolean;
 }
 ```
 
@@ -871,9 +972,10 @@ Toggle raw packet streaming for this WebSocket client. Only subscribed clients r
 Request a fresh node list for a device.
 
 **Payload:**
+
 ```ts
 {
-  deviceId: string   // UUID
+  deviceId: string; // UUID
 }
 ```
 
@@ -896,10 +998,11 @@ Request the current list of MQTT-sourced nodes.
 Trigger a position request to a specific node over the mesh.
 
 **Payload:**
+
 ```ts
 {
-  deviceId: string   // UUID
-  nodeId:   number   // Target node ID
+  deviceId: string; // UUID
+  nodeId: number; // Target node ID
 }
 ```
 
@@ -912,10 +1015,11 @@ Trigger a position request to a specific node over the mesh.
 Initiate a traceroute to a specific node.
 
 **Payload:**
+
 ```ts
 {
-  deviceId: string   // UUID
-  nodeId:   number   // Target node ID
+  deviceId: string; // UUID
+  nodeId: number; // Target node ID
 }
 ```
 
@@ -928,10 +1032,11 @@ Initiate a traceroute to a specific node.
 Remove a node from the device's node database.
 
 **Payload:**
+
 ```ts
 {
-  deviceId: string   // UUID
-  nodeId:   number   // Node to remove
+  deviceId: string; // UUID
+  nodeId: number; // Node to remove
 }
 ```
 
@@ -944,9 +1049,10 @@ Remove a node from the device's node database.
 Enable or disable the MQTT gateway.
 
 **Payload:**
+
 ```ts
 {
-  enabled: boolean
+  enabled: boolean;
 }
 ```
 
@@ -959,9 +1065,10 @@ Enable or disable the MQTT gateway.
 Request the current configuration snapshot for a device.
 
 **Payload:**
+
 ```ts
 {
-  deviceId: string   // UUID
+  deviceId: string; // UUID
 }
 ```
 
@@ -974,12 +1081,13 @@ Request the current configuration snapshot for a device.
 Apply a configuration change to a device section.
 
 **Payload:**
+
 ```ts
 {
-  deviceId:  string                      // UUID
-  namespace: "radio" | "module"          // Config namespace
-  section:   string                      // Section key within namespace
-  value:     Record<string, unknown>     // Partial config values to apply
+  deviceId: string; // UUID
+  namespace: "radio" | "module"; // Config namespace
+  section: string; // Section key within namespace
+  value: Record<string, unknown>; // Partial config values to apply
 }
 ```
 
@@ -991,31 +1099,31 @@ Apply a configuration change to a device section.
 
 The server pushes these events both in response to commands and proactively as the mesh state changes.
 
-| Event Type          | Trigger                                      | Payload Type |
-|---------------------|----------------------------------------------|--------------|
-| `device:list`       | On connect; device added/removed             | `DeviceInfo[]` |
-| `device:status`     | Device status change                         | `DeviceInfo` |
-| `device:config`     | On connect; config requested or changed      | `DeviceConfig` |
-| `node:list`         | On connect; `nodes:request-list` received    | `NodeInfo[]` |
-| `node:update`       | Node heard / position received               | `NodeInfo` |
-| `node:removed`      | `node:remove` command processed              | `{ nodeId: number }` |
-| `message:received`  | Incoming mesh message                        | `Message` |
-| `message:sent`      | `message:send` command queued               | `Message` |
-| `message:history`   | `messages:request-history` processed         | `Message[]` |
-| `message:ack`       | ACK or error received for a sent message     | `{ messageId, packetId, status, ackAt, ackError }` |
-| `packet:raw`        | Any packet (subscribed clients only)         | `Packet` |
-| `channel:list`      | On connect; channel update                   | `Channel[]` |
-| `waypoint:list`     | On connect; waypoint update                  | `Waypoint[]` |
-| `waypoint:update`   | Waypoint received or changed                 | `Waypoint` |
-| `mqtt_node:list`    | On connect; `mqtt_nodes:request-list`        | `MqttNode[]` |
-| `mqtt_node:update`  | MQTT node update received                    | `MqttNode` |
-| `mqtt:status`       | On connect; `mqtt:toggle` processed          | `{ enabled: boolean }` |
-| `traceroute:result` | Traceroute response received from mesh       | `{ deviceId, nodeId, route: number[], routeBack: number[] }` |
-| `activity:snapshot` | On connect                                   | `ActivityEntry[]` |
-| `activity:entry`    | Any loggable daemon event                    | `ActivityEntry` |
-| `log:snapshot`      | On connect                                   | `LogEntry[]` |
-| `log:entry`         | Console log line from daemon                 | `LogEntry` |
-| `error`             | Validation failure or command error          | `{ code: string, message: string }` |
+| Event Type          | Trigger                                   | Payload Type                                                 |
+| ------------------- | ----------------------------------------- | ------------------------------------------------------------ |
+| `device:list`       | On connect; device added/removed          | `DeviceInfo[]`                                               |
+| `device:status`     | Device status change                      | `DeviceInfo`                                                 |
+| `device:config`     | On connect; config requested or changed   | `DeviceConfig`                                               |
+| `node:list`         | On connect; `nodes:request-list` received | `NodeInfo[]`                                                 |
+| `node:update`       | Node heard / position received            | `NodeInfo`                                                   |
+| `node:removed`      | `node:remove` command processed           | `{ nodeId: number }`                                         |
+| `message:received`  | Incoming mesh message                     | `Message`                                                    |
+| `message:sent`      | `message:send` command queued             | `Message`                                                    |
+| `message:history`   | `messages:request-history` processed      | `Message[]`                                                  |
+| `message:ack`       | ACK or error received for a sent message  | `{ messageId, packetId, status, ackAt, ackError }`           |
+| `packet:raw`        | Any packet (subscribed clients only)      | `Packet`                                                     |
+| `channel:list`      | On connect; channel update                | `Channel[]`                                                  |
+| `waypoint:list`     | On connect; waypoint update               | `Waypoint[]`                                                 |
+| `waypoint:update`   | Waypoint received or changed              | `Waypoint`                                                   |
+| `mqtt_node:list`    | On connect; `mqtt_nodes:request-list`     | `MqttNode[]`                                                 |
+| `mqtt_node:update`  | MQTT node update received                 | `MqttNode`                                                   |
+| `mqtt:status`       | On connect; `mqtt:toggle` processed       | `{ enabled: boolean }`                                       |
+| `traceroute:result` | Traceroute response received from mesh    | `{ deviceId, nodeId, route: number[], routeBack: number[] }` |
+| `activity:snapshot` | On connect                                | `ActivityEntry[]`                                            |
+| `activity:entry`    | Any loggable daemon event                 | `ActivityEntry`                                              |
+| `log:snapshot`      | On connect                                | `LogEntry[]`                                                 |
+| `log:entry`         | Console log line from daemon              | `LogEntry`                                                   |
+| `error`             | Validation failure or command error       | `{ code: string, message: string }`                          |
 
 ---
 
@@ -1026,16 +1134,18 @@ The server pushes these events both in response to commands and proactively as t
 All types are defined in [shared/src/types.ts](packages/shared/src/types.ts) and [shared/src/ws-protocol.ts](packages/shared/src/ws-protocol.ts).
 
 **`DeviceInfo`**
+
 ```ts
 {
-  id:     string   // UUID
-  name:   string
-  port:   string
-  status: "connected" | "disconnected" | "error"
+  id: string; // UUID
+  name: string;
+  port: string;
+  status: "connected" | "disconnected" | "error";
 }
 ```
 
 **`NodeInfo`**
+
 ```ts
 {
   nodeId:    number
@@ -1053,6 +1163,7 @@ All types are defined in [shared/src/types.ts](packages/shared/src/types.ts) and
 ```
 
 **`NodeOverride`**
+
 ```ts
 {
   nodeId:     number
@@ -1065,6 +1176,7 @@ All types are defined in [shared/src/types.ts](packages/shared/src/types.ts) and
 ```
 
 **`Message`**
+
 ```ts
 {
   id:           string
@@ -1086,23 +1198,25 @@ All types are defined in [shared/src/types.ts](packages/shared/src/types.ts) and
 ```
 
 **`MqttNode`**
+
 ```ts
 {
-  nodeId:    number
-  longName:  string
-  shortName: string
-  hwModel:   number
-  lastHeard: string   // ISO 8601
+  nodeId: number;
+  longName: string;
+  shortName: string;
+  hwModel: number;
+  lastHeard: string; // ISO 8601
 }
 ```
 
 **`ActivityEntry`**
+
 ```ts
 {
-  id:        string
-  level:     "info" | "warn" | "error"
-  message:   string
-  timestamp: string   // ISO 8601
+  id: string;
+  level: "info" | "warn" | "error";
+  message: string;
+  timestamp: string; // ISO 8601
 }
 ```
 
@@ -1112,15 +1226,15 @@ All types are defined in [shared/src/types.ts](packages/shared/src/types.ts) and
 
 All analytics endpoints accept an optional `since` param that filters to records after a point in time.
 
-| Value      | Meaning |
-|------------|---------|
-| `1h`       | Last 1 hour |
-| `6h`       | Last 6 hours |
-| `24h`      | Last 24 hours |
-| `7d`       | Last 7 days |
-| `30d`      | Last 30 days |
-| `all`      | No time filter — all records |
-| ISO 8601   | Custom start time, e.g. `2025-04-01T00:00:00Z` |
+| Value    | Meaning                                        |
+| -------- | ---------------------------------------------- |
+| `1h`     | Last 1 hour                                    |
+| `6h`     | Last 6 hours                                   |
+| `24h`    | Last 24 hours                                  |
+| `7d`     | Last 7 days                                    |
+| `30d`    | Last 30 days                                   |
+| `all`    | No time filter — all records                   |
+| ISO 8601 | Custom start time, e.g. `2025-04-01T00:00:00Z` |
 
 Omitting `since` uses a sensible server-side default (varies per endpoint).
 
@@ -1131,6 +1245,7 @@ Omitting `since` uses a sensible server-side default (varies per endpoint).
 ### Error Responses
 
 **REST validation errors** (Zod)
+
 ```json
 {
   "error": {
@@ -1140,7 +1255,21 @@ Omitting `since` uses a sensible server-side default (varies per endpoint).
 }
 ```
 
+This `400` response shape applies uniformly to REST query strings, path parameters, and JSON
+bodies across all route modules. In particular:
+
+- Device and proposal IDs in REST paths and `deviceId` query filters must be UUIDs.
+- Bounded pagination and analytics inputs such as `limit` and `offset` are rejected when they
+  are non-numeric or outside an endpoint's documented range; they are not silently clamped.
+- Proposal create/update bodies must be JSON objects. Arrays, `null`, and primitive JSON values
+  return this validation error instead of causing an internal server error.
+
+The analytics `since` parsing behavior is unchanged: values that cannot be parsed still mean no
+time filter. `/api/traceroutes` continues to reject an invalid `since` value with its existing
+plain-string validation response.
+
 **REST runtime errors**
+
 ```json
 {
   "error": "Device not found"
@@ -1148,6 +1277,7 @@ Omitting `since` uses a sensible server-side default (varies per endpoint).
 ```
 
 **WebSocket errors**
+
 ```json
 {
   "type": "error",
@@ -1162,10 +1292,10 @@ Omitting `since` uses a sensible server-side default (varies per endpoint).
 
 ### HTTP Status Codes
 
-| Code  | Meaning |
-|-------|---------|
-| `200` | Success with body |
-| `204` | Success, no body (DELETE) |
-| `400` | Bad request — invalid parameters or body |
-| `404` | Resource not found |
+| Code  | Meaning                                                  |
+| ----- | -------------------------------------------------------- |
+| `200` | Success with body                                        |
+| `204` | Success, no body (DELETE)                                |
+| `400` | Bad request — invalid parameters or body                 |
+| `404` | Resource not found                                       |
 | `503` | Service unavailable — device unreachable or DB not ready |

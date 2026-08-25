@@ -1,0 +1,85 @@
+.gpsContainer {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.gpsDotOn {
+  color: #22c55e;
+  font-size: 0.65rem;
+}
+
+.gpsDotOff {
+  color: #ef4444;
+  font-size: 0.65rem;
+}
+
+.gpsPanel {
+  min-width: 300px;
+}
+
+.gpsTable {
+  width: 100%;
+  font-size: 0.75rem;
+  border-collapse: collapse;
+}
+
+.gpsTableLabel {
+  color: #475569;
+  padding-right: 0.75rem;
+  padding-bottom: 0.15rem;
+}
+
+.gpsTableValue {
+  color: #e2e8f0;
+  font-family: monospace;
+}
+
+.gpsWaiting {
+  color: #475569;
+  font-size: 0.75rem;
+}
+
+.gpsRefreshBtn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  opacity: 1;
+}
+
+.gpsRefreshBtn.gpsRefreshBtnPending {
+  cursor: default;
+  opacity: 0.7;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.gpsSpinner {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 2px solid #475569;
+  border-top-color: #94a3b8;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.gpsNoNodeId {
+  color: #475569;
+  font-size: 0.7rem;
+  margin-top: 0.4rem;
+  display: block;
+}

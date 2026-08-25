@@ -1,6 +1,8 @@
+import { formatNodeId, resolveNodeName } from "@foreman/shared";
 import { useState, useEffect, Fragment } from "react";
 
 import logo from "../assets/logo.png";
+import { formatRelativeTime } from "../lib/relativeTime.js";
 
 import { NodeDetailPanel } from "./NodeDetailPanel.js";
 
@@ -11,16 +13,7 @@ import type { DeviceInfo, NodeInfo, MqttNode } from "@foreman/shared";
 // ---------------------------------------------------------------------------
 
 function formatLastHeard(iso: string | null): string {
-  if (!iso) return "—";
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
-function nodeHex(nodeId: number): string {
-  return `!${nodeId.toString(16).padStart(8, "0")}`;
+  return formatRelativeTime(iso);
 }
 
 function formatDistance(distanceM: number | null): string {
@@ -251,7 +244,7 @@ function filterNodes(list: MergedNode[], query: string): MergedNode[] {
     const p = m.mesh ?? m.mqtt!;
     const longName = (p.longName ?? "").toLowerCase();
     const shortName = (p.shortName ?? "").toLowerCase();
-    const hexFull = nodeHex(m.nodeId).toLowerCase(); // "!abcdef01"
+    const hexFull = formatNodeId(m.nodeId).toLowerCase(); // "!abcdef01"
     const hexBare = hexFull.slice(1); // "abcdef01"
     const dec = String(m.nodeId);
     const searchHex = q.startsWith("!") ? q.slice(1) : q;
@@ -284,8 +277,8 @@ function sortMerged(
     let cmp = 0;
     switch (col) {
       case "name": {
-        const na = (pa.longName ?? pa.shortName ?? "").toLowerCase();
-        const nb = (pb.longName ?? pb.shortName ?? "").toLowerCase();
+        const na = resolveNodeName(a.nodeId, pa, { fallback: "" }).toLowerCase();
+        const nb = resolveNodeName(b.nodeId, pb, { fallback: "" }).toLowerCase();
         cmp = na.localeCompare(nb);
         break;
       }
@@ -682,12 +675,12 @@ function NodeRows({ merged, selectedNodeId, protoMap, onRowClick }: NodeRowsProp
         onClick={() => onRowClick(nodeId)}
       >
         <td style={styles.td}>
-          <strong>{primary.longName ?? primary.shortName ?? "Unknown"}</strong>
+          <strong>{resolveNodeName(nodeId, primary, { fallback: "Unknown" })}</strong>
           {primary.shortName && primary.longName && (
             <span style={{ ...styles.muted, marginLeft: "0.4rem" }}>({primary.shortName})</span>
           )}
         </td>
-        <td style={{ ...styles.td, ...styles.mono }}>{nodeHex(nodeId)}</td>
+        <td style={{ ...styles.td, ...styles.mono }}>{formatNodeId(nodeId)}</td>
         <td style={styles.td}>
           {isMqttOnly ? (
             <span style={styles.mqttChip}>MQTT</span>

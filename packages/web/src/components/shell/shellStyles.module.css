@@ -1,0 +1,295 @@
+/* Shared structural pieces used across the shell (AppShell + its menus/nav). */
+
+.page {
+  font-family: monospace;
+  background: #0f172a;
+  color: #e2e8f0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1.25rem;
+  border-bottom: 1px solid #1e293b;
+  flex-shrink: 0;
+}
+
+.logo {
+  height: 2rem;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #f8fafc;
+  white-space: nowrap;
+}
+
+.nav {
+  display: flex;
+  gap: 0.25rem;
+}
+
+/* MainNavigation tabs */
+
+.tab {
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  padding: 0.35rem 1rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.875rem;
+}
+
+.tab.tabActive {
+  background: #3b82f6;
+  color: #fff;
+}
+
+/* Header dropdown menu trigger buttons (Device/Gps/Mqtt/Settings menus) */
+
+.menuContainer {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.menuBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  color: #e2e8f0;
+  padding: 0.25rem 0.65rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.menuBtn.menuBtnOpen {
+  background: #1e293b;
+  color: #fff;
+}
+
+.menuBtn.menuBtnBorderOpen {
+  border-color: #3b82f6;
+}
+
+.menuBtn.menuBtnBorderDisconnected {
+  border-color: #ef4444;
+}
+
+.menuPanel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  min-width: 280px;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.menuSection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.menuSectionLabel {
+  width: 100%;
+  color: #334155;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.15rem;
+}
+
+.menuDivider {
+  height: 1px;
+  background: #1e293b;
+}
+
+.menuCount {
+  background: #334155;
+  border-radius: 9999px;
+  padding: 0 0.35rem;
+  font-size: 0.65rem;
+}
+
+.menuNavBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  color: #94a3b8;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.menuNavBtn.menuNavBtnActive {
+  background: #1e3a5f;
+  border-color: #3b82f6;
+  color: #e2e8f0;
+}
+
+.deviceActionBtn {
+  padding: 0.15rem 0.6rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.72rem;
+}
+
+.deviceActionBtn.deviceActionConnect {
+  background: #14532d;
+  border: 1px solid #16a34a;
+  color: #4ade80;
+}
+
+.deviceActionBtn.deviceActionDisconnect {
+  background: #450a0a;
+  border: 1px solid #991b1b;
+  color: #f87171;
+}
+
+.hdrFilterBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  color: #64748b;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-family: monospace;
+}
+
+.hdrFilterBtn.hdrFilterBtnActive {
+  background: #1e3a5f;
+  border-color: #3b82f6;
+  color: #e2e8f0;
+}
+
+/* Variant used where the call site historically overrode the active color to
+   pure white instead of hdrFilterBtnActive's #e2e8f0 (activity source, log
+   level, and log tag filter buttons). */
+.hdrFilterBtn.hdrFilterBtnActiveWhite {
+  background: #1e3a5f;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.hdrFilterBtn.colorMesh {
+  color: #60a5fa;
+}
+.hdrFilterBtn.colorMqtt {
+  color: #34d399;
+}
+.hdrFilterBtn.colorWarn {
+  color: #fbbf24;
+}
+.hdrFilterBtn.colorError {
+  color: #f87171;
+}
+.hdrFilterBtn.tagDevices {
+  color: #60a5fa;
+}
+.hdrFilterBtn.tagMqtt {
+  color: #34d399;
+}
+.hdrFilterBtn.tagWs {
+  color: #a78bfa;
+}
+.hdrFilterBtn.tagDb {
+  color: #fb923c;
+}
+.hdrFilterBtn.tagForeman {
+  color: #94a3b8;
+}
+
+.filterLabel {
+  color: #475569;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.dotBase {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.hdrCount {
+  background: #334155;
+  border-radius: 9999px;
+  padding: 0 0.3rem;
+  font-size: 0.6rem;
+  margin-left: 0.1rem;
+}
+
+.badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  color: #fff;
+  font-weight: bold;
+}
+
+.badgeOn {
+  background: #22c55e;
+}
+.badgeOff {
+  background: #ef4444;
+}
+
+/* Small shared utilities */
+
+.caret {
+  color: #475569;
+  margin-left: 0.3rem;
+  font-size: 0.65rem;
+}
+
+.caret.caretTight {
+  margin-left: 0.1rem;
+}
+
+.muted72 {
+  color: #475569;
+  font-size: 0.72rem;
+}
+
+.mlSmall {
+  margin-left: 0.25rem;
+}
+
+.mlMed {
+  margin-left: 0.4rem;
+}
+
+.justifyEnd {
+  justify-content: flex-end;
+}

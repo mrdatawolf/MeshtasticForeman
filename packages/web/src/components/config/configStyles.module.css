@@ -1,0 +1,482 @@
+/* Shared page-level styling for DeviceConfigPage and its ConfigCard grid. */
+
+.page {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.deviceBar {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.empty {
+  color: #64748b;
+  font-size: 0.85rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.pageBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sectionTitle {
+  font-size: 0.65rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 0.75rem;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #0f172a;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #1e293b;
+}
+
+.cardBody {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+}
+
+.rowKey {
+  color: #7a8fa6;
+  width: 13rem;
+  flex-shrink: 0;
+  font-size: 0.78rem;
+}
+
+.rowVal {
+  color: #e2e8f0;
+  word-break: break-all;
+  font-size: 0.78rem;
+}
+
+.disabledPill {
+  font-size: 0.6rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 9999px;
+  border: 1px solid #334155;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.editBtn {
+  background: transparent;
+  border: 1px solid #1e293b;
+  color: #64748b;
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.72rem;
+}
+
+.cancelBtn {
+  background: transparent;
+  border: 1px solid #334155;
+  color: #64748b;
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.72rem;
+}
+
+.inputText {
+  background: #0f172a;
+  border: 1px solid #3b82f6;
+  color: #e2e8f0;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.2rem;
+  font-family: monospace;
+  font-size: 0.76rem;
+  width: 100%;
+  outline: none;
+}
+
+.inputNum {
+  background: #0f172a;
+  border: 1px solid #3b82f6;
+  color: #e2e8f0;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.2rem;
+  font-family: monospace;
+  font-size: 0.76rem;
+  width: 7rem;
+  outline: none;
+}
+
+.wizardBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #0d1420;
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.wizardBarTitle {
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.wizardBarSub {
+  color: #64748b;
+  font-size: 0.75rem;
+  margin-top: 0.1rem;
+}
+
+/* Setup-wizard modal chrome (wizardStyles). */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  width: 90vw;
+  max-width: 640px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid #1e293b;
+  flex-shrink: 0;
+}
+
+.closeBtn {
+  background: none;
+  border: 1px solid #1e293b;
+  color: #64748b;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.stepPip {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 9999px;
+  font-family: monospace;
+}
+
+.wizardBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem 1.5rem;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stepTitle {
+  color: #f1f5f9;
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.stepSub {
+  color: #64748b;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+}
+
+.nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #1e293b;
+}
+
+.stepEmpty {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.5rem;
+  background: #0d1420;
+  border: 1px solid #1e293b;
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.selectionHint {
+  margin-top: 0.9rem;
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+/* Parameterized button/card/pill base classes + discrete-state modifiers.
+   See configStyles.ts for the *Class(...) functions that compose these. */
+
+.namespacePill {
+  font-size: 0.6rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid #1e293b;
+  color: #94a3b8;
+}
+.namespacePillRadio {
+  border-color: #1e3a5f;
+  color: #60a5fa;
+}
+
+.configCard {
+  background: #0d1420;
+  border: 1px solid #1e293b;
+  border-radius: 0.375rem;
+  overflow: hidden;
+  opacity: 1;
+  display: flex;
+  flex-direction: column;
+}
+.configCardInactive {
+  opacity: 0.55;
+}
+
+.channelCard {
+  background: #0d1420;
+  border: 1px solid #1e293b;
+  border-radius: 0.375rem;
+  padding: 0.6rem 0.85rem;
+  min-width: 140px;
+}
+.channelCardPrimary {
+  border-color: #22c55e;
+}
+
+.row {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  padding: 0.15rem 0.2rem;
+  border-radius: 0.2rem;
+}
+.rowInDraft {
+  background: #0f2a1a;
+}
+
+.deviceBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: transparent;
+  border: 1px solid #1e293b;
+  padding: 0.2rem 0.7rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+.deviceBtnActive {
+  background: #1e293b;
+  border-color: #3b82f6;
+}
+.deviceBtnConnected {
+  color: #e2e8f0;
+}
+.deviceBtnDisconnected {
+  color: #64748b;
+}
+
+.navBtn {
+  background: #1e3a5f;
+  border: none;
+  color: #93c5fd;
+  padding: 0.35rem 1rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.82rem;
+}
+.navBtnDisabled {
+  background: #1e293b;
+  color: #475569;
+  cursor: not-allowed;
+}
+
+.applyBtn {
+  background: #1d4ed8;
+  border: none;
+  color: #fff;
+  padding: 0.35rem 1.25rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+.applyBtnDisabled {
+  background: #1e293b;
+  color: #475569;
+  cursor: not-allowed;
+}
+
+.saveBtn {
+  background: #1d4ed8;
+  border: none;
+  color: #fff;
+  padding: 0.15rem 0.65rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.75rem;
+}
+.saveBtnDisabled {
+  background: #1e293b;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.wizardLaunchBtn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #64748b;
+  padding: 0.35rem 1rem;
+  border-radius: 0.375rem;
+  cursor: not-allowed;
+  font-family: monospace;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.wizardLaunchBtnEnabled {
+  background: #1e3a5f;
+  border-color: #3b82f6;
+  color: #93c5fd;
+  cursor: pointer;
+}
+
+.toggleBtn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #64748b;
+  padding: 0.15rem 0.6rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.75rem;
+  min-width: 3.2rem;
+  flex-shrink: 0;
+}
+.toggleBtnOn {
+  background: #166534;
+  border-color: #16a34a;
+  color: #4ade80;
+}
+
+.wizardRoleBtn {
+  background: #0d1420;
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+}
+.wizardRoleBtnActive {
+  background: #0f2a4a;
+  border-color: #3b82f6;
+}
+
+.wizardRegionBtn {
+  background: #0d1420;
+  border: 1px solid #1e293b;
+  border-radius: 0.375rem;
+  padding: 0.65rem 0.85rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+}
+.wizardRegionBtnChild {
+  border-color: #0f172a;
+}
+.wizardRegionBtnActive {
+  background: #0f2a4a;
+  border-color: #3b82f6;
+}
+
+.wizardBreadcrumbBtn {
+  background: #0d1420;
+  border: 1px solid #1e293b;
+  color: #94a3b8;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+.wizardBreadcrumbBtnActive {
+  background: #1e3a5f;
+  border-color: #3b82f6;
+  color: #dbeafe;
+}
+
+.featureBlock {
+  background: #0d1420;
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+.featureBlockActive {
+  background: #0f2a1a;
+  border-color: #166534;
+}

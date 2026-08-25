@@ -1,5 +1,14 @@
+import { z } from "zod";
+
+import { createLogger } from "../logger.js";
+
+import { sendValidationError } from "./schemas.js";
+
+import type { DaemonConfig } from "../config.js";
 import type { PGlite } from "@electric-sql/pglite";
 import type { FastifyInstance } from "fastify";
+
+const log = createLogger("coverage");
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -7,11 +16,6 @@ import type { FastifyInstance } from "fastify";
 
 /** Effective Earth radius (m) for radio propagation — 4/3 × 6371 km */
 const EARTH_RADIUS_EFF_M = 8_500_000;
-
-/** Elevation API endpoint. Override with ELEVATION_API_URL env var to point
- *  at a self-hosted Open-Elevation instance for faster, offline operation. */
-const ELEVATION_API_URL =
-  process.env.ELEVATION_API_URL ?? "https://api.open-elevation.com/api/v1/lookup";
 
 /** Persist elevation lookups for 6 months.  Terrain changes negligibly over
  *  that window and we want to be a good citizen to public elevation APIs. */
@@ -25,6 +29,23 @@ const ELEVATION_CHUNK_DELAY_MS = 250;
 
 /** Max retries on HTTP 429 with exponential back-off. */
 const ELEVATION_MAX_RETRIES = 4;
+
+const coordinatesSchema = {
+  lat: z.coerce.number().finite().min(-90).max(90),
+  lon: z.coerce.number().finite().min(-180).max(180),
+};
+const radiusKmSchema = z.coerce.number().finite().min(0.5).max(50);
+const viewshedQuerySchema = z.object({
+  ...coordinatesSchema,
+  altitudeM: z.coerce.number().finite().min(0).default(2),
+  radiusKm: radiusKmSchema.default(10),
+  radials: z.coerce.number().int().min(8).max(72).default(36),
+});
+const elevationQuerySchema = z.object(coordinatesSchema);
+const deleteViewshedQuerySchema = z.object({
+  ...coordinatesSchema,
+  radiusKm: radiusKmSchema.default(20),
+});
 
 // ---------------------------------------------------------------------------
 // Elevation cache
@@ -51,6 +72,7 @@ function elevKey(lat: number, lon: number): string {
 async function fetchElevations(
   db: PGlite,
   points: Array<{ lat: number; lon: number }>,
+  elevationApiUrl: string,
 ): Promise<number[]> {
   const results = new Array<number>(points.length).fill(0);
   const needDb: Array<{ idx: number; lat: number; lon: number }> = [];
@@ -124,7 +146,7 @@ async function fetchElevations(
         const backoffMs = Math.min(500 * 2 ** (attempt - 1), 8_000);
         await new Promise((r) => setTimeout(r, backoffMs));
       }
-      res = await fetch(ELEVATION_API_URL, {
+      res = await fetch(elevationApiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -133,8 +155,14 @@ async function fetchElevations(
         signal: AbortSignal.timeout(15_000),
       });
       if (res.status !== 429) break;
-      console.warn(
-        `[coverage] Elevation API rate-limited (429), retry ${attempt + 1}/${ELEVATION_MAX_RETRIES}`,
+      log.warn(
+        {
+          operation: "fetch-elevation",
+          statusCode: 429,
+          attempt: attempt + 1,
+          maxRetries: ELEVATION_MAX_RETRIES,
+        },
+        "elevation API rate limited",
       );
     }
     if (!res || !res.ok) throw new Error(`Elevation API returned HTTP ${res?.status ?? "???"}`);
@@ -200,7 +228,11 @@ function destinationPoint(
 // Route
 // ---------------------------------------------------------------------------
 
-export async function registerCoverageRoutes(app: FastifyInstance, db: PGlite) {
+export async function registerCoverageRoutes(
+  app: FastifyInstance,
+  db: PGlite,
+  config: Pick<DaemonConfig, "coverage">,
+) {
   /**
    * GET /api/coverage/viewshed
    *
@@ -216,18 +248,10 @@ export async function registerCoverageRoutes(app: FastifyInstance, db: PGlite) {
    *   radials    – number of angular rays to cast (default 36, max 72)
    */
   app.get("/api/coverage/viewshed", async (req, reply) => {
-    const q = req.query as Record<string, string | undefined>;
-
-    const lat = Number(q.lat);
-    const lon = Number(q.lon);
-    const antennaM = Math.max(0, Number(q.altitudeM ?? 2) || 2);
-    const radiusKm = Math.min(50, Math.max(0.5, Number(q.radiusKm ?? 10) || 10));
-    const numRadials = Math.min(72, Math.max(8, Number(q.radials ?? 36) || 36));
+    const result = viewshedQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { lat, lon, altitudeM: antennaM, radiusKm, radials: numRadials } = result.data;
     const numSteps = 15; // fixed: balances API call volume vs. resolution
-
-    if (!isFinite(lat) || !isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-      return reply.status(400).send({ error: "Invalid lat/lon" });
-    }
 
     // ── Viewshed cache lookup ──────────────────────────────────────────────
     // Key at ~1 km precision (2 decimal places).  A node that hasn't moved
@@ -267,9 +291,9 @@ export async function registerCoverageRoutes(app: FastifyInstance, db: PGlite) {
     // ── Fetch all elevations in one batched call ───────────────────────────
     let elevations: number[];
     try {
-      elevations = await fetchElevations(db, allPoints);
+      elevations = await fetchElevations(db, allPoints, config.coverage.elevationApiUrl);
     } catch (err) {
-      console.error("[coverage] elevation fetch failed:", err);
+      log.error({ operation: "fetch-elevation", err }, "elevation fetch failed");
       return reply.status(502).send({
         error: "Elevation service unavailable — check ELEVATION_API_URL",
         detail: String(err),
@@ -367,27 +391,18 @@ export async function registerCoverageRoutes(app: FastifyInstance, db: PGlite) {
    * Response: { elevationM: number }
    */
   app.get("/api/elevation", async (req, reply) => {
-    const q = req.query as Record<string, string | undefined>;
-    const lat = Number(q.lat);
-    const lon = Number(q.lon);
+    const result = elevationQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { lat, lon } = result.data;
 
-    if (!isFinite(lat) || lat < -90 || lat > 90 || !isFinite(lon) || lon < -180 || lon > 180) {
-      return reply.status(400).send({ error: "Invalid lat/lon" });
-    }
-
-    const [elevationM] = await fetchElevations(db, [{ lat, lon }]);
+    const [elevationM] = await fetchElevations(db, [{ lat, lon }], config.coverage.elevationApiUrl);
     return { elevationM };
   });
 
   app.delete("/api/coverage/viewshed", async (req, reply) => {
-    const q = req.query as Record<string, string | undefined>;
-    const lat = Number(q.lat);
-    const lon = Number(q.lon);
-    const radiusKm = Number(q.radiusKm ?? 20);
-
-    if (!isFinite(lat) || !isFinite(lon)) {
-      return reply.status(400).send({ error: "Invalid lat/lon" });
-    }
+    const result = deleteViewshedQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { lat, lon, radiusKm } = result.data;
 
     const latKey = lat.toFixed(2);
     const lonKey = lon.toFixed(2);

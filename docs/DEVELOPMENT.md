@@ -63,6 +63,40 @@ targeting `main`. It installs the pinned pnpm version from the root
 `package.json`, then checks formatting, linting, the build, and tests as separate
 steps. Keep these checks passing before requesting review.
 
+## Dependency and runtime version review
+
+Dependency and runtime-version drift is reviewed on a fixed quarterly schedule
+rather than left to ad hoc discovery.
+
+**Cadence and trigger:** the first business day of each calendar quarter
+(January, April, July, October).
+
+**Scope of each review:**
+
+* Run `pnpm outdated` and review direct dependencies (root `package.json` and
+  each workspace package) against published security advisories and available
+  major-version upgrades. Transitive-only bumps are not the focus of this
+  review.
+* Check Node.js LTS/support status against the `engines.node` floor in the
+  root `package.json` (currently `>=22.13.0`), and update the floor if the
+  current minimum has fallen out of support.
+* Check pnpm's own release/support status against the version pinned in the
+  root `packageManager` field (currently `pnpm@11.21.0`), and update the pin
+  if it has fallen out of support.
+
+**Responsible party:** the project maintainer. This repository does not
+currently define a team or role roster beyond the maintainer, so no other
+role is assigned this responsibility.
+
+**Output of a review:** findings are recorded as an ordinary maintenance task
+(see `tasks/README.md` for the task lifecycle) rather than acted on directly;
+this review process only identifies what, if anything, needs to change.
+
+Automating a reminder for this cadence (for example, a recurring GitHub issue
+template) has been discussed but not decided. It remains an optional future
+enhancement for the maintainer to pursue if documentation alone proves
+insufficient to keep the cadence on track.
+
 ## Coding conventions
 
 Not yet formalized beyond what the codebase already does. Stage 1 of

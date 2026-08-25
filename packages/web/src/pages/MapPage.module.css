@@ -1,0 +1,314 @@
+.wrap {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Traceroute + Coverage + Proposal control panels — top left, side by side. */
+.topControlsRow {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: flex-start;
+  z-index: 10;
+}
+
+.routeCountText {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+/* Colocated-node popup header (shown when multiple markers share a location). */
+.stackHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #1e293b;
+  margin-bottom: 0.35rem;
+  max-width: 260px;
+}
+
+.stackHeaderLabel {
+  font-size: 0.65rem;
+  color: #64748b;
+  width: 100%;
+  margin-bottom: 0.1rem;
+}
+
+/* Per-node color (border/background/text) is data-driven (nodeColor(nodeId) + active
+   state), so it's supplied via --stack-border/--stack-bg/--stack-color custom properties. */
+.stackButton {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.7rem;
+  font-family: monospace;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  border: var(--stack-border);
+  background: var(--stack-bg);
+  color: var(--stack-color);
+}
+
+/* Search filter — top center */
+.searchBar {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  z-index: 10;
+  box-shadow: 0 2px 8px #0008;
+}
+
+.searchIcon {
+  color: #64748b;
+  font-size: 0.75rem;
+  user-select: none;
+}
+
+.searchInput {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e2e8f0;
+  font-size: 0.75rem;
+  font-family: monospace;
+  width: 14rem;
+}
+
+.searchCount {
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.searchClearBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+}
+
+/* Node markers — position/shape/cursor are shared; per-node hue is data-driven
+   (nodeColor(nodeId)) and applied via --marker-* custom properties. */
+.markerOuter {
+  position: relative;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.markerOuterMesh {
+  border-color: var(--marker-color);
+  box-shadow: 0 0 0 2px var(--marker-shadow);
+}
+
+.markerInner {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: bold;
+  font-family: monospace;
+  user-select: none;
+  background: var(--marker-bg);
+  color: var(--marker-fg);
+  border: var(--marker-border);
+}
+
+.markerInnerMqtt {
+  background: #0f172a;
+  box-shadow: 0 0 0 2px var(--marker-shadow);
+}
+
+.markerInnerStacked {
+  width: 2.4rem;
+  height: 2.4rem;
+}
+
+.localRing {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px dashed #22c55e;
+  pointer-events: none;
+}
+
+.stackBadge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #f59e0b;
+  color: #000;
+  font-size: 0.5rem;
+  font-weight: bold;
+  font-family: monospace;
+  border-radius: 0.6rem;
+  padding: 0 0.25rem;
+  min-width: 1rem;
+  height: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  line-height: 1;
+}
+
+.proposalMarker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+}
+
+.proposalDiamond {
+  width: 14px;
+  height: 14px;
+  background: #f59e0b;
+  border: 2px solid #fff;
+  transform: rotate(45deg);
+  box-shadow: 0 0 4px #f59e0b88;
+  flex-shrink: 0;
+}
+
+.proposalPole {
+  width: 2px;
+  height: 18px;
+  background: #f59e0b;
+  flex-shrink: 0;
+}
+
+.proposalLabel {
+  font-size: 0.6rem;
+  font-family: monospace;
+  color: #fef3c7;
+  font-weight: bold;
+  background: #78350fdd;
+  border-radius: 0.2rem;
+  padding: 0 0.25rem;
+  margin-top: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 3px #00000066;
+}
+
+/* Legend — bottom left */
+.legend {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  background: #0f172acc;
+  backdrop-filter: blur(4px);
+  color: #e2e8f0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  z-index: 10;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legendDirectWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.legendDirectRing {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px dashed #22c55e;
+}
+
+.legendDot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legendDotDirect {
+  background: #3b82f6;
+  border: 2px solid #3b82f6;
+}
+
+.legendDotMesh {
+  background: #0f172a;
+  border: 2px solid #94a3b8;
+}
+
+.legendDotMqtt {
+  background: #0f172a;
+  border: 2px dashed #94a3b8;
+}
+
+.legendLine {
+  display: inline-block;
+  width: 1.5rem;
+  height: 0;
+  border-top: 2px solid #94a3b8;
+}
+
+.legendLineDashed {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.legendSwatch {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+}
+
+.legendSwatchUnion {
+  border-radius: 2px;
+  background: #3b82f633;
+  border: 1px solid #3b82f6;
+}
+
+.legendSwatchTerrainSeparate {
+  border-radius: 2px;
+  background: #94a3b833;
+  border: 1px solid #94a3b8;
+}
+
+.legendSwatchCircle {
+  border-radius: 50%;
+  background: #94a3b833;
+  border: 1px solid #94a3b8;
+}
+
+.legendSwatchAmber {
+  border-radius: 2px;
+  background: #f59e0b33;
+  border: 1px dashed #f59e0b;
+}
+
+.legendMuted {
+  color: #64748b;
+}

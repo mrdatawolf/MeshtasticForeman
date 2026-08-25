@@ -1,3 +1,4 @@
+import { formatNodeId as nodeHex, resolveNodeName } from "@foreman/shared";
 import { useState, useRef, useEffect, useCallback } from "react";
 
 import {
@@ -20,19 +21,13 @@ interface Props {
   onInitialNodeConsumed?: () => void;
 }
 
-function nodeHex(nodeId: number) {
-  return `!${nodeId.toString(16).padStart(8, "0")}`;
-}
-
 function nodeName(nodeId: number, nodes: NodeInfo[], mqttNodes: MqttNode[]): string {
   if (nodeId === BROADCAST) return "Public Channel";
   const mesh = nodes.find((n) => n.nodeId === nodeId);
-  if (mesh?.shortName) return mesh.shortName;
-  if (mesh?.longName) return mesh.longName;
   const mqtt = mqttNodes.find((n) => n.nodeId === nodeId);
-  if (mqtt?.shortName) return mqtt.shortName;
-  if (mqtt?.longName) return mqtt.longName;
-  return nodeHex(nodeId);
+  return resolveNodeName(nodeId, [mesh ?? {}, mqtt ?? {}], {
+    preference: ["shortName", "longName"],
+  });
 }
 
 function formatTime(iso: string) {
@@ -368,7 +363,9 @@ export function MessagesPage({
                         onClick={() => openConversation(n.nodeId)}
                       >
                         <span style={styles.pickerName}>
-                          {n.shortName ?? n.longName ?? nodeHex(n.nodeId)}
+                          {resolveNodeName(n.nodeId, n, {
+                            preference: ["shortName", "longName"],
+                          })}
                         </span>
                         {n.longName && n.shortName && (
                           <span style={styles.pickerSub}>{n.longName}</span>

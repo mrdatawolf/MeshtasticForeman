@@ -1,0 +1,139 @@
+.apiDotOn {
+  color: #22c55e;
+  font-size: 0.65rem;
+}
+
+.apiDotOff {
+  color: #ef4444;
+  font-size: 0.65rem;
+}
+
+.deviceEntry {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  padding: 0.1rem 0;
+}
+
+.deviceRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.statusConnected {
+  color: #22c55e;
+}
+.statusConnecting {
+  color: #f59e0b;
+}
+.statusDisconnected {
+  color: #ef4444;
+}
+
+.deviceId {
+  color: #e2e8f0;
+  font-weight: bold;
+}
+
+.deviceStatusLabel {
+  color: #64748b;
+  text-transform: capitalize;
+}
+
+.deviceMeta {
+  color: #475569;
+}
+
+.deviceActions {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.batteryWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.batteryPercent {
+  font-size: 0.7rem;
+}
+
+.batteryBarOuter {
+  display: inline-flex;
+  align-items: center;
+  width: 2.5rem;
+  height: 0.65rem;
+  border: 1px solid;
+  border-radius: 0.15rem;
+  padding: 0.08rem;
+  position: relative;
+}
+
+.batteryBarFill {
+  display: block;
+  height: 100%;
+  width: var(--battery-width);
+  border-radius: 0.08rem;
+  transition: width 0.5s ease;
+}
+
+/* batteryLow/Mid/High are reused across three different base elements
+   (percent text, bar outline, bar fill); each pairing is scoped with a
+   compound selector so only the property relevant to that element applies. */
+.batteryPercent.batteryLow {
+  color: #ef4444;
+}
+.batteryPercent.batteryMid {
+  color: #f59e0b;
+}
+.batteryPercent.batteryHigh {
+  color: #22c55e;
+}
+
+.batteryBarOuter.batteryLow {
+  border-color: #ef4444;
+}
+.batteryBarOuter.batteryMid {
+  border-color: #f59e0b;
+}
+.batteryBarOuter.batteryHigh {
+  border-color: #22c55e;
+}
+
+.batteryBarFill.batteryLow {
+  background: #ef4444;
+}
+.batteryBarFill.batteryMid {
+  background: #f59e0b;
+}
+.batteryBarFill.batteryHigh {
+  background: #22c55e;
+}
+
+.dotMesh {
+  border: 2px solid #94a3b8;
+  background: #0f172a;
+}
+
+.dotMqtt {
+  border: 2px dashed #94a3b8;
+  background: #0f172a;
+}
+
+.versionRow {
+  padding: 0.4rem 0.75rem;
+  text-align: right;
+}
+
+.versionText {
+  color: #1e293b;
+  font-size: 0.65rem;
+  font-family: monospace;
+}
