@@ -4,8 +4,8 @@ Owner role: UX Specialist
 Assigned agent: interface-designer
 Proposed by: jarvis
 Proposed date: 2026-08-24
-Approved by:
-Approved date:
+Approved by: Patrick
+Approved date: 08/24/26
 Related contracts: None
 Related ADRs: None
 Dependencies: TASK-017 (build the new shell components against the finalized state/store shape, not the old `useState` sprawl)

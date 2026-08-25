@@ -1,6 +1,6 @@
 # CONTRACT-003: Daemon Configuration Module
 
-Status: Proposed
+Status: Accepted
 Approved by:
 Approved date:
 Related tasks: TASK-014

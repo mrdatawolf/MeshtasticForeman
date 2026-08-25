@@ -4,8 +4,8 @@ Owner role: UX Specialist
 Assigned agent: interface-designer
 Proposed by: jarvis
 Proposed date: 2026-08-24
-Approved by:
-Approved date:
+Approved by: Patrick
+Approved date: 08/24/26
 Related contracts: None (TASK-005's endpoint tests already pin backend behavior; this is a frontend-only restructuring)
 Related ADRs: None
 Dependencies: TASK-005 (endpoint behavior already regression-tested — safe to restructure the frontend consumer), TASK-013 recommended (typed HTTP client — natural fit for the "small query hook" the roadmap asks for), not a hard blocker if you'd rather sequence them independently

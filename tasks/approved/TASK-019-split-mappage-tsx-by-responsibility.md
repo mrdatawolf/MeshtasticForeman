@@ -4,8 +4,8 @@ Owner role: UX Specialist
 Assigned agent: interface-designer
 Proposed by: jarvis
 Proposed date: 2026-08-24
-Approved by:
-Approved date:
+Approved by: Patrick
+Approved date: 08/24/26
 Related contracts: None (coverage math contract, if accepted, was already attached to TASK-011 where the math is extracted — this task just relocates the already-tested module)
 Related ADRs: None
 Dependencies: **TASK-011 (hard blocker — coverage math, coordinate helpers must already be extracted and tested before this restructuring, so the split moves already-proven pure modules rather than extracting-and-restructuring simultaneously).**
