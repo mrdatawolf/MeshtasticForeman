@@ -4,8 +4,8 @@ Owner role: Implementer
 Assigned agent: openai-coder
 Proposed by: jarvis
 Proposed date: 2026-08-24
-Approved by:
-Approved date:
+Approved by: Patrick
+Approved date: 08/24/26
 Related contracts: **CONTRACT-005 recommended** (ambiguous/high-risk per change-classification.md — malformed-payload handling at a third-party protocol boundary needs explicit failure-behavior definition)
 Related ADRs: None
 Dependencies: None (deliberately sequenced *before* TASK-024, reversing the roadmap's listed bullet order — see rationale below)

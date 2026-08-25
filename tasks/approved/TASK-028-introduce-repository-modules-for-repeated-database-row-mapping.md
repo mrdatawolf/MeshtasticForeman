@@ -4,8 +4,8 @@ Owner role: Implementer
 Assigned agent: openai-coder
 Proposed by: jarvis
 Proposed date: 2026-08-24
-Approved by:
-Approved date:
+Approved by: Patrick
+Approved date: 08/24/26
 Related contracts: None
 Related ADRs: None
 Dependencies: TASK-026 (route split, so repository boundaries can align with the now-separated domain modules), TASK-016 (shared formatting/domain utilities, which repository modules will call for converting raw rows to domain types)
