@@ -4,8 +4,8 @@ Owner role: Implementer
 Assigned agent: openai-coder
 Proposed by: contract-architect (via Claude, orchestrating session), per CONTRACT-001's Open question #1
 Proposed date: 2026-08-24
-Approved by:
-Approved date:
+Approved by: Patrick
+Approved date: 08/24/26
 Related contracts: CONTRACT-001 (documents this as a known, deliberately-preserved gap under TASK-012's "pure consolidation" scope; this task is the fast-follow that closes it)
 Related ADRs: None
 Dependencies: TASK-012 (must land first — this task adds a `clearDbLock()` call to the *consolidated* `client.ts`, not the current duplicated one, to avoid fixing code that TASK-012 is about to delete)
