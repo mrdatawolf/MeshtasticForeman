@@ -54,7 +54,65 @@ None.
 
 ## Implementation handoff
 
-Not started.
+Implemented 2026-08-25 by openai-coder.
+
+### Changes made
+
+- Extracted raw-packet persistence, node/position updates, telemetry,
+  configuration, message/bot handling, and traceroute handling into explicit
+  dependency-injected modules under `packages/daemon/src/device/`.
+- Kept `batteryLevels`, `gpsAcquired`, `gpsDetails`, `myNodeIds`, and the shared
+  `pendingReplyIds` map centrally owned by `DeviceManager`; handlers receive
+  narrow getter/setter callbacks and the producer/consumer receive the same map.
+- Kept the post-`configure()` config-snapshot trigger in `DeviceManager` so its
+  queued passive-config-write ordering remains lifecycle-coordinated; snapshot
+  read/emission logic lives in the configuration module.
+- Grouped position handling with node updates because both mutate node/position
+  state and emit the same `node:update` projection.
+- Named the traceroute module `traceroute-handler.ts` and entry point
+  `handleTraceroutePacket` to mirror the SDK event it handles.
+- Added characterization coverage for reply-id correlation, bot commands,
+  telemetry filters/change semantics, configuration paths, and traceroutes.
+
+### Validation performed
+
+Command used at every extraction checkpoint:
+`pnpm --filter @foreman/daemon test -- device-manager.test.ts` (with Node
+v22.22.3 and pnpm 11.21.0). The package script ran all daemon Vitest files.
+
+- Step 2 raw packets: exit 0; 10 files, 183 tests passed.
+- Step 3 node/position: exit 0; 10 files, 183 tests passed.
+- Step 4 telemetry: exit 0; 10 files, 186 tests passed.
+- Step 5 configuration: exit 0; 10 files, 191 tests passed.
+- Step 6 message/bot: exit 0; 10 files, 197 tests passed.
+- Step 7 traceroute: exit 0; 10 files, 199 tests passed.
+- Step 8 final coordination audit: exit 0; 10 files, 199 tests passed.
+
+The packetId/replyId test was present and passing at every step above. Source
+order still subscribes `onMessagePacket` before `onMeshPacket`, both on the
+same `meshDevice`; the raw handler still writes the shared map synchronously
+before its first await, and message handling consumes/deletes the entry.
+
+Final validation:
+
+- `pnpm --filter @foreman/daemon build`: exit 0 (`tsc --noEmit`).
+- `pnpm --filter @foreman/daemon lint`: exit 0 (`eslint .`).
+
+### Assumptions and deviations
+
+- Used the installed NVM Node v22.22.3 and Corepack-cached pnpm 11.21.0 because
+  the non-interactive shell's default PATH exposed Node v20.19.2 and no `pnpm`.
+- No behavioral deviations from CONTRACT-004 were intended or identified.
+- No physical/simulated-radio manual smoke test was available; all specified
+  paths were exercised through the existing mocked dispatcher pattern.
+
+### Unresolved risks
+
+- This remains a high-risk structural change and should receive the contract's
+  recommended independent Quality Assurance review before human acceptance.
+- The test dispatcher manually fires `onMeshPacket` immediately before
+  `onMessagePacket`; the upstream SDK's internal derivation order is preserved
+  structurally but cannot be independently proven by this mocked unit suite.
 
 ## Review
 

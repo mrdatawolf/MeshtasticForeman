@@ -67,6 +67,9 @@ vi.mock("@meshtastic/core", async (importOriginal) => {
     MeshDevice: class MockMeshDevice {
       configure = vi.fn().mockResolvedValue(0);
       sendText = vi.fn().mockResolvedValue(42);
+      setConfig = vi.fn().mockResolvedValue(undefined);
+      setModuleConfig = vi.fn().mockResolvedValue(undefined);
+      commitEditSettings = vi.fn().mockResolvedValue(undefined);
       setHeartbeatInterval = vi.fn();
       events = {
         onMessagePacket: makeDispatcher(),
@@ -342,6 +345,104 @@ describe("DeviceManager", () => {
       );
       expect(rows[0].last_seen).not.toBeNull();
     });
+
+    it("correlates a raw packet replyId with the derived message packet id", async () => {
+      await manager.connect("/dev/ttyUSB0", "Node");
+      emitted.length = 0;
+
+      getFakeEvents().onMeshPacket.dispatch({
+        id: 4242,
+        replyId: 3131,
+        from: 111,
+        to: 222,
+        channel: 0,
+        rxTime: Math.trunc(new Date("2025-01-15T12:00:00Z").getTime() / 1000),
+        payloadVariant: {
+          case: "decoded",
+          value: { portnum: 1, payload: new TextEncoder().encode("reply") },
+        },
+      });
+      dispatchMessage({ id: 4242, data: "reply" });
+      await new Promise((r) => setTimeout(r, 20));
+
+      const { rows } = await db.query<{ reply_to_packet_id: number }>(
+        "SELECT reply_to_packet_id FROM messages WHERE packet_id = 4242 AND role = 'received'",
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].reply_to_packet_id).toBe(3131);
+
+      const messageEvent = emitted.find(
+        (event) => event.type === "message:received" && event.payload.packetId === 4242,
+      );
+      expect(messageEvent?.payload).toMatchObject({ replyToPacketId: 3131 });
+    });
+  });
+
+  describe("bot command handling", () => {
+    async function connectBot() {
+      manager = new DeviceManager(db, { bot: { enabled: true } });
+      emitted = collectEvents(manager);
+      const connected = await manager.connect("/dev/ttyUSB0", "Bot Node");
+      getFakeEvents().onMyNodeInfo.dispatch({ myNodeNum: 123 });
+      emitted.length = 0;
+      return connected;
+    }
+
+    function dispatchCommand(data: string) {
+      getFakeEvents().onMessagePacket.dispatch({
+        id: 900,
+        rxTime: new Date("2025-01-15T12:00:00Z"),
+        from: 456,
+        to: 123,
+        channel: 2,
+        data,
+        type: "direct",
+      });
+    }
+
+    it.each([
+      ["!ping", "pong!"],
+      ["!help", "Commands: !ping !nodes !status !help"],
+      ["!nodes", "1 nodes in mesh"],
+      ["!status", "Foreman OK · 1 nodes · me: !0000007b"],
+      ["!wat", 'Unknown command "wat". Try !help'],
+    ])("replies to %s and persists/emits its own sent message", async (command, reply) => {
+      const connected = await connectBot();
+      await db.query("INSERT INTO nodes(node_id, device_id) VALUES (999, $1)", [connected.id]);
+      dispatchCommand(command);
+      await new Promise((r) => setTimeout(r, 20));
+
+      const sendText = mockDevice.ref!.sendText as ReturnType<typeof vi.fn>;
+      expect(sendText).toHaveBeenCalledWith(reply, 456, false, 2);
+      const { rows } = await db.query<{
+        text: string;
+        role: string;
+        reply_to_packet_id: number;
+        from_node_id: number;
+      }>("SELECT text, role, reply_to_packet_id, from_node_id FROM messages WHERE role = 'sent'");
+      expect(rows).toEqual([
+        { text: reply, role: "sent", reply_to_packet_id: 0, from_node_id: 123 },
+      ]);
+      const botEvent = emitted.find(
+        (event) => event.type === "message:received" && event.payload.role === "sent",
+      );
+      expect(botEvent?.payload).toMatchObject({
+        text: reply,
+        fromNodeId: 123,
+        toNodeId: 456,
+        channelIndex: 2,
+        replyToPacketId: 0,
+      });
+    });
+
+    it("silently ignores unknown commands that include arguments", async () => {
+      await connectBot();
+      dispatchCommand("!wat argument");
+      await new Promise((r) => setTimeout(r, 20));
+      expect(mockDevice.ref!.sendText).not.toHaveBeenCalled();
+      const { rows } = await db.query("SELECT id FROM messages WHERE role = 'sent'");
+      expect(rows).toHaveLength(0);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -562,6 +663,163 @@ describe("DeviceManager", () => {
       );
       expect(rows).toHaveLength(2);
       expect(rows.map((r) => r.device_id)).toContain(devA.id);
+    });
+  });
+
+  describe("telemetry handling (onTelemetryPacket)", () => {
+    function dispatchTelemetry(from: number, batteryLevel: number) {
+      getFakeEvents().onTelemetryPacket.dispatch({
+        from,
+        data: { variant: { case: "deviceMetrics", value: { batteryLevel } } },
+      });
+    }
+
+    it("ignores zero battery readings and telemetry from peer nodes", async () => {
+      const connected = await manager.connect("/dev/ttyUSB0", "Node");
+      getFakeEvents().onMyNodeInfo.dispatch({ myNodeNum: 123 });
+      emitted.length = 0;
+
+      dispatchTelemetry(123, 0);
+      dispatchTelemetry(456, 75);
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(manager.getBatteryLevel(connected.id)).toBeNull();
+      expect(emitted.filter((event) => event.type === "device:status")).toHaveLength(0);
+    });
+
+    it("updates own-node battery and emits a full status only when the value changes", async () => {
+      const connected = await manager.connect("/dev/ttyUSB0", "Node");
+      getFakeEvents().onMyNodeInfo.dispatch({ myNodeNum: 123 });
+      emitted.length = 0;
+
+      dispatchTelemetry(123, 75);
+      await new Promise((r) => setTimeout(r, 20));
+      dispatchTelemetry(123, 75);
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(manager.getBatteryLevel(connected.id)).toBe(75);
+      const statusEvents = emitted.filter((event) => event.type === "device:status");
+      expect(statusEvents).toHaveLength(1);
+      expect(statusEvents[0].payload).toMatchObject({
+        id: connected.id,
+        status: "connected",
+        batteryLevel: 75,
+        ownNodeId: 123,
+      });
+    });
+
+    it("ignores non-deviceMetrics variants", async () => {
+      const connected = await manager.connect("/dev/ttyUSB0", "Node");
+      getFakeEvents().onMyNodeInfo.dispatch({ myNodeNum: 123 });
+      emitted.length = 0;
+      getFakeEvents().onTelemetryPacket.dispatch({
+        from: 123,
+        data: { variant: { case: "environmentMetrics", value: {} } },
+      });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(manager.getBatteryLevel(connected.id)).toBeNull();
+      expect(emitted.filter((event) => event.type === "device:status")).toHaveLength(0);
+    });
+  });
+
+  describe("configuration handling", () => {
+    it("persists passive radio, module, and channel packets and returns a snapshot", async () => {
+      const connected = await manager.connect("/dev/ttyUSB0", "Node");
+      getFakeEvents().onConfigPacket.dispatch({
+        payloadVariant: { case: "device", value: { role: 2 } },
+      });
+      getFakeEvents().onModuleConfigPacket.dispatch({
+        payloadVariant: { case: "mqtt", value: { enabled: true } },
+      });
+      getFakeEvents().onChannelPacket.dispatch({
+        index: 1,
+        role: 2,
+        settings: { name: "Ops", psk: new Uint8Array([1, 2, 3]) },
+      });
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(await manager.getDeviceConfig(connected.id)).toEqual({
+        deviceId: connected.id,
+        radioConfig: { device: { role: 2 } },
+        moduleConfig: { mqtt: { enabled: true } },
+        channels: [{ index: 1, name: "Ops", role: 2, psk: "AQID" }],
+      });
+    });
+
+    it("no-ops on missing passive packet variants and channel index", async () => {
+      const connected = await manager.connect("/dev/ttyUSB0", "Node");
+      getFakeEvents().onConfigPacket.dispatch({});
+      getFakeEvents().onModuleConfigPacket.dispatch({ payloadVariant: {} });
+      getFakeEvents().onChannelPacket.dispatch({ settings: { name: "ignored" } });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(await manager.getDeviceConfig(connected.id)).toEqual({
+        deviceId: connected.id,
+        radioConfig: {},
+        moduleConfig: {},
+        channels: [],
+      });
+    });
+
+    it("returns null for a missing device", async () => {
+      await expect(manager.getDeviceConfig("missing")).resolves.toBeNull();
+    });
+
+    it("throws when applying config to a disconnected device", async () => {
+      await expect(
+        manager.applyConfigSection("missing", "radio", "device", { role: 2 }),
+      ).rejects.toThrow("Device missing not connected");
+    });
+
+    it("applies, commits, persists, and emits a radio config snapshot", async () => {
+      const connected = await manager.connect("/dev/ttyUSB0", "Node");
+      emitted.length = 0;
+      await manager.applyConfigSection(connected.id, "radio", "device", { role: 2 });
+
+      const fake = mockDevice.ref!;
+      expect(fake.setConfig).toHaveBeenCalledOnce();
+      expect(fake.commitEditSettings).toHaveBeenCalledOnce();
+      expect((await manager.getDeviceConfig(connected.id))?.radioConfig).toEqual({
+        device: { role: 2 },
+      });
+      expect(emitted.filter((event) => event.type === "device:config")).toHaveLength(1);
+    });
+  });
+
+  describe("traceroute handling (onTraceRoutePacket)", () => {
+    it("emits synchronously before asynchronously persisting with own-node fallback 0", async () => {
+      const connected = await manager.connect("/dev/ttyUSB0", "Node");
+      emitted.length = 0;
+
+      getFakeEvents().onTraceRoutePacket.dispatch({
+        from: 456,
+        data: { route: new Uint32Array([111, 222]), routeBack: new Uint32Array([333]) },
+      });
+
+      expect(emitted).toContainEqual({
+        type: "traceroute:result",
+        payload: { deviceId: connected.id, nodeId: 456, route: [111, 222], routeBack: [333] },
+      });
+      const { rows: immediateRows } = await db.query("SELECT id FROM traceroutes");
+      expect(immediateRows).toHaveLength(1);
+      const { rows } = await db.query<{
+        from_node_id: number;
+        to_node_id: number;
+        route: number[];
+        route_back: number[];
+      }>("SELECT from_node_id, to_node_id, route, route_back FROM traceroutes");
+      expect(rows).toEqual([
+        { from_node_id: 0, to_node_id: 456, route: [111, 222], route_back: [333] },
+      ]);
+    });
+
+    it("uses empty route arrays when packet data is absent", async () => {
+      await manager.connect("/dev/ttyUSB0", "Node");
+      emitted.length = 0;
+      getFakeEvents().onTraceRoutePacket.dispatch({ from: 456 });
+      expect(emitted[0]).toMatchObject({
+        type: "traceroute:result",
+        payload: { nodeId: 456, route: [], routeBack: [] },
+      });
     });
   });
 
