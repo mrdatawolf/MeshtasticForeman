@@ -4,8 +4,8 @@ Owner role: Documentation Curator
 Assigned agent: librarian
 Proposed by: jarvis
 Proposed date: 2026-08-24
-Approved by:
-Approved date:
+Approved by: Patrick
+Approved date: 08/24/26
 Related contracts: None
 Related ADRs: None
 Dependencies: None
