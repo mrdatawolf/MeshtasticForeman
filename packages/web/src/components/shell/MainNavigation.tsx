@@ -1,4 +1,4 @@
-import { styles, tabStyle } from "./shellStyles.js";
+import { styles, tabClass } from "./shellStyles.js";
 
 import type { Tab } from "./types.js";
 
@@ -9,17 +9,17 @@ interface Props {
 
 export function MainNavigation({ tab, onNavigate }: Props) {
   return (
-    <nav style={styles.nav}>
-      <button style={tabStyle(tab === "nodes")} onClick={() => onNavigate("nodes")}>
+    <nav className={styles.nav}>
+      <button className={tabClass(tab === "nodes")} onClick={() => onNavigate("nodes")}>
         Nodes
       </button>
-      <button style={tabStyle(tab === "map")} onClick={() => onNavigate("map")}>
+      <button className={tabClass(tab === "map")} onClick={() => onNavigate("map")}>
         Map
       </button>
-      <button style={tabStyle(tab === "messages")} onClick={() => onNavigate("messages")}>
+      <button className={tabClass(tab === "messages")} onClick={() => onNavigate("messages")}>
         Messages
       </button>
-      <button style={tabStyle(tab === "analytics")} onClick={() => onNavigate("analytics")}>
+      <button className={tabClass(tab === "analytics")} onClick={() => onNavigate("analytics")}>
         Analytics
       </button>
     </nav>

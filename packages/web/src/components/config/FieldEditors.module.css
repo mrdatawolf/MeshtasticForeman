@@ -1,0 +1,35 @@
+.sensitiveMask {
+  color: #334155;
+  letter-spacing: 0.1em;
+}
+
+.emptyDim {
+  color: #334155;
+}
+
+.boolTrue {
+  color: #22c55e;
+}
+
+.boolFalse {
+  color: #64748b;
+}
+
+.plainValue {
+  color: #e2e8f0;
+}
+
+.enumCode {
+  color: #334155;
+  margin-left: 0.4rem;
+  font-size: 0.7rem;
+}
+
+.arrayValue {
+  color: #64748b;
+}
+
+.rawValue {
+  color: #64748b;
+  font-size: 0.72rem;
+}

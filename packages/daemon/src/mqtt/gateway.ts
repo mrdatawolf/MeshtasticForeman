@@ -5,6 +5,9 @@ import { EventEmitter } from "node:events";
 import { formatNodeId } from "@foreman/shared";
 import { MeshDevice, Types, Protobuf } from "@meshtastic/core";
 
+import { mapMqttNodeRow, type MqttNodeRow } from "../db/repositories/mqtt-nodes.js";
+import { createLogger } from "../logger.js";
+
 import { DEFAULT_KEY, decrypt, encrypt, expandPsk } from "./codec.js";
 import {
   handleInbound,
@@ -39,11 +42,16 @@ export interface MqttGatewayConfig {
 }
 
 const DEFAULT_SELF_ANNOUNCE_INTERVAL = 15 * 60 * 1000;
+const log = createLogger("mqtt");
+const mqttError = (err: unknown) => ({
+  name: err instanceof Error ? err.name : "UnknownError",
+  code: err instanceof Error ? (err as NodeJS.ErrnoException).code : undefined,
+});
 
 export class MqttGateway extends EventEmitter {
   private readonly cfg: Required<MqttGatewayConfig>;
   private client: mqtt.MqttClient | null = null;
-  private connected = false;
+  private _connected = false;
   private readonly devices = new Map<string, DeviceState>();
   private readonly nodePersistence: NodePersistence;
 
@@ -59,14 +67,20 @@ export class MqttGateway extends EventEmitter {
   start(): void {
     this.client = connectTransport(this.cfg);
     this.client.on("connect", () => {
-      this.connected = true;
-      console.log(`[mqtt] connected to ${this.cfg.broker}`);
+      this._connected = true;
+      log.info({ operation: "connect", broker: this.cfg.broker }, "connected to broker");
       subscribeTransport(this.client!, this.cfg.rootTopic);
-      for (const [deviceId] of this.devices) this._publishSelf(deviceId).catch(console.error);
+      for (const [deviceId] of this.devices)
+        this._publishSelf(deviceId).catch((err) =>
+          log.error(
+            { deviceId, operation: "publish-self", err: mqttError(err) },
+            "self publish failed",
+          ),
+        );
     });
     this.client.on("message", (topic, payload) => {
       this._handleInbound(topic, payload).catch((err) =>
-        console.error("[mqtt] inbound error:", err.message),
+        log.error({ operation: "handle-inbound", err: mqttError(err) }, "inbound handling failed"),
       );
     });
     this.client.on(
@@ -79,17 +93,20 @@ export class MqttGateway extends EventEmitter {
             }
           | undefined,
       ) => {
-        this.connected = false;
-        console.log(
-          `[mqtt] disconnected reason=${packet?.reasonCode ?? "?"} (${packet?.properties?.reasonString ?? "no reason"})`,
+        this._connected = false;
+        log.info(
+          { operation: "disconnect", reasonCode: packet?.reasonCode },
+          "disconnected from broker",
         );
       },
     );
     this.client.on("close", () => {
-      this.connected = false;
-      console.log("[mqtt] connection closed");
+      this._connected = false;
+      log.info({ operation: "close" }, "broker connection closed");
     });
-    this.client.on("error", (err) => console.error("[mqtt] error:", err.message));
+    this.client.on("error", (err) =>
+      log.error({ operation: "client", err: mqttError(err) }, "MQTT client error"),
+    );
   }
 
   stop(): void {
@@ -101,8 +118,8 @@ export class MqttGateway extends EventEmitter {
     }
     stopTransport(this.client);
     this.client = null;
-    this.connected = false;
-    console.log("[mqtt] stopped");
+    this._connected = false;
+    log.info({ operation: "stop" }, "gateway stopped");
   }
 
   /**
@@ -113,12 +130,19 @@ export class MqttGateway extends EventEmitter {
     try {
       this.stop();
     } catch (err) {
-      console.error("[mqtt] shutdown failed:", err);
+      log.error({ operation: "shutdown", err: mqttError(err) }, "gateway shutdown failed");
     }
   }
 
   get isRunning(): boolean {
     return this.client !== null;
+  }
+
+  /** True only while the underlying mqtt.js client has fired "connect" and
+   *  has not since fired "disconnect"/"close"/"error"-induced closure.
+   *  Backed by the gateway's existing private `_connected` field. */
+  get connected(): boolean {
+    return this._connected;
   }
 
   attachDevice(deviceId: string, meshDevice: MeshDevice): void {
@@ -137,12 +161,25 @@ export class MqttGateway extends EventEmitter {
     const scheduleAnnounceIfReady = () => {
       if (state.announceScheduled || state.nodeNum === 0 || state.channels.size === 0) return;
       state.announceScheduled = true;
-      console.log(`[mqtt] device ${deviceId} ready (${state.gatewayId}), announcing in 2s`);
+      log.info(
+        { deviceId, operation: "schedule-announce", gatewayId: state.gatewayId, delayMs: 2000 },
+        "device ready; scheduling announcement",
+      );
       setTimeout(() => {
-        this._publishSelf(deviceId).catch(console.error);
+        this._publishSelf(deviceId).catch((err) =>
+          log.error(
+            { deviceId, operation: "publish-self", err: mqttError(err) },
+            "self publish failed",
+          ),
+        );
         if (!state.selfAnnounceTimer) {
           state.selfAnnounceTimer = setInterval(() => {
-            this._publishSelf(deviceId).catch(console.error);
+            this._publishSelf(deviceId).catch((err) =>
+              log.error(
+                { deviceId, operation: "publish-self", err: mqttError(err) },
+                "self publish failed",
+              ),
+            );
           }, this.cfg.selfAnnounceInterval);
         }
       }, 2000);
@@ -151,7 +188,10 @@ export class MqttGateway extends EventEmitter {
     meshDevice.events.onMyNodeInfo.subscribe((info: any) => {
       state.nodeNum = info.myNodeNum;
       state.gatewayId = formatNodeId(info.myNodeNum);
-      console.log(`[mqtt] device ${deviceId} nodeNum = ${state.gatewayId}`);
+      log.info(
+        { deviceId, operation: "own-node-info", gatewayId: state.gatewayId },
+        "device node number received",
+      );
       scheduleAnnounceIfReady();
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -160,7 +200,10 @@ export class MqttGateway extends EventEmitter {
       const name = ch.settings?.name || "LongFast";
       const rawPsk = ch.settings?.psk;
       state.channels.set(idx, { name, key: rawPsk ? this._expandPsk(rawPsk) : DEFAULT_KEY });
-      console.log(`[mqtt] device ${deviceId} channel ${idx} = "${name}"`);
+      log.info(
+        { deviceId, operation: "channel-info", channelIndex: idx, channelName: name },
+        "device channel received",
+      );
       scheduleAnnounceIfReady();
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -169,31 +212,52 @@ export class MqttGateway extends EventEmitter {
         state.nodeNum !== 0
           ? nodeInfo.num === state.nodeNum
           : !!(nodeInfo.user?.id && nodeInfo.user.id === state.gatewayId);
-      console.log(
-        `[mqtt] nodeInfo num=${formatNodeId(nodeInfo.num ?? 0)} ours=${isOurs} stateNum=${state.gatewayId} hasPos=${!!nodeInfo.position?.latitudeI} latI=${nodeInfo.position?.latitudeI ?? "none"}`,
+      log.info(
+        {
+          deviceId,
+          operation: "node-info",
+          nodeId: formatNodeId(nodeInfo.num ?? 0),
+          ownNode: isOurs,
+          hasPosition: !!nodeInfo.position?.latitudeI,
+        },
+        "node info received",
       );
       if (isOurs) {
         if (nodeInfo.user) state.cachedUser = nodeInfo.user as Protobuf.Mesh.User;
         if (nodeInfo.position?.latitudeI) {
           state.cachedPosition = nodeInfo.position as Protobuf.Mesh.Position;
-          console.log(
-            `[mqtt] cached own position from nodeInfo: lat=${nodeInfo.position.latitudeI / 1e7} lon=${nodeInfo.position.longitudeI / 1e7}`,
+          log.info(
+            { deviceId, operation: "cache-own-position", source: "node-info" },
+            "cached own position",
           );
         }
       }
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onPositionPacket.subscribe((pkt: any) => {
-      console.log(
-        `[mqtt] positionPacket from=${formatNodeId(pkt.from ?? 0)} stateNum=${state.gatewayId} latI=${pkt.data?.latitudeI ?? "none"}`,
+      log.info(
+        {
+          deviceId,
+          packetId: pkt.id,
+          operation: "position-packet",
+          fromNodeId: formatNodeId(pkt.from ?? 0),
+        },
+        "position packet received",
       );
       if (pkt.from !== state.nodeNum) return;
       const hadPosition = !!state.cachedPosition;
       state.cachedPosition = pkt.data as Protobuf.Mesh.Position;
-      console.log(
-        `[mqtt] cached own position from positionPacket: lat=${pkt.data?.latitudeI / 1e7}`,
+      log.info(
+        { deviceId, packetId: pkt.id, operation: "cache-own-position", source: "position-packet" },
+        "cached own position",
       );
-      if (!hadPosition && state.announceScheduled) this._publishSelf(deviceId).catch(console.error);
+      if (!hadPosition && state.announceScheduled)
+        this._publishSelf(deviceId).catch((err) =>
+          log.error(
+            { deviceId, operation: "publish-self", err: mqttError(err) },
+            "self publish failed",
+          ),
+        );
       if (state.cachedPosition.latitudeI && state.cachedPosition.longitudeI) {
         const pos = state.cachedPosition;
         this.emit("gps:position", deviceId, {
@@ -219,18 +283,29 @@ export class MqttGateway extends EventEmitter {
         this._recalcAllDistances(
           state.cachedPosition.latitudeI / 1e7,
           state.cachedPosition.longitudeI / 1e7,
-        ).catch(console.error);
+        ).catch((err) =>
+          log.error(
+            { deviceId, operation: "recalculate-distances", err: mqttError(err) },
+            "distance recalculation failed",
+          ),
+        );
       }
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onMeshPacket.subscribe((pkt: any) => {
       this._handleMeshPacket(deviceId, pkt).catch((err) =>
-        console.error(`[mqtt] packet error on ${deviceId}:`, err.message),
+        log.error(
+          { deviceId, packetId: pkt.id, operation: "handle-mesh-packet", err: mqttError(err) },
+          "mesh packet handling failed",
+        ),
       );
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onDeviceStatus.subscribe((status: any) => {
-      console.log(`[mqtt] device ${deviceId} status = ${Types.DeviceStatusEnum[status] ?? status}`);
+      log.info(
+        { deviceId, operation: "device-status", status: Types.DeviceStatusEnum[status] ?? status },
+        "device status changed",
+      );
       if (status === Types.DeviceStatusEnum.DeviceConfigured) scheduleAnnounceIfReady();
     });
   }
@@ -243,42 +318,11 @@ export class MqttGateway extends EventEmitter {
   }
 
   async listMqttNodes(): Promise<MqttNode[]> {
-    const { rows } = await this.db.query<{
-      node_id: number;
-      long_name: string | null;
-      short_name: string | null;
-      hw_model: number | null;
-      public_key: string | null;
-      last_heard: string | null;
-      latitude: number | null;
-      longitude: number | null;
-      altitude: number | null;
-      last_gateway: string | null;
-      region_path: string | null;
-      channel_name: string | null;
-      snr: number | null;
-      hops_away: number | null;
-      distance_m: number | null;
-    }>(`SELECT node_id, long_name, short_name, hw_model, public_key, last_heard,
+    const { rows } = await this.db
+      .query<MqttNodeRow>(`SELECT node_id, long_name, short_name, hw_model, public_key, last_heard,
               latitude, longitude, altitude, last_gateway, region_path, channel_name, snr, hops_away, distance_m
        FROM mqtt_nodes ORDER BY last_heard DESC NULLS LAST`);
-    return rows.map((r) => ({
-      nodeId: r.node_id,
-      longName: r.long_name,
-      shortName: r.short_name,
-      hwModel: r.hw_model,
-      publicKey: r.public_key,
-      lastHeard: r.last_heard,
-      latitude: r.latitude,
-      longitude: r.longitude,
-      altitude: r.altitude,
-      lastGateway: r.last_gateway,
-      regionPath: r.region_path,
-      channelName: r.channel_name,
-      snr: r.snr,
-      hopsAway: r.hops_away,
-      distanceM: r.distance_m,
-    }));
+    return rows.map(mapMqttNodeRow);
   }
 
   private inboundDeps(): InboundHandlingDeps {
@@ -293,7 +337,7 @@ export class MqttGateway extends EventEmitter {
   private publishingDeps(): PublishingDeps {
     return {
       getClient: () => this.client,
-      isConnected: () => this.connected,
+      isConnected: () => this._connected,
       rootTopic: this.cfg.rootTopic,
       db: this.db,
       nodePersistence: this.nodePersistence,
@@ -413,6 +457,6 @@ export class MqttGateway extends EventEmitter {
        ) WHERE latitude IS NOT NULL AND longitude IS NOT NULL`,
       [ownLat, ownLon],
     );
-    console.log("[mqtt] recalculated distances for all positioned nodes");
+    log.info({ operation: "recalculate-distances" }, "recalculated positioned-node distances");
   }
 }

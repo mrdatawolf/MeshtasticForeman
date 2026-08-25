@@ -1,4 +1,8 @@
+import { createLogger } from "../logger.js";
+
 import type { PGlite } from "@electric-sql/pglite";
+
+const log = createLogger("db");
 
 const migrations: string[] = [
   /* 001 – initial schema */
@@ -340,7 +344,7 @@ export async function runMigrations(db: PGlite) {
     const version = i + 1;
     if (applied.has(version)) continue;
 
-    console.log(`[db] applying migration ${version}`);
+    log.info({ operation: "apply-migration", version }, "applying migration");
     await db.transaction(async (tx) => {
       await tx.exec(migrations[i]);
       await tx.query("INSERT INTO schema_migrations(version) VALUES ($1)", [version]);

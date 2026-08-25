@@ -5,6 +5,8 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { formatNodeId } from "@foreman/shared";
 import { Protobuf } from "@meshtastic/core";
 
+import { createLogger } from "../logger.js";
+
 import type { NodePersistence, NodeWriteMeta } from "./node-persistence.js";
 import type { PGlite } from "@electric-sql/pglite";
 import type mqtt from "mqtt";
@@ -38,6 +40,7 @@ export interface PublishingDeps {
 }
 
 const publishRoot = (rootTopic: string) => (rootTopic === "all" ? "msh" : rootTopic);
+const log = createLogger("mqtt");
 
 export async function handleMeshPacket(
   deps: PublishingDeps,
@@ -95,18 +98,38 @@ export async function handleMeshPacket(
     ? ((Protobuf.Portnums.PortNum as Record<number, string>)[pkt.payloadVariant.value.portnum] ??
       "?")
     : "encrypted";
-  console.log(`[mqtt] pub  ${portnumName} from ${formatNodeId(fromNum)} → ${topic}`);
+  log.info(
+    {
+      packetId,
+      operation: "publish-mesh-packet",
+      portnum: portnumName,
+      fromNodeId: formatNodeId(fromNum),
+      topic,
+    },
+    "mesh packet published",
+  );
   const relayInterval = 5 * 60 * 1000;
   if (state.cachedPosition && Date.now() - state.lastRelayAnnounceMs > relayInterval) {
     state.lastRelayAnnounceMs = Date.now();
-    publishSelf().catch(console.error);
+    publishSelf().catch(() =>
+      log.error(
+        { operation: "publish-self", err: { name: "PublishError" } },
+        "self publish failed",
+      ),
+    );
   }
 }
 
 export async function publishSelf(deps: PublishingDeps, state: DeviceState): Promise<void> {
   if (!deps.isConnected() || !deps.getClient() || state.nodeNum === 0) return;
-  console.log(
-    `[mqtt] _publishSelf ${state.gatewayId}: hasUser=${!!state.cachedUser} hasPos=${!!state.cachedPosition} latI=${state.cachedPosition?.latitudeI ?? "none"} lonI=${state.cachedPosition?.longitudeI ?? "none"}`,
+  log.info(
+    {
+      operation: "publish-self",
+      gatewayId: state.gatewayId,
+      hasUser: !!state.cachedUser,
+      hasPosition: !!state.cachedPosition,
+    },
+    "publishing self announcement",
   );
   const ch = state.channels.get(0) ?? { name: "LongFast", key: deps.codec.DEFAULT_KEY };
   if (state.cachedUser) {
@@ -142,8 +165,9 @@ export async function publishSelf(deps: PublishingDeps, state: DeviceState): Pro
         hopsAway: null,
       };
       await deps.nodePersistence.upsertSelfPosition(state.nodeNum, { lat, lon, alt }, meta);
-      console.log(
-        `[mqtt] self position written to mqtt_nodes: ${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+      log.info(
+        { operation: "persist-self-position", gatewayId: state.gatewayId },
+        "self position persisted",
       );
     }
   }
@@ -184,7 +208,15 @@ export async function publishOwnPacket(
   });
   const topic = `${publishRoot(deps.rootTopic)}/2/e/${ch.name}/${state.gatewayId}`;
   client.publish(topic, Buffer.from(toBinary(Protobuf.Mqtt.ServiceEnvelopeSchema, envelope)));
-  console.log(`[mqtt] self ${Protobuf.Portnums.PortNum[portnum]} → ${topic}`);
+  log.info(
+    {
+      packetId,
+      operation: "publish-own-packet",
+      portnum: Protobuf.Portnums.PortNum[portnum],
+      topic,
+    },
+    "own packet published",
+  );
 }
 
 export async function publishMapReport(
@@ -227,7 +259,7 @@ export async function publishMapReport(
   });
   const topic = `${publishRoot(deps.rootTopic)}/2/map/`;
   client.publish(topic, Buffer.from(toBinary(Protobuf.Mqtt.ServiceEnvelopeSchema, envelope)));
-  console.log(`[mqtt] self MAP_REPORT_APP → ${topic}`);
+  log.info({ operation: "publish-map-report", topic }, "map report published");
 }
 
 export function randomPacketId(): number {

@@ -1,10 +1,14 @@
 import { z } from "zod";
 
+import { createLogger } from "../logger.js";
+
 import { sendValidationError } from "./schemas.js";
 
 import type { DaemonConfig } from "../config.js";
 import type { PGlite } from "@electric-sql/pglite";
 import type { FastifyInstance } from "fastify";
+
+const log = createLogger("coverage");
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -151,8 +155,14 @@ async function fetchElevations(
         signal: AbortSignal.timeout(15_000),
       });
       if (res.status !== 429) break;
-      console.warn(
-        `[coverage] Elevation API rate-limited (429), retry ${attempt + 1}/${ELEVATION_MAX_RETRIES}`,
+      log.warn(
+        {
+          operation: "fetch-elevation",
+          statusCode: 429,
+          attempt: attempt + 1,
+          maxRetries: ELEVATION_MAX_RETRIES,
+        },
+        "elevation API rate limited",
       );
     }
     if (!res || !res.ok) throw new Error(`Elevation API returned HTTP ${res?.status ?? "???"}`);
@@ -283,7 +293,7 @@ export async function registerCoverageRoutes(
     try {
       elevations = await fetchElevations(db, allPoints, config.coverage.elevationApiUrl);
     } catch (err) {
-      console.error("[coverage] elevation fetch failed:", err);
+      log.error({ operation: "fetch-elevation", err }, "elevation fetch failed");
       return reply.status(502).send({
         error: "Elevation service unavailable — check ELEVATION_API_URL",
         detail: String(err),

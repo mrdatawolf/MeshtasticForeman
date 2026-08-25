@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 
 import { formatNodeId } from "@foreman/shared";
 
+import { createLogger } from "../logger.js";
+
 import type { PGlite } from "@electric-sql/pglite";
 import type { ServerEvent } from "@foreman/shared";
 
@@ -12,6 +14,7 @@ export interface TracerouteHandlerDeps {
   emit: (event: ServerEvent) => void;
   getMyNodeId: (deviceId: string) => number | undefined;
 }
+const log = createLogger("devices");
 
 // SDK traceroute packet typing remains intentionally unchanged from DeviceManager.
 export async function handleTraceroutePacket(
@@ -27,8 +30,14 @@ export async function handleTraceroutePacket(
     type: "traceroute:result",
     payload: { deviceId, nodeId, route, routeBack },
   });
-  console.log(
-    `[devices] traceroute result from ${formatNodeId(nodeId)} route=[${route.map((n) => formatNodeId(n, 0)).join(",")}]`,
+  log.info(
+    {
+      deviceId,
+      operation: "traceroute-result",
+      nodeId: formatNodeId(nodeId),
+      route: route.map((node) => formatNodeId(node, 0)),
+    },
+    "traceroute result received",
   );
   await deps.db.query(
     `INSERT INTO traceroutes(id, device_id, from_node_id, to_node_id, route, route_back)

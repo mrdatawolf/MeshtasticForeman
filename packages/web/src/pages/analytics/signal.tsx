@@ -13,10 +13,12 @@ import {
 
 import * as analyticsApi from "../../api/analytics.js";
 
+import { cx, styles } from "./analyticsStyles.js";
 import {
   ChartCard,
   Empty,
   GRID_COLOR,
+  LEGEND_WRAPPER_STYLE,
   Loading,
   RangeBtn,
   TICK_STYLE,
@@ -24,12 +26,13 @@ import {
   formatTs,
   nodeColor,
   nodeName,
-  styles,
 } from "./components.js";
+import localStyles from "./signal.module.css";
 import { useAnalyticsQuery } from "./useAnalyticsQuery.js";
 
 import type { LinkQualityEntry, SnrHistoryPoint } from "../../api/analytics.js";
 import type { MqttNode, NodeInfo } from "@foreman/shared";
+import type { CSSProperties } from "react";
 
 // Tab 1 — Signal Quality
 // ---------------------------------------------------------------------------
@@ -83,7 +86,7 @@ export function SignalTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: 
     "received directly over radio — MQTT-relayed packets do not carry rx_snr/rx_rssi.";
 
   return (
-    <div style={styles.grid}>
+    <div className={styles.grid}>
       <ChartCard title="SNR over Time (dB)" fullWidth>
         <RangeBtn options={["1h", "6h", "24h", "7d"]} value={since} onChange={setSince} />
         {snrData === null ? (
@@ -100,7 +103,7 @@ export function SignalTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: 
                 {...TOOLTIP_STYLE}
                 labelFormatter={(v) => new Date(v as string).toLocaleString()}
               />
-              <Legend wrapperStyle={styles.legendWrap} />
+              <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
               {topNodes.map((id) => (
                 <Line
                   key={id}
@@ -131,7 +134,7 @@ export function SignalTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: 
                 {...TOOLTIP_STYLE}
                 labelFormatter={(v) => new Date(v as string).toLocaleString()}
               />
-              <Legend wrapperStyle={styles.legendWrap} />
+              <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
               {topNodes.map((id) => (
                 <Line
                   key={id}
@@ -189,13 +192,13 @@ export function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNo
     return m;
   }, [data]);
 
-  function cellColor(snr: number | null): string {
-    if (snr === null) return "#0f172a";
-    if (snr > 0) return "#14532d";
-    if (snr > -5) return "#166534";
-    if (snr > -10) return "#854d0e";
-    if (snr > -15) return "#7c2d12";
-    return "#450a0a";
+  function cellClass(snr: number | null): string {
+    if (snr === null) return localStyles.snrCellNone;
+    if (snr > 0) return localStyles.snrCellGreat;
+    if (snr > -5) return localStyles.snrCellGood;
+    if (snr > -10) return localStyles.snrCellFair;
+    if (snr > -15) return localStyles.snrCellPoor;
+    return localStyles.snrCellBad;
   }
   function cellText(snr: number | null): string {
     if (snr === null) return "";
@@ -211,17 +214,10 @@ export function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNo
   };
 
   return (
-    <div style={styles.grid}>
-      <div style={{ gridColumn: "1 / -1" }}>
+    <div className={styles.grid}>
+      <div className={styles.gridSpan}>
         <RangeBtn options={["24h", "7d", "30d", "all"]} value={since} onChange={setSince} />
-        <div
-          style={{
-            color: "#64748b",
-            fontSize: "0.7rem",
-            fontFamily: "monospace",
-            marginTop: "0.25rem",
-          }}
-        >
+        <div className={localStyles.matrixCaption}>
           Average SNR (dB) per node pair · top 20 most active nodes shown
         </div>
       </div>
@@ -232,15 +228,17 @@ export function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNo
         ) : data.length === 0 ? (
           <Empty message="No SNR data in this time window. Link quality requires packets received directly over radio — MQTT-relayed packets do not carry rx_snr." />
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{ borderCollapse: "collapse", fontFamily: "monospace", fontSize: "0.65rem" }}
-            >
+          <div className={localStyles.tableScroll}>
+            <table className={localStyles.table}>
               <thead>
                 <tr>
-                  <th style={styles.matrixCorner} />
+                  <th className={styles.matrixCorner} />
                   {nodeIds.map((id) => (
-                    <th key={id} style={styles.matrixHeader} title={nodeName(id, nodes, mqttNodes)}>
+                    <th
+                      key={id}
+                      className={styles.matrixHeader}
+                      title={nodeName(id, nodes, mqttNodes)}
+                    >
                       {shortName(id)}
                     </th>
                   ))}
@@ -249,24 +247,26 @@ export function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNo
               <tbody>
                 {nodeIds.map((fromId) => (
                   <tr key={fromId}>
-                    <td style={styles.matrixRowHeader} title={nodeName(fromId, nodes, mqttNodes)}>
+                    <td
+                      className={styles.matrixRowHeader}
+                      title={nodeName(fromId, nodes, mqttNodes)}
+                    >
                       {shortName(fromId)}
                     </td>
                     {nodeIds.map((toId) => {
                       if (fromId === toId) {
                         return (
-                          <td key={toId} style={{ ...styles.matrixCell, background: "#1e293b" }} />
+                          <td
+                            key={toId}
+                            className={cx(styles.matrixCell, localStyles.matrixCellDiag)}
+                          />
                         );
                       }
                       const snr = snrMap.get(`${fromId}_${toId}`) ?? null;
                       return (
                         <td
                           key={toId}
-                          style={{
-                            ...styles.matrixCell,
-                            background: cellColor(snr),
-                            color: snr !== null ? "#e2e8f0" : undefined,
-                          }}
+                          className={cx(styles.matrixCell, cellClass(snr))}
                           title={`${shortName(fromId)} → ${shortName(toId)}: ${snr !== null ? `${snr.toFixed(1)} dB` : "no data"}`}
                         >
                           {cellText(snr)}
@@ -278,7 +278,7 @@ export function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNo
               </tbody>
             </table>
             {/* Legend */}
-            <div style={{ display: "flex", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+            <div className={localStyles.legend}>
               {[
                 { label: "> 0 dB", bg: "#14532d" },
                 { label: "0 to -5", bg: "#166534" },
@@ -287,26 +287,10 @@ export function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNo
                 { label: "< -15 dB", bg: "#450a0a" },
                 { label: "No data", bg: "#0f172a" },
               ].map((s) => (
-                <span
-                  key={s.label}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.35rem",
-                    fontSize: "0.68rem",
-                    fontFamily: "monospace",
-                    color: "#64748b",
-                  }}
-                >
+                <span key={s.label} className={localStyles.legendItem}>
                   <span
-                    style={{
-                      display: "inline-block",
-                      width: "0.9rem",
-                      height: "0.9rem",
-                      background: s.bg,
-                      border: "1px solid #334155",
-                      borderRadius: "2px",
-                    }}
+                    className={localStyles.legendSwatch}
+                    style={{ "--swatch-color": s.bg } as CSSProperties}
                   />
                   {s.label}
                 </span>

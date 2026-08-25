@@ -19,8 +19,10 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { openDb, clearDbLock } from "../db/open.js";
+import { createLogger } from "../logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const log = createLogger("export");
 
 // All cache files live under TD_cache/ at the project root
 const CACHE_DIR = resolve(__dirname, "../../../../TD_cache");
@@ -55,7 +57,10 @@ async function main(): Promise<void> {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("does not exist")) {
-      console.log("[export] elevation_cache table not found — nothing to export.");
+      log.info(
+        { operation: "export", reason: "table-missing" },
+        "elevation cache table not found; nothing to export",
+      );
       await db.close();
       return;
     }
@@ -65,7 +70,10 @@ async function main(): Promise<void> {
   }
 
   if (rows.length === 0) {
-    console.log("[export] elevation_cache is empty — nothing to export.");
+    log.info(
+      { operation: "export", reason: "empty" },
+      "elevation cache is empty; nothing to export",
+    );
     return;
   }
 
@@ -104,10 +112,10 @@ async function main(): Promise<void> {
   }
 
   writeFileSync(filePath, lines.join("\n"), "utf8");
-  console.log(`[export] Wrote ${rows.length} rows → ${filePath}`);
+  log.info({ operation: "export", rowCount: rows.length, filePath }, "terrain cache exported");
 }
 
 main().catch((err) => {
-  console.error("[export] Fatal:", err);
+  log.error({ operation: "export", err }, "terrain cache export failed");
   process.exit(1);
 });

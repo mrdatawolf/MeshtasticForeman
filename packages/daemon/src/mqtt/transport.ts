@@ -2,6 +2,10 @@ import { randomBytes } from "node:crypto";
 
 import mqtt from "mqtt";
 
+import { createLogger } from "../logger.js";
+
+const log = createLogger("mqtt");
+
 export interface TransportConfig {
   broker: string;
   port: number;
@@ -20,7 +24,10 @@ export function connectTransport(cfg: TransportConfig): mqtt.MqttClient {
     reconnectPeriod: 5000,
     keepalive: 60,
   });
-  console.log(`[mqtt] connecting as clientId=${clientId}`);
+  log.info(
+    { operation: "connect-transport", clientId, broker: cfg.broker, port: cfg.port },
+    "connecting transport",
+  );
   return client;
 }
 
@@ -31,8 +38,12 @@ export function subscribeTransport(client: mqtt.MqttClient, rootTopic: string): 
   // Special value "all" subscribes to every topic on the broker.
   const subTopic = rootTopic === "all" ? "#" : `${rootTopic}/#`;
   client.subscribe(subTopic, (err) => {
-    if (err) console.error("[mqtt] subscribe error:", err.message);
-    else console.log(`[mqtt] subscribed to ${subTopic}`);
+    if (err)
+      log.error(
+        { operation: "subscribe", topic: subTopic, err: { name: err.name } },
+        "topic subscription failed",
+      );
+    else log.info({ operation: "subscribe", topic: subTopic }, "subscribed to topic");
   });
 }
 

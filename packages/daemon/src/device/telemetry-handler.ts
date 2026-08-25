@@ -1,3 +1,5 @@
+import { createLogger } from "../logger.js";
+
 import type { AdaptedTelemetry } from "./meshtastic-adapter.js";
 import type { PGlite } from "@electric-sql/pglite";
 import type { ServerEvent, GpsDetail } from "@foreman/shared";
@@ -7,6 +9,7 @@ interface DeviceStatusSource {
   port: string;
   connectedAt: string;
 }
+const log = createLogger("devices");
 
 export interface TelemetryHandlerDeps {
   db: PGlite;
@@ -35,7 +38,7 @@ export async function handleTelemetry(
   if (deps.getBatteryLevel(deviceId) === batteryLevel) return;
 
   deps.setBatteryLevel(deviceId, batteryLevel);
-  console.log(`[devices] battery ${name} ${batteryLevel}%`);
+  log.info({ deviceId, operation: "battery-update", batteryLevel }, "device battery updated");
   const device = deps.getDevice(deviceId);
   if (!device) return;
   const { rows } = await deps.db.query<{ hw_model: string | null; firmware: string | null }>(

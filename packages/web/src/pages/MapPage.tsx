@@ -14,6 +14,12 @@ import {
   TERRAIN_FETCH_RADIUS_KM,
   TERRAIN_MAP_STYLE,
 } from "../components/map/mapCoverageConfig.js";
+import {
+  ageFilterBtnClass,
+  cx,
+  onOffBtnClass,
+  styles as controlStyles,
+} from "../components/map/mapStyles.js";
 import { MeshPopup, MqttPopup } from "../components/map/NodePopups.js";
 import { ProposalControls } from "../components/map/ProposalControls.js";
 import { ProposalEditor } from "../components/map/ProposalEditor.js";
@@ -22,9 +28,12 @@ import { buildCoverageCircle, clipViewshedToRadius } from "../lib/coordinateHelp
 import { mergeCoveragePolygons } from "../lib/coverageMath.js";
 import { foremanClient } from "../ws/client.js";
 
+import styles from "./MapPage.module.css";
+
 export { channelNameToPreset } from "../components/map/mapCoverageConfig.js";
 
 import type { NodeInfo, MqttNode, DeviceConfig, CoverageProposal } from "@foreman/shared";
+import type { CSSProperties } from "react";
 
 type PendingMapAction = { nodeId: number; action: "ping" | "traceroute" };
 
@@ -726,7 +735,7 @@ export function MapPage({
         : null;
 
   return (
-    <div style={styles.wrap}>
+    <div className={styles.wrap}>
       <MapCanvas
         mapRef={mapRef}
         hasGpsNodes={allMappable.length > 0}
@@ -774,7 +783,6 @@ export function MapPage({
             const color = nodeColor(node.nodeId);
             const stackCount = colocatedCounts.get(`${node.latitude}:${node.longitude}`) ?? 1;
             const hasStack = stackCount > 1;
-            const size = hasStack ? "2.4rem" : "2rem";
             return (
               <Marker
                 key={`mesh-${node.nodeId}`}
@@ -785,30 +793,31 @@ export function MapPage({
               >
                 <div
                   title={resolveNodeName(node.nodeId, node, { preference: ["longName"] })}
-                  style={{
-                    ...styles.markerOuter,
-                    borderColor: color,
-                    boxShadow: `0 0 0 2px ${color}33`,
-                    cursor: "pointer",
-                  }}
+                  className={cx(styles.markerOuter, styles.markerOuterMesh)}
+                  style={
+                    {
+                      "--marker-color": color,
+                      "--marker-shadow": `${color}33`,
+                    } as CSSProperties
+                  }
                 >
                   <div
-                    style={{
-                      ...styles.markerInner,
-                      width: size,
-                      height: size,
-                      background: isLocal ? color : "#0f172a",
-                      color: isLocal ? "#fff" : color,
-                      border: `2px solid ${color}`,
-                    }}
+                    className={cx(styles.markerInner, hasStack && styles.markerInnerStacked)}
+                    style={
+                      {
+                        "--marker-bg": isLocal ? color : "#0f172a",
+                        "--marker-fg": isLocal ? "#fff" : color,
+                        "--marker-border": `2px solid ${color}`,
+                      } as CSSProperties
+                    }
                   >
                     {resolveNodeName(node.nodeId, node, {
                       preference: ["shortName"],
                       fallback: nodeHex(node.nodeId).slice(-4),
                     }).slice(0, 4)}
                   </div>
-                  {isLocal && <div style={styles.localRing} />}
-                  {hasStack && <div style={styles.stackBadge}>+{stackCount}</div>}
+                  {isLocal && <div className={styles.localRing} />}
+                  {hasStack && <div className={styles.stackBadge}>+{stackCount}</div>}
                 </div>
               </Marker>
             );
@@ -820,7 +829,6 @@ export function MapPage({
             const color = nodeColor(node.nodeId);
             const stackCount = colocatedCounts.get(`${node.latitude}:${node.longitude}`) ?? 1;
             const hasStack = stackCount > 1;
-            const size = hasStack ? "2.4rem" : "2rem";
             return (
               <Marker
                 key={`mqtt-${node.nodeId}`}
@@ -831,25 +839,28 @@ export function MapPage({
               >
                 <div
                   title={`[MQTT] ${resolveNodeName(node.nodeId, node, { preference: ["longName"] })}`}
-                  style={{ ...styles.markerOuter, cursor: "pointer" }}
+                  className={styles.markerOuter}
                 >
                   <div
-                    style={{
-                      ...styles.markerInner,
-                      width: size,
-                      height: size,
-                      background: "#0f172a",
-                      color,
-                      border: `2px dashed ${color}`,
-                      boxShadow: `0 0 0 2px ${color}22`,
-                    }}
+                    className={cx(
+                      styles.markerInner,
+                      styles.markerInnerMqtt,
+                      hasStack && styles.markerInnerStacked,
+                    )}
+                    style={
+                      {
+                        "--marker-fg": color,
+                        "--marker-border": `2px dashed ${color}`,
+                        "--marker-shadow": `${color}22`,
+                      } as CSSProperties
+                    }
                   >
                     {resolveNodeName(node.nodeId, node, {
                       preference: ["shortName"],
                       fallback: nodeHex(node.nodeId).slice(-4),
                     }).slice(0, 4)}
                   </div>
-                  {hasStack && <div style={styles.stackBadge}>+{stackCount}</div>}
+                  {hasStack && <div className={styles.stackBadge}>+{stackCount}</div>}
                 </div>
               </Marker>
             );
@@ -900,15 +911,15 @@ export function MapPage({
                 }}
               >
                 <div
-                  style={styles.proposalMarker}
+                  className={styles.proposalMarker}
                   title={`Proposal: ${p.name} — drag to reposition`}
                 >
                   {/* Label on top */}
-                  <span style={styles.proposalLabel}>{p.name}</span>
+                  <span className={styles.proposalLabel}>{p.name}</span>
                   {/* Diamond head */}
-                  <div style={styles.proposalDiamond} />
+                  <div className={styles.proposalDiamond} />
                   {/* Pole — bottom is the anchor point */}
-                  <div style={styles.proposalPole} />
+                  <div className={styles.proposalPole} />
                 </div>
               </Marker>
             ))}
@@ -923,6 +934,8 @@ export function MapPage({
             closeButton={true}
             closeOnClick={false}
             onClose={() => setSelectedProposal(null)}
+            // react-map-gl's <Popup> only accepts a `style` prop for its container
+            // (no `className`), so this can't move to a CSS module.
             style={{ fontFamily: "monospace" }}
           >
             <ProposalEditor
@@ -1035,28 +1048,13 @@ export function MapPage({
                   setSelected(null);
                   setStackedNodes([]);
                 }}
+                // react-map-gl's <Popup> only accepts a `style` prop for its container
+                // (no `className`), so this can't move to a CSS module.
                 style={{ fontFamily: "monospace" }}
               >
                 {stackedNodes.length > 1 && (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: "0.25rem",
-                      padding: "0.35rem 0.5rem",
-                      borderBottom: "1px solid #1e293b",
-                      marginBottom: "0.35rem",
-                      maxWidth: "260px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "0.65rem",
-                        color: "#64748b",
-                        width: "100%",
-                        marginBottom: "0.1rem",
-                      }}
-                    >
+                  <div className={styles.stackHeader}>
+                    <span className={styles.stackHeaderLabel}>
                       {stackedNodes.length} nodes at this location:
                     </span>
                     {stackedNodes.map((sn) => {
@@ -1069,16 +1067,14 @@ export function MapPage({
                         <button
                           key={`${sn.source}-${sn.node.nodeId}`}
                           onClick={() => setSelected(sn)}
-                          style={{
-                            padding: "0.15rem 0.4rem",
-                            fontSize: "0.7rem",
-                            fontFamily: "monospace",
-                            borderRadius: "0.25rem",
-                            border: `1px solid ${isActive ? nodeColor(sn.node.nodeId) : "#334155"}`,
-                            background: isActive ? `${nodeColor(sn.node.nodeId)}22` : "#0f172a",
-                            color: isActive ? nodeColor(sn.node.nodeId) : "#94a3b8",
-                            cursor: "pointer",
-                          }}
+                          className={styles.stackButton}
+                          style={
+                            {
+                              "--stack-border": `1px solid ${isActive ? nodeColor(sn.node.nodeId) : "#334155"}`,
+                              "--stack-bg": isActive ? `${nodeColor(sn.node.nodeId)}22` : "#0f172a",
+                              "--stack-color": isActive ? nodeColor(sn.node.nodeId) : "#94a3b8",
+                            } as CSSProperties
+                          }
                           title={resolveNodeName(sn.node.nodeId, sn.node, {
                             preference: ["longName"],
                           })}
@@ -1157,33 +1153,19 @@ export function MapPage({
       </MapCanvas>
 
       {/* Traceroute + Coverage controls — top left, side by side */}
-      <div
-        style={{
-          position: "absolute",
-          top: "1rem",
-          left: "1rem",
-          display: "flex",
-          flexDirection: "row",
-          gap: "0.5rem",
-          alignItems: "flex-start",
-          zIndex: 10,
-        }}
-      >
+      <div className={styles.topControlsRow}>
         {/* ── Traceroute panel ─────────────────────────────────────────── */}
-        <div style={{ ...styles.controlPanel }}>
+        <div className={controlStyles.controlPanel}>
           {/* Simple row — always visible */}
-          <div style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
-            <span style={styles.controlLabel}>Traceroutes:</span>
+          <div className={controlStyles.controlRow}>
+            <span className={controlStyles.controlLabel}>Traceroutes:</span>
 
-            <span style={styles.summaryPill}>
+            <span className={controlStyles.summaryPill}>
               {AGE_OPTIONS.find((o) => o.hours === ageHours)?.label ?? `${ageHours}h`}
             </span>
 
             <button
-              style={{
-                ...ageFilterBtnStyle(showTraceroutes),
-                ...(!showTraceroutes ? { color: "#64748b" } : {}),
-              }}
+              className={onOffBtnClass(showTraceroutes)}
               onClick={() => setShowTraceroutes((v) => !v)}
               title={showTraceroutes ? "Hide traceroute lines" : "Show traceroute lines"}
             >
@@ -1191,14 +1173,14 @@ export function MapPage({
             </button>
 
             <button
-              style={{ ...ageFilterBtnStyle(tracerouteExpanded), padding: "0.2rem 0.35rem" }}
+              className={cx(ageFilterBtnClass(tracerouteExpanded), controlStyles.ageFilterBtnCaret)}
               onClick={() => setTracerouteExpanded((v) => !v)}
               title={tracerouteExpanded ? "Hide age options" : "Show age options"}
             >
               {tracerouteExpanded ? "▲" : "▼"}
             </button>
 
-            <span style={{ color: "#64748b", fontSize: "0.7rem" }}>
+            <span className={styles.routeCountText}>
               {showTraceroutes
                 ? `${traceroutes.length} route${traceroutes.length !== 1 ? "s" : ""}`
                 : "hidden"}
@@ -1207,20 +1189,14 @@ export function MapPage({
 
           {/* Age row — shown when expanded */}
           {tracerouteExpanded && (
-            <div
-              style={{
-                display: "flex",
-                gap: "0.3rem",
-                alignItems: "center",
-                paddingTop: "0.15rem",
-                borderTop: "1px solid #1e293b",
-              }}
-            >
-              <span style={{ ...styles.controlLabel, marginRight: 0 }}>Age:</span>
+            <div className={cx(controlStyles.controlRow, controlStyles.advancedRow)}>
+              <span className={cx(controlStyles.controlLabel, controlStyles.controlLabelFlush)}>
+                Age:
+              </span>
               {AGE_OPTIONS.map((opt) => (
                 <button
                   key={opt.label}
-                  style={ageFilterBtnStyle(ageHours === opt.hours)}
+                  className={ageFilterBtnClass(ageHours === opt.hours)}
                   onClick={() => {
                     setAgeHours(opt.hours);
                     if (!showTraceroutes) setShowTraceroutes(true);
@@ -1276,62 +1252,23 @@ export function MapPage({
       </div>
 
       {/* Search filter — top center */}
-      <div
-        style={{
-          position: "absolute",
-          top: "0.75rem",
-          left: "50%",
-          transform: "translateX(-50%)",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.35rem",
-          background: "#0f172a",
-          border: "1px solid #334155",
-          borderRadius: "0.5rem",
-          padding: "0.25rem 0.5rem",
-          zIndex: 10,
-          boxShadow: "0 2px 8px #0008",
-        }}
-      >
-        <span style={{ color: "#64748b", fontSize: "0.75rem", userSelect: "none" }}>🔍</span>
+      <div className={styles.searchBar}>
+        <span className={styles.searchIcon}>🔍</span>
         <input
           type="text"
           placeholder="node name or !hex…"
           value={mapSearch}
           onChange={(e) => setMapSearch(e.target.value)}
-          style={{
-            background: "transparent",
-            border: "none",
-            outline: "none",
-            color: "#e2e8f0",
-            fontSize: "0.75rem",
-            fontFamily: "monospace",
-            width: "14rem",
-          }}
+          className={styles.searchInput}
         />
         {mapSearch && (
           <>
-            <span
-              style={{
-                color: "#94a3b8",
-                fontSize: "0.7rem",
-                fontFamily: "monospace",
-                whiteSpace: "nowrap",
-              }}
-            >
+            <span className={styles.searchCount}>
               {filteredMesh.length + filteredMqtt.length} shown
             </span>
             <button
               onClick={() => setMapSearch("")}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "#64748b",
-                fontSize: "0.85rem",
-                lineHeight: 1,
-                padding: "0 0.1rem",
-              }}
+              className={styles.searchClearBtn}
               title="Clear search"
             >
               ✕
@@ -1341,61 +1278,41 @@ export function MapPage({
       </div>
 
       {/* Legend — bottom left */}
-      <div style={styles.legend}>
-        <span style={styles.legendItem}>
-          <span
-            style={{
-              position: "relative",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <span
-              style={{ ...styles.legendDot, background: "#3b82f6", border: "2px solid #3b82f6" }}
-            />
-            <span
-              style={{
-                position: "absolute",
-                inset: "-3px",
-                borderRadius: "50%",
-                border: "2px dashed #22c55e",
-              }}
-            />
+      <div className={styles.legend}>
+        <span className={styles.legendItem}>
+          <span className={styles.legendDirectWrap}>
+            <span className={cx(styles.legendDot, styles.legendDotDirect)} />
+            <span className={styles.legendDirectRing} />
           </span>
           Direct (0 hops)
         </span>
-        <span style={styles.legendItem}>
-          <span
-            style={{ ...styles.legendDot, background: "#0f172a", border: "2px solid #94a3b8" }}
-          />
+        <span className={styles.legendItem}>
+          <span className={cx(styles.legendDot, styles.legendDotMesh)} />
           Mesh
         </span>
-        <span style={styles.legendItem}>
-          <span
-            style={{ ...styles.legendDot, background: "#0f172a", border: "2px dashed #94a3b8" }}
-          />
+        <span className={styles.legendItem}>
+          <span className={cx(styles.legendDot, styles.legendDotMqtt)} />
           MQTT
         </span>
-        <span style={styles.legendItem}>
-          <span style={styles.legendLine} />
+        <span className={styles.legendItem}>
+          <span className={styles.legendLine} />
           Traceroute
         </span>
-        <span style={styles.legendItem}>
-          <span style={{ ...styles.legendLine, borderStyle: "dashed", opacity: 0.6 }} />
+        <span className={styles.legendItem}>
+          <span className={cx(styles.legendLine, styles.legendLineDashed)} />
           Traceroute (gap)
         </span>
         {showCoverage && (
-          <span style={styles.legendItem}>
+          <span className={styles.legendItem}>
             <span
-              style={{
-                display: "inline-block",
-                width: "1rem",
-                height: "1rem",
-                borderRadius: terrainMode ? "2px" : coverageUnion ? "2px" : "50%",
-                background: coverageUnion ? "#3b82f633" : "#94a3b833",
-                border: `1px solid ${coverageUnion ? "#3b82f6" : "#94a3b8"}`,
-              }}
+              className={cx(
+                styles.legendSwatch,
+                coverageUnion
+                  ? styles.legendSwatchUnion
+                  : terrainMode
+                    ? styles.legendSwatchTerrainSeparate
+                    : styles.legendSwatchCircle,
+              )}
             />
             {terrainMode
               ? "Terrain LOS"
@@ -1405,21 +1322,12 @@ export function MapPage({
           </span>
         )}
         {showProposals && proposals.some((p) => p.visible) && (
-          <span style={styles.legendItem}>
-            <span
-              style={{
-                display: "inline-block",
-                width: "1rem",
-                height: "1rem",
-                borderRadius: "2px",
-                background: "#f59e0b33",
-                border: "1px dashed #f59e0b",
-              }}
-            />
+          <span className={styles.legendItem}>
+            <span className={cx(styles.legendSwatch, styles.legendSwatchAmber)} />
             Proposed site
           </span>
         )}
-        <span style={{ color: "#64748b" }}>
+        <span className={styles.legendMuted}>
           {mapSearch
             ? `${filteredMesh.length + filteredMqtt.length} / ${mappableMesh.length + mappableMqtt.length} matching`
             : `${mappableMesh.length + mappableMqtt.length} / ${nodes.length + mqttNodes.length} with GPS`}
@@ -1436,180 +1344,3 @@ export function MapPage({
 function mkFeatureCollection(features: GeoJSON.Feature[]): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features };
 }
-
-function ageFilterBtnStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: "0.2rem 0.45rem",
-    fontSize: "0.7rem",
-    borderRadius: "0.3rem",
-    border: active ? "1px solid #60a5fa" : "1px solid #334155",
-    background: active ? "#1e3a5f" : "#1e293b",
-    color: active ? "#93c5fd" : "#94a3b8",
-    cursor: "pointer",
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Popup components
-// ---------------------------------------------------------------------------
-
-// Styles
-// ---------------------------------------------------------------------------
-
-const styles: Record<string, React.CSSProperties> = {
-  wrap: {
-    flex: 1,
-    position: "relative",
-    minHeight: 0,
-    overflow: "hidden",
-  },
-  markerOuter: {
-    position: "relative",
-    borderRadius: "50%",
-  },
-  markerInner: {
-    width: "2rem",
-    height: "2rem",
-    borderRadius: "50%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "0.6rem",
-    fontWeight: "bold",
-    fontFamily: "monospace",
-    userSelect: "none",
-  },
-  localRing: {
-    position: "absolute",
-    inset: "-4px",
-    borderRadius: "50%",
-    border: "2px dashed #22c55e",
-    pointerEvents: "none",
-  },
-  stackBadge: {
-    position: "absolute",
-    top: "-5px",
-    right: "-5px",
-    background: "#f59e0b",
-    color: "#000",
-    fontSize: "0.5rem",
-    fontWeight: "bold",
-    fontFamily: "monospace",
-    borderRadius: "0.6rem",
-    padding: "0 0.25rem",
-    minWidth: "1rem",
-    height: "1rem",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    pointerEvents: "none",
-    lineHeight: 1,
-  },
-  controls: {
-    position: "absolute",
-    top: "1rem",
-    left: "1rem",
-    background: "#0f172acc",
-    backdropFilter: "blur(4px)",
-    color: "#e2e8f0",
-    padding: "0.4rem 0.6rem",
-    borderRadius: "0.5rem",
-    fontSize: "0.75rem",
-    display: "flex",
-    gap: "0.3rem",
-    alignItems: "center",
-    zIndex: 10,
-  },
-  controlPanel: {
-    background: "#0f172acc",
-    backdropFilter: "blur(4px)",
-    color: "#e2e8f0",
-    padding: "0.4rem 0.6rem",
-    borderRadius: "0.5rem",
-    fontSize: "0.75rem",
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "0.35rem",
-    alignItems: "flex-start",
-  },
-  summaryPill: {
-    fontSize: "0.7rem",
-    color: "#cbd5e1",
-    background: "#1e293b",
-    border: "1px solid #334155",
-    borderRadius: "0.3rem",
-    padding: "0.15rem 0.45rem",
-    fontFamily: "monospace",
-  },
-  controlLabel: {
-    color: "#94a3b8",
-    marginRight: "0.15rem",
-    fontSize: "0.7rem",
-  },
-  legend: {
-    position: "absolute",
-    bottom: "1rem",
-    left: "1rem",
-    background: "#0f172acc",
-    backdropFilter: "blur(4px)",
-    color: "#e2e8f0",
-    padding: "0.5rem 0.75rem",
-    borderRadius: "0.5rem",
-    fontSize: "0.75rem",
-    display: "flex",
-    gap: "1rem",
-    alignItems: "center",
-    zIndex: 10,
-  },
-  legendItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.4rem",
-  },
-  legendDot: {
-    width: "0.75rem",
-    height: "0.75rem",
-    borderRadius: "50%",
-    display: "inline-block",
-  },
-  legendLine: {
-    display: "inline-block",
-    width: "1.5rem",
-    height: 0,
-    borderTop: "2px solid #94a3b8",
-  },
-  proposalMarker: {
-    display: "flex",
-    flexDirection: "column" as const,
-    alignItems: "center",
-    cursor: "pointer",
-  },
-  proposalDiamond: {
-    width: "14px",
-    height: "14px",
-    background: "#f59e0b",
-    border: "2px solid #fff",
-    transform: "rotate(45deg)",
-    boxShadow: "0 0 4px #f59e0b88",
-    flexShrink: 0,
-  },
-  proposalPole: {
-    width: "2px",
-    height: "18px",
-    background: "#f59e0b",
-    flexShrink: 0,
-  },
-  proposalLabel: {
-    fontSize: "0.6rem",
-    fontFamily: "monospace",
-    color: "#fef3c7",
-    fontWeight: "bold",
-    background: "#78350fdd",
-    borderRadius: "0.2rem",
-    padding: "0 0.25rem",
-    marginTop: "2px",
-    whiteSpace: "nowrap" as const,
-    pointerEvents: "none" as const,
-    boxShadow: "0 1px 3px #00000066",
-  },
-};

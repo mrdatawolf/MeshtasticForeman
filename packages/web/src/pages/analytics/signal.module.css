@@ -1,0 +1,74 @@
+.matrixCaption {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-family: monospace;
+  margin-top: 0.25rem;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  font-family: monospace;
+  font-size: 0.65rem;
+}
+
+.matrixCellDiag {
+  background: #1e293b;
+}
+
+.snrCellNone {
+  background: #0f172a;
+}
+
+.snrCellGreat {
+  background: #14532d;
+  color: #e2e8f0;
+}
+
+.snrCellGood {
+  background: #166534;
+  color: #e2e8f0;
+}
+
+.snrCellFair {
+  background: #854d0e;
+  color: #e2e8f0;
+}
+
+.snrCellPoor {
+  background: #7c2d12;
+  color: #e2e8f0;
+}
+
+.snrCellBad {
+  background: #450a0a;
+  color: #e2e8f0;
+}
+
+.legend {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.68rem;
+  font-family: monospace;
+  color: #64748b;
+}
+
+.legendSwatch {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  background: var(--swatch-color);
+  border: 1px solid #334155;
+  border-radius: 2px;
+}

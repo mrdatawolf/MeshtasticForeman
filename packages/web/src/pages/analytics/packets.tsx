@@ -16,18 +16,20 @@ import {
 
 import * as analyticsApi from "../../api/analytics.js";
 
+import { cx, styles } from "./analyticsStyles.js";
 import {
   ChartCard,
   Empty,
   GRID_COLOR,
+  LEGEND_WRAPPER_STYLE,
   Loading,
   PIE_PALETTE,
   RangeBtn,
   TICK_STYLE,
   TOOLTIP_STYLE,
   formatTs,
-  styles,
 } from "./components.js";
+import localStyles from "./packets.module.css";
 import { useAnalyticsQuery } from "./useAnalyticsQuery.js";
 
 import type { PacketLogEntry, PacketTimelinePoint, PortnumCount } from "../../api/analytics.js";
@@ -104,8 +106,8 @@ export function PacketsTab() {
       : [];
 
   return (
-    <div style={styles.grid}>
-      <div style={{ gridColumn: "1 / -1" }}>
+    <div className={styles.grid}>
+      <div className={styles.gridSpan}>
         <RangeBtn options={["1h", "6h", "24h", "7d"]} value={since} onChange={setSince} />
       </div>
 
@@ -132,12 +134,8 @@ export function PacketsTab() {
               </Pie>
               <Tooltip {...TOOLTIP_STYLE} />
               <Legend
-                wrapperStyle={styles.legendWrap}
-                formatter={(value) => (
-                  <span style={{ color: "#94a3b8", fontSize: "0.68rem", fontFamily: "monospace" }}>
-                    {value}
-                  </span>
-                )}
+                wrapperStyle={LEGEND_WRAPPER_STYLE}
+                formatter={(value) => <span className={localStyles.legendLabel}>{value}</span>}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -160,7 +158,7 @@ export function PacketsTab() {
                 {...TOOLTIP_STYLE}
                 labelFormatter={(v) => new Date(v as string).toLocaleString()}
               />
-              <Legend wrapperStyle={styles.legendWrap} />
+              <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
               {areaKeys.map((key, i) => (
                 <Area
                   key={key}
@@ -178,27 +176,11 @@ export function PacketsTab() {
 
       {/* Raw Packet Log */}
       <ChartCard title="Packet Log" fullWidth>
-        <div
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            alignItems: "center",
-            marginBottom: "0.6rem",
-            flexWrap: "wrap",
-          }}
-        >
+        <div className={localStyles.controlsRow}>
           <select
             value={logFilter}
             onChange={(e) => setLogFilter(e.target.value)}
-            style={{
-              background: "#1e293b",
-              color: "#94a3b8",
-              border: "1px solid #334155",
-              borderRadius: "0.3rem",
-              padding: "0.2rem 0.4rem",
-              fontSize: "0.7rem",
-              fontFamily: "monospace",
-            }}
+            className={localStyles.select}
           >
             <option value="">All types</option>
             {(portnum ?? []).map((p) => (
@@ -207,22 +189,10 @@ export function PacketsTab() {
               </option>
             ))}
           </select>
-          <span style={{ color: "#64748b", fontSize: "0.7rem", fontFamily: "monospace", flex: 1 }}>
+          <span className={localStyles.rowStatus}>
             {packetLog !== null ? `${packetLog.length} rows (latest 200)` : "loading…"}
           </span>
-          <button
-            onClick={handleCsvExport}
-            style={{
-              background: "#1e3a5f",
-              color: "#93c5fd",
-              border: "1px solid #3b82f6",
-              borderRadius: "0.3rem",
-              padding: "0.2rem 0.6rem",
-              fontSize: "0.7rem",
-              fontFamily: "monospace",
-              cursor: "pointer",
-            }}
-          >
+          <button onClick={handleCsvExport} className={localStyles.exportBtn}>
             Export CSV
           </button>
         </div>
@@ -231,28 +201,12 @@ export function PacketsTab() {
         ) : packetLog.length === 0 ? (
           <Empty message="No packets in this time window." />
         ) : (
-          <div style={{ overflowX: "auto", maxHeight: "400px", overflowY: "auto" }}>
-            <table
-              style={{
-                borderCollapse: "collapse",
-                fontFamily: "monospace",
-                fontSize: "0.65rem",
-                width: "100%",
-              }}
-            >
+          <div className={localStyles.logScroll}>
+            <table className={localStyles.table}>
               <thead>
-                <tr style={{ background: "#1e293b", position: "sticky", top: 0 }}>
+                <tr className={localStyles.stickyHeaderRow}>
                   {["Time", "From", "To", "Type", "SNR", "RSSI", "Hops", "MQTT"].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: "0.3rem 0.5rem",
-                        color: "#94a3b8",
-                        textAlign: "left",
-                        borderBottom: "1px solid #334155",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <th key={h} className={localStyles.th}>
                       {h}
                     </th>
                   ))}
@@ -260,37 +214,41 @@ export function PacketsTab() {
               </thead>
               <tbody>
                 {packetLog.map((p) => (
-                  <tr key={p.id} style={{ borderBottom: "1px solid #1e293b" }}>
-                    <td style={styles.logCell}>{new Date(p.rxTime).toLocaleTimeString()}</td>
-                    <td style={styles.logCell}>{nodeHex(p.fromNodeId)}</td>
-                    <td style={styles.logCell}>{nodeHex(p.toNodeId)}</td>
-                    <td style={{ ...styles.logCell, color: "#7dd3fc" }}>
+                  <tr key={p.id} className={localStyles.tr}>
+                    <td className={localStyles.logCell}>
+                      {new Date(p.rxTime).toLocaleTimeString()}
+                    </td>
+                    <td className={localStyles.logCell}>{nodeHex(p.fromNodeId)}</td>
+                    <td className={localStyles.logCell}>{nodeHex(p.toNodeId)}</td>
+                    <td className={cx(localStyles.logCell, localStyles.logCellType)}>
                       {p.portnumName.replace(/_APP$/, "")}
                     </td>
                     <td
-                      style={{
-                        ...styles.logCell,
-                        color:
-                          p.rxSnr != null
-                            ? p.rxSnr > 0
-                              ? "#4ade80"
-                              : p.rxSnr > -10
-                                ? "#fbbf24"
-                                : "#f87171"
-                            : "#475569",
-                      }}
+                      className={cx(
+                        localStyles.logCell,
+                        p.rxSnr == null
+                          ? localStyles.logCellSnrNone
+                          : p.rxSnr > 0
+                            ? localStyles.logCellSnrGood
+                            : p.rxSnr > -10
+                              ? localStyles.logCellSnrOk
+                              : localStyles.logCellSnrBad,
+                      )}
                     >
                       {p.rxSnr != null ? `${p.rxSnr.toFixed(1)}` : "—"}
                     </td>
-                    <td style={{ ...styles.logCell, color: "#94a3b8" }}>
-                      {p.rxRssi != null ? p.rxRssi : "—"}
-                    </td>
-                    <td style={{ ...styles.logCell, color: "#94a3b8" }}>
+                    <td className={localStyles.logCell}>{p.rxRssi != null ? p.rxRssi : "—"}</td>
+                    <td className={localStyles.logCell}>
                       {p.hopLimit != null && p.hopStart != null
                         ? `${p.hopStart - p.hopLimit}/${p.hopStart}`
                         : (p.hopLimit ?? "—")}
                     </td>
-                    <td style={{ ...styles.logCell, color: p.viaMqtt ? "#818cf8" : "#334155" }}>
+                    <td
+                      className={cx(
+                        localStyles.logCell,
+                        p.viaMqtt ? localStyles.logCellMqttYes : localStyles.logCellMqttNo,
+                      )}
+                    >
                       {p.viaMqtt ? "yes" : "—"}
                     </td>
                   </tr>

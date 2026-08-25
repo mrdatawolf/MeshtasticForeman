@@ -1,0 +1,45 @@
+.popupWide {
+  min-width: 220px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.formRow {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.formColFlex1 {
+  flex: 1;
+}
+
+.formColFlex2 {
+  flex: 2;
+}
+
+.input {
+  width: 100%;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.25rem;
+  padding: 0.2rem 0.4rem;
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: #1e293b;
+  box-sizing: border-box;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 2.5rem;
+}
+
+.metaLine {
+  color: #64748b;
+  font-size: 0.65rem;
+  font-family: monospace;
+}

@@ -1,0 +1,63 @@
+.topologyHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.mutedNote {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-family: monospace;
+}
+
+.routeCount {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-family: monospace;
+  margin-bottom: 0.6rem;
+}
+
+.snrLegend {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.snrLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-family: monospace;
+  color: #64748b;
+}
+
+.snrSwatch {
+  display: inline-block;
+  width: 1.5rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--swatch-color);
+}
+
+.graphContainer {
+  background: #020617;
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+
+.graphPlaceholder {
+  height: var(--graph-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.legendFormatterLabel {
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-family: monospace;
+}

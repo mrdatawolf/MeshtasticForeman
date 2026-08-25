@@ -12,10 +12,12 @@ import {
 
 import * as analyticsApi from "../../api/analytics.js";
 
+import { styles } from "./analyticsStyles.js";
 import {
   ChartCard,
   Empty,
   GRID_COLOR,
+  LEGEND_WRAPPER_STYLE,
   Loading,
   RangeBtn,
   TICK_STYLE,
@@ -23,8 +25,8 @@ import {
   formatTs,
   nodeColor,
   nodeName,
-  styles,
 } from "./components.js";
+import localStyles from "./telemetry.module.css";
 import { useAnalyticsQuery } from "./useAnalyticsQuery.js";
 
 import type { TelemetryPoint } from "../../api/analytics.js";
@@ -87,23 +89,16 @@ export function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNode
       <XAxis dataKey="ts" tickFormatter={(v) => formatTs(v)} tick={TICK_STYLE} />
       <YAxis tick={TICK_STYLE} unit={` ${unit}`} />
       <Tooltip {...TOOLTIP_STYLE} labelFormatter={(v) => new Date(v as string).toLocaleString()} />
-      <Legend wrapperStyle={styles.legendWrap} />
+      <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
     </>
   );
 
   return (
-    <div style={styles.grid}>
-      <div style={{ gridColumn: "1 / -1" }}>
+    <div className={styles.grid}>
+      <div className={styles.gridSpan}>
         <RangeBtn options={["1h", "6h", "24h", "7d"]} value={since} onChange={setSince} />
         {noData && (
-          <div
-            style={{
-              color: "#64748b",
-              fontSize: "0.75rem",
-              fontFamily: "monospace",
-              marginTop: "0.5rem",
-            }}
-          >
+          <div className={localStyles.noDataNote}>
             No telemetry data yet. TELEMETRY_APP packets will be decoded and stored as they arrive
             from connected devices.
           </div>

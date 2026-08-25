@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { mapPacketLogRow, type PacketLogRow } from "../../db/repositories/packets.js";
 import { deviceIdSchema, limitSchema, offsetSchema, sendValidationError } from "../schemas.js";
 
 import { buildFilters, parseSince } from "./shared.js";
@@ -19,21 +20,6 @@ const packetLogQuerySchema = packetLogFiltersSchema.extend({
   limit: limitSchema(5_000, 500),
   offset: offsetSchema(5_000),
 });
-
-type PacketLogRow = {
-  id: string;
-  packet_id: string;
-  device_id: string;
-  from_node_id: string;
-  to_node_id: string;
-  portnum_name: string;
-  rx_time: string;
-  rx_snr: number | null;
-  rx_rssi: number | null;
-  hop_limit: number | null;
-  hop_start: number | null;
-  via_mqtt: boolean;
-};
 
 export function buildPortnumBreakdownQuery(opts: { since?: string; deviceId?: string }) {
   const { where, params } = buildFilters(opts);
@@ -125,20 +111,7 @@ export async function registerPacketsRoutes(app: FastifyInstance, db: PGlite) {
     const { since, deviceId, portnum, limit, offset } = result.data;
     const q = buildPacketLogQuery({ since, deviceId, portnum, limit, offset });
     const { rows } = await db.query<PacketLogRow>(q.sql, q.params);
-    return rows.map((r) => ({
-      id: r.id,
-      packetId: Number(r.packet_id),
-      deviceId: r.device_id,
-      fromNodeId: Number(r.from_node_id),
-      toNodeId: Number(r.to_node_id),
-      portnumName: r.portnum_name,
-      rxTime: new Date(r.rx_time).toISOString(),
-      rxSnr: r.rx_snr ?? null,
-      rxRssi: r.rx_rssi ?? null,
-      hopLimit: r.hop_limit ?? null,
-      hopStart: r.hop_start ?? null,
-      viaMqtt: r.via_mqtt,
-    }));
+    return rows.map(mapPacketLogRow);
   });
   app.get("/api/analytics/packet-log.csv", async (req, reply) => {
     const result = packetLogFiltersSchema.safeParse(req.query);

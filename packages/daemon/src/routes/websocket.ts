@@ -7,6 +7,7 @@ import { Types } from "@meshtastic/core";
 
 import { consoleLog } from "../activity/console-log.js";
 import { activityLog } from "../activity/log.js";
+import { createLogger } from "../logger.js";
 
 import type { DeviceManager } from "../device/device-manager.js";
 import type { MqttGateway } from "../mqtt/gateway.js";
@@ -21,6 +22,8 @@ import type {
 } from "@foreman/shared";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket, RawData } from "ws";
+
+const log = createLogger("ws");
 
 export interface WsRouteHandle {
   /** Closes every currently-connected WebSocket client. */
@@ -92,7 +95,7 @@ export async function registerWsRoute(
 
   app.get("/ws", { websocket: true }, (socket) => {
     clients.add(socket);
-    console.log(`[ws] client connected (total=${clients.size})`);
+    log.info({ operation: "client-connect", clientCount: clients.size }, "client connected");
 
     // Send current state snapshot on connect
     deviceManager.listDevices().then(async (devices) => {
@@ -189,7 +192,10 @@ export async function registerWsRoute(
         db,
         broadcast,
       ).catch((err) => {
-        console.error("[ws] command error:", err);
+        log.error(
+          { operation: "handle-command", command: parsed.type, err },
+          "command handling failed",
+        );
         socket.send(
           JSON.stringify({
             type: "error",
@@ -202,7 +208,10 @@ export async function registerWsRoute(
     socket.on("close", () => {
       clients.delete(socket);
       packetSubscriptions.delete(socket);
-      console.log(`[ws] client disconnected (total=${clients.size})`);
+      log.info(
+        { operation: "client-disconnect", clientCount: clients.size },
+        "client disconnected",
+      );
     });
   });
 
@@ -286,7 +295,7 @@ async function handleClientCommand(
         replyToPacketId: 0,
       };
       if (broadcast) broadcast({ type: "message:sent", payload: sentMsg });
-      console.log(`[ws] message:send → ${device.name} to node ${toNodeId}`);
+      log.info({ deviceId, packetId, operation: "send-message", toNodeId }, "message sent");
       break;
     }
 
@@ -309,7 +318,14 @@ async function handleClientCommand(
       } else {
         packetSubscriptions.delete(socket);
       }
-      console.log(`[ws] packets:subscribe → ${device.name}, enabled=${command.payload.enabled}`);
+      log.info(
+        {
+          deviceId: command.payload.deviceId,
+          operation: "packet-subscription",
+          enabled: command.payload.enabled,
+        },
+        "packet subscription updated",
+      );
       break;
     }
 
@@ -328,7 +344,10 @@ async function handleClientCommand(
       const nodes = await deviceManager.listNodes(deviceId);
       const event: ServerEvent = { type: "node:list", payload: nodes };
       socket.send(JSON.stringify(event));
-      console.log(`[ws] nodes:request-list → ${device.name}, returned ${nodes.length} nodes`);
+      log.info(
+        { deviceId, operation: "list-nodes", nodeCount: nodes.length },
+        "node list returned",
+      );
       break;
     }
 
@@ -336,7 +355,10 @@ async function handleClientCommand(
       const nodes = mqttGateway ? await mqttGateway.listMqttNodes() : [];
       const event: ServerEvent = { type: "mqtt_node:list", payload: nodes };
       socket.send(JSON.stringify(event));
-      console.log(`[ws] mqtt_nodes:request-list → returned ${nodes.length} nodes`);
+      log.info(
+        { operation: "list-mqtt-nodes", nodeCount: nodes.length },
+        "MQTT node list returned",
+      );
       break;
     }
 
@@ -359,13 +381,15 @@ async function handleClientCommand(
       device.meshDevice
         .requestPosition(nodeId)
         .then(() => {
-          console.log(
-            `[ws] node:request-position → ${device.name} for node ${formatNodeId(nodeId)}`,
+          log.info(
+            { deviceId, operation: "request-position", nodeId: formatNodeId(nodeId) },
+            "node position requested",
           );
         })
         .catch((err: unknown) => {
-          console.log(
-            `[ws] node:request-position failed for ${formatNodeId(nodeId)}: ${err instanceof Error ? err.message : String(err)}`,
+          log.warn(
+            { deviceId, operation: "request-position", nodeId: formatNodeId(nodeId), err },
+            "node position request failed",
           );
         });
       break;
@@ -385,10 +409,16 @@ async function handleClientCommand(
       }
       try {
         await device.meshDevice.traceRoute(nodeId);
-        console.log(`[ws] node:traceroute → ${device.name} for node ${formatNodeId(nodeId)}`);
+        log.info(
+          { deviceId, operation: "traceroute", nodeId: formatNodeId(nodeId) },
+          "node traceroute requested",
+        );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.log(`[ws] node:traceroute failed for ${formatNodeId(nodeId)}: ${msg}`);
+        log.warn(
+          { deviceId, operation: "traceroute", nodeId: formatNodeId(nodeId), err },
+          "node traceroute failed",
+        );
         socket.send(
           JSON.stringify({
             type: "error",
@@ -414,12 +444,15 @@ async function handleClientCommand(
       try {
         // Tell the radio to wipe this node from its nodeDB via AdminMessage over serial
         await device.meshDevice.removeNodeByNum(nodeId);
-        console.log(
-          `[ws] node:remove → ${device.name} removed ${formatNodeId(nodeId)} from device nodeDB`,
+        log.info(
+          { deviceId, operation: "remove-node-device", nodeId: formatNodeId(nodeId) },
+          "node removed from device database",
         );
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[ws] node:remove serial failed for ${formatNodeId(nodeId)}: ${msg}`);
+        log.warn(
+          { deviceId, operation: "remove-node-device", nodeId: formatNodeId(nodeId), err },
+          "serial node removal failed",
+        );
         // Don't abort — still clear our local cache below so the UI refreshes
       }
       // Always clear from daemon's local DB so stale data doesn't linger
@@ -428,7 +461,10 @@ async function handleClientCommand(
           deviceId,
           nodeId,
         ]);
-        console.log(`[ws] node:remove cleared ${formatNodeId(nodeId)} from local DB`);
+        log.info(
+          { deviceId, operation: "remove-node-local", nodeId: formatNodeId(nodeId) },
+          "node removed from local database",
+        );
       }
       socket.send(
         JSON.stringify({
@@ -452,7 +488,7 @@ async function handleClientCommand(
         return;
       }
       socket.send(JSON.stringify({ type: "device:config", payload: config } satisfies ServerEvent));
-      console.log(`[ws] device:config-request → ${deviceId}`);
+      log.info({ deviceId, operation: "get-config" }, "device configuration returned");
       break;
     }
 
@@ -490,10 +526,10 @@ async function handleClientCommand(
       }
       if (enabled && !mqttGateway.isRunning) {
         mqttGateway.start();
-        console.log("[ws] mqtt:toggle → started");
+        log.info({ operation: "toggle-mqtt", enabled: true }, "MQTT gateway started");
       } else if (!enabled && mqttGateway.isRunning) {
         mqttGateway.stop();
-        console.log("[ws] mqtt:toggle → stopped");
+        log.info({ operation: "toggle-mqtt", enabled: false }, "MQTT gateway stopped");
       }
       // Persist the new state so the next restart honours the user's choice
       persistEnvVar("ENABLE_MQTT", enabled ? "true" : "false");
@@ -522,8 +558,9 @@ async function handleClientCommand(
       });
       const event: ServerEvent = { type: "message:history", payload: messages };
       socket.send(JSON.stringify(event));
-      console.log(
-        `[ws] messages:request-history → ${device.name}, returned ${messages.length} messages`,
+      log.info(
+        { deviceId, operation: "message-history", messageCount: messages.length },
+        "message history returned",
       );
       break;
     }

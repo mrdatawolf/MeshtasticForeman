@@ -1,0 +1,46 @@
+.select {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #1e293b;
+  border-radius: 0.25rem;
+  padding: 0.15rem 0.4rem;
+  font-family: monospace;
+  font-size: 0.72rem;
+}
+
+.mutedNote {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-family: monospace;
+}
+
+.mapWrap {
+  height: 420px;
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  font-family: monospace;
+  font-size: 0.68rem;
+  width: 100%;
+}
+
+.tr {
+  border-bottom: 1px solid #1e293b;
+}
+
+.nodeDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot-color);
+  margin-right: 5px;
+  vertical-align: middle;
+}

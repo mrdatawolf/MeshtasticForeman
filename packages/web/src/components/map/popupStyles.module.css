@@ -1,0 +1,99 @@
+/*
+ * Shared styling for map popup content (NodePopups.tsx's MeshPopup/MqttPopup
+ * and ProposalEditor.tsx) — both previously carried their own identical copy
+ * of `popupStyles` and the `popupActionBtnStyle` helper function.
+ */
+
+.popup {
+  min-width: 200px;
+  font-size: 0.8rem;
+  color: #1e293b;
+}
+
+.name {
+  font-weight: bold;
+  font-size: 0.9rem;
+  margin-bottom: 0.1rem;
+}
+
+.muted {
+  color: #64748b;
+  margin-bottom: 0.25rem;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.tag {
+  display: inline-block;
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-radius: 0.25rem;
+  padding: 0 0.35rem;
+  font-size: 0.65rem;
+  font-weight: bold;
+  margin-bottom: 0.4rem;
+}
+
+/* ProposalEditor's "Proposal" tag uses amber instead of the MQTT tag's blue. */
+.tagAmber {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.75rem;
+  align-items: baseline;
+}
+
+.label {
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.mono {
+  font-family: monospace;
+  font-size: 0.75rem;
+}
+
+/* popupActionBtnStyle(active) base + active state */
+.actionBtn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  border-radius: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.75rem;
+}
+
+.actionBtnActive {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  cursor: not-allowed;
+}
+
+/* "Coverage Map" button override (always inactive base + green border/text). */
+.actionBtnGreen {
+  border-color: #166534;
+  color: #15803d;
+}
+
+/* "Delete Proposal" button override (always inactive base + red border/text). */
+.actionBtnRed {
+  border-color: #fca5a5;
+  color: #dc2626;
+}

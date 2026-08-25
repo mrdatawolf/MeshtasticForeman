@@ -15,10 +15,12 @@ import {
 
 import * as analyticsApi from "../../api/analytics.js";
 
+import { styles } from "./analyticsStyles.js";
 import {
   ChartCard,
   Empty,
   GRID_COLOR,
+  LEGEND_WRAPPER_STYLE,
   Loading,
   MeshGraph,
   PIE_PALETTE,
@@ -29,8 +31,8 @@ import {
   nodeName,
   snrLinkColor,
   snrLinkWidth,
-  styles,
 } from "./components.js";
+import localStyles from "./network.module.css";
 import { useAnalyticsQuery } from "./useAnalyticsQuery.js";
 
 import type {
@@ -40,6 +42,7 @@ import type {
   TracerouteRecord,
 } from "../../api/analytics.js";
 import type { MqttNode, NodeInfo } from "@foreman/shared";
+import type { CSSProperties } from "react";
 
 // Tab 3 — Network
 // ---------------------------------------------------------------------------
@@ -174,9 +177,9 @@ export function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes:
   ];
 
   return (
-    <div style={styles.grid}>
+    <div className={styles.grid}>
       {/* Range selector */}
-      <div style={{ gridColumn: "1 / -1" }}>
+      <div className={styles.gridSpan}>
         <RangeBtn
           options={["1h", "6h", "24h", "7d", "all"]}
           value={graphSince}
@@ -186,61 +189,31 @@ export function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes:
 
       {/* Neighbor Info Graph — full width, primary topology view */}
       <ChartCard title="Neighbor Topology (SNR-coloured links)" fullWidth>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: "1rem",
-            marginBottom: "0.6rem",
-            flexWrap: "wrap",
-          }}
-        >
+        <div className={localStyles.topologyHeader}>
           {neighbors && (
-            <span style={{ color: "#64748b", fontSize: "0.7rem", fontFamily: "monospace" }}>
+            <span className={localStyles.mutedNote}>
               {neighborGraphData.nodes.length} nodes · {neighborGraphData.links.length} links
               {neighbors.length === 0 && " — no NEIGHBORINFO_APP packets received yet"}
             </span>
           )}
           {/* SNR colour legend */}
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginLeft: "auto" }}>
+          <div className={localStyles.snrLegend}>
             {snrLegend.map((s) => (
-              <span
-                key={s.label}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.3rem",
-                  fontSize: "0.68rem",
-                  fontFamily: "monospace",
-                  color: "#64748b",
-                }}
-              >
+              <span key={s.label} className={localStyles.snrLegendItem}>
                 <span
-                  style={{
-                    display: "inline-block",
-                    width: "1.5rem",
-                    height: "3px",
-                    background: s.color,
-                    borderRadius: "2px",
-                  }}
+                  className={localStyles.snrSwatch}
+                  style={{ "--swatch-color": s.color } as CSSProperties}
                 />
                 {s.label}
               </span>
             ))}
           </div>
         </div>
-        <div
-          ref={neighborRef}
-          style={{ background: "#020617", borderRadius: "0.375rem", overflow: "hidden" }}
-        >
+        <div ref={neighborRef} className={localStyles.graphContainer}>
           {neighbors === null ? (
             <div
-              style={{
-                height: 420,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
+              className={localStyles.graphPlaceholder}
+              style={{ "--graph-height": "420px" } as CSSProperties}
             >
               <div className="analytics-spinner" />
             </div>
@@ -296,11 +269,9 @@ export function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes:
               </Pie>
               <Tooltip {...TOOLTIP_STYLE} />
               <Legend
-                wrapperStyle={styles.legendWrap}
+                wrapperStyle={LEGEND_WRAPPER_STYLE}
                 formatter={(value) => (
-                  <span style={{ color: "#94a3b8", fontSize: "0.7rem", fontFamily: "monospace" }}>
-                    {value}
-                  </span>
+                  <span className={localStyles.legendFormatterLabel}>{value}</span>
                 )}
               />
             </PieChart>
@@ -311,29 +282,15 @@ export function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes:
       {/* Traceroute Topology — secondary graph */}
       <ChartCard title="Traceroute Topology" fullWidth>
         {routes && (
-          <div
-            style={{
-              color: "#64748b",
-              fontSize: "0.7rem",
-              fontFamily: "monospace",
-              marginBottom: "0.6rem",
-            }}
-          >
+          <div className={localStyles.routeCount}>
             {tracerouteGraphData.nodes.length} nodes · {tracerouteGraphData.links.length} links
           </div>
         )}
-        <div
-          ref={tracerouteRef}
-          style={{ background: "#020617", borderRadius: "0.375rem", overflow: "hidden" }}
-        >
+        <div ref={tracerouteRef} className={localStyles.graphContainer}>
           {routes === null ? (
             <div
-              style={{
-                height: 360,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
+              className={localStyles.graphPlaceholder}
+              style={{ "--graph-height": "360px" } as CSSProperties}
             >
               <div className="analytics-spinner" />
             </div>

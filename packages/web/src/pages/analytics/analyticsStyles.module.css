@@ -1,0 +1,212 @@
+/* Shared classes used across AnalyticsPage's tab modules (formerly the
+   `styles: Record<string, React.CSSProperties>` object in components.tsx,
+   plus a handful of small cross-tab utility classes verified byte-identical
+   across 2+ tab files before being pulled out here). */
+
+.page {
+  padding: 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.subNav {
+  display: flex;
+  gap: 0.1rem;
+  border-bottom: 1px solid #1e293b;
+  margin-bottom: 1rem;
+  flex-shrink: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.card {
+  background: #0f172a;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  border: 1px solid #1e293b;
+}
+
+.cardFullWidth {
+  grid-column: 1 / -1;
+}
+
+.cardTitle {
+  font-size: 0.7rem;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #1e293b;
+  margin-bottom: 0.75rem;
+}
+
+/* --loading-height lets <Loading height={n}/> override the default 160px
+   (continuous per-instance value — see Loading() in components.tsx). */
+.empty {
+  height: var(--loading-height, 160px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+  font-size: 0.75rem;
+  font-family: monospace;
+}
+
+.subLabel {
+  font-size: 0.65rem;
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #475569;
+  margin-bottom: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+.errorRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  font-family: monospace;
+  padding: 0.1rem 0;
+}
+
+.deliverySummary {
+  font-size: 0.72rem;
+  font-family: monospace;
+  color: #94a3b8;
+  margin-bottom: 0.25rem;
+}
+
+.latencySummary {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.72rem;
+  font-family: monospace;
+  color: #64748b;
+  margin-bottom: 0.5rem;
+}
+
+.matrixCorner {
+  padding: 0.2rem 0.4rem;
+  background: #020617;
+}
+
+.matrixHeader {
+  padding: 0.2rem 0.4rem;
+  text-align: center;
+  color: #94a3b8;
+  background: #020617;
+  border-bottom: 1px solid #1e293b;
+  font-weight: normal;
+  white-space: nowrap;
+  max-width: 5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.matrixRowHeader {
+  padding: 0.2rem 0.5rem;
+  color: #94a3b8;
+  background: #020617;
+  border-right: 1px solid #1e293b;
+  white-space: nowrap;
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.matrixCell {
+  padding: 0.2rem 0.4rem;
+  text-align: center;
+  font-size: 0.62rem;
+  color: #64748b;
+  border: 1px solid #0f172a;
+}
+
+.logCell {
+  padding: 0.25rem 0.5rem;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+/* RangeBtn (components.tsx) */
+.rangeBtnRow {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.6rem;
+}
+
+.rangeBtn {
+  background: #0f172a;
+  color: #64748b;
+  border: 1px solid #1e293b;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.72rem;
+}
+
+.rangeBtnActive {
+  background: #1e3a5f;
+  color: #60a5fa;
+  border-color: #3b82f6;
+}
+
+/* Loading spinner (formerly injected once into <head> via a raw
+   `document.createElement("style")` call in components.tsx). */
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #1e293b;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: analyticsSpin 0.75s linear infinite;
+}
+
+@keyframes analyticsSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* MeshGraph's "no data yet" / Suspense-loading placeholder. --mesh-height
+   carries the per-call-site `height` prop (default 420, 360 elsewhere). */
+.meshPlaceholder {
+  height: var(--mesh-height, 420px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+  font-size: 0.75rem;
+}
+
+/* Cross-tab utilities verified byte-identical across 2+ tab modules. */
+.gridSpan {
+  grid-column: 1 / -1;
+}
+
+.controlsRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.controlsRowWrap {
+  flex-wrap: wrap;
+}
+
+.mutedNote {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-family: monospace;
+}

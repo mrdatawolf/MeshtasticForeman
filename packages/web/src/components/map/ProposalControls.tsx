@@ -1,9 +1,9 @@
 import { MODEM_PRESET_LABELS as MODEM_PRESET_LABEL } from "@foreman/shared";
 
 import { MODEM_PRESET_RADIUS_KM } from "./mapCoverageConfig.js";
+import { ageFilterBtnClass, cx, statusClass, styles } from "./mapStyles.js";
 
 import type { CoverageProposal } from "@foreman/shared";
-import type React from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 
 type ProposalStatus = "loading" | "ready" | "error";
@@ -55,33 +55,28 @@ export function ProposalControls({
           if (done < total)
             return {
               text: `⛰ ${done}/${total}`,
-              color: "#fbbf24",
+              className: statusClass(done, total, errors),
               title: "Computing terrain line-of-sight for proposals…",
             };
           return {
             text: errors > 0 ? `⛰ ${errors} failed` : "⛰ ready",
-            color: errors > 0 ? "#fca5a5" : "#86efac",
+            className: statusClass(done, total, errors),
             title: undefined,
           };
         })();
 
         return (
-          <div style={{ ...styles.controlPanel }}>
+          <div className={styles.controlPanel}>
             {/* Always-visible summary row */}
-            <div style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
-              <span style={styles.controlLabel}>Proposals:</span>
-              <span style={styles.summaryPill}>
+            <div className={styles.controlRow}>
+              <span className={styles.controlLabel}>Proposals:</span>
+              <span className={styles.summaryPill}>
                 {proposals.length === 0
                   ? "none"
                   : `${proposals.filter((p) => p.visible).length}/${proposals.length}`}
               </span>
               <button
-                style={{
-                  ...ageFilterBtnStyle(proposalPlanningMode),
-                  ...(proposalPlanningMode
-                    ? { borderColor: "#f59e0b", color: "#f59e0b", background: "#422006" }
-                    : {}),
-                }}
+                className={ageFilterBtnClass(proposalPlanningMode, "amber")}
                 onClick={() => setProposalPlanningMode((v) => !v)}
                 title={
                   proposalPlanningMode
@@ -93,11 +88,7 @@ export function ProposalControls({
               </button>
               {proposalTerrainStatus && (
                 <span
-                  style={{
-                    color: proposalTerrainStatus.color,
-                    fontSize: "0.7rem",
-                    fontFamily: "monospace",
-                  }}
+                  className={proposalTerrainStatus.className}
                   title={proposalTerrainStatus.title}
                 >
                   {proposalTerrainStatus.text}
@@ -105,7 +96,7 @@ export function ProposalControls({
               )}
               {proposals.length > 0 && (
                 <button
-                  style={ageFilterBtnStyle(proposalsExpanded)}
+                  className={ageFilterBtnClass(proposalsExpanded)}
                   onClick={() => setProposalsExpanded((v) => !v)}
                   title="Show/hide proposal list"
                 >
@@ -116,27 +107,14 @@ export function ProposalControls({
 
             {/* Expanded proposal list */}
             {proposalsExpanded && proposals.length > 0 && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.25rem",
-                  paddingTop: "0.15rem",
-                  borderTop: "1px solid #1e293b",
-                  width: "100%",
-                }}
-              >
+              <div className={styles.proposalListWrap}>
                 {proposals.map((p) => (
-                  <div key={p.id} style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
+                  <div key={p.id} className={styles.proposalRow}>
                     <button
-                      style={{
-                        ...ageFilterBtnStyle(p.visible),
-                        padding: "0.15rem 0.4rem",
-                        minWidth: "2.5rem",
-                        ...(p.visible
-                          ? { borderColor: "#f59e0b", color: "#f59e0b", background: "#422006" }
-                          : {}),
-                      }}
+                      className={cx(
+                        ageFilterBtnClass(p.visible, "amber"),
+                        styles.proposalVisibleBtn,
+                      )}
                       onClick={() => {
                         fetch(`/api/proposals/${p.id}`, {
                           method: "PATCH",
@@ -155,27 +133,12 @@ export function ProposalControls({
                     >
                       {p.visible ? "●" : "○"}
                     </button>
-                    <span
-                      style={{
-                        flex: 1,
-                        color: "#cbd5e1",
-                        fontSize: "0.7rem",
-                        fontFamily: "monospace",
-                      }}
-                    >
-                      {p.name}
-                    </span>
-                    <span
-                      style={{ color: "#64748b", fontSize: "0.65rem", fontFamily: "monospace" }}
-                    >
+                    <span className={styles.proposalName}>{p.name}</span>
+                    <span className={styles.proposalMeta}>
                       {MODEM_PRESET_LABEL[p.modemPreset]?.replace(/_/g, " ") ?? `#${p.modemPreset}`}
                     </span>
                     <button
-                      style={{
-                        ...ageFilterBtnStyle(false),
-                        padding: "0.15rem 0.4rem",
-                        color: "#ef4444",
-                      }}
+                      className={cx(ageFilterBtnClass(false), styles.dangerBtn)}
                       onClick={() => {
                         fetch(`/api/proposals/${p.id}`, { method: "DELETE" })
                           .then(() => {
@@ -198,12 +161,7 @@ export function ProposalControls({
                 ))}
                 {/* Copy all proposals as GeoJSON FeatureCollection */}
                 <button
-                  style={{
-                    ...ageFilterBtnStyle(false),
-                    marginTop: "0.1rem",
-                    textAlign: "center",
-                    width: "100%",
-                  }}
+                  className={cx(ageFilterBtnClass(false), styles.copyAllBtn)}
                   onClick={() => {
                     const fc: GeoJSON.FeatureCollection = {
                       type: "FeatureCollection",
@@ -235,40 +193,3 @@ export function ProposalControls({
     </>
   );
 }
-
-function ageFilterBtnStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: "0.2rem 0.45rem",
-    fontSize: "0.7rem",
-    borderRadius: "0.3rem",
-    border: active ? "1px solid #60a5fa" : "1px solid #334155",
-    background: active ? "#1e3a5f" : "#1e293b",
-    color: active ? "#93c5fd" : "#94a3b8",
-    cursor: "pointer",
-  };
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  controlPanel: {
-    background: "#0f172acc",
-    backdropFilter: "blur(4px)",
-    color: "#e2e8f0",
-    padding: "0.4rem 0.6rem",
-    borderRadius: "0.5rem",
-    fontSize: "0.75rem",
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.35rem",
-    alignItems: "flex-start",
-  },
-  summaryPill: {
-    fontSize: "0.7rem",
-    color: "#cbd5e1",
-    background: "#1e293b",
-    border: "1px solid #334155",
-    borderRadius: "0.3rem",
-    padding: "0.15rem 0.45rem",
-    fontFamily: "monospace",
-  },
-  controlLabel: { color: "#94a3b8", marginRight: "0.15rem", fontSize: "0.7rem" },
-};

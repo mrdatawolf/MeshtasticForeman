@@ -25,7 +25,7 @@ import type { ServerEvent } from "@foreman/shared";
 // All shared state that the mock factory needs must live here.
 // ---------------------------------------------------------------------------
 
-const { mockDevice, makeDispatcher } = vi.hoisted(() => {
+const { mockDevice, mockTransport, makeDispatcher } = vi.hoisted(() => {
   /** A minimal synchronous event bus that mirrors the ste-simple-events API. */
   function makeDispatcher<T = unknown>() {
     const handlers: Array<(d: T) => void> = [];
@@ -42,6 +42,9 @@ const { mockDevice, makeDispatcher } = vi.hoisted(() => {
   return {
     /** Holds a reference to the most recently constructed fake MeshDevice. */
     mockDevice: { ref: null as Record<string, unknown> | null },
+    mockTransport: {
+      pipeTo: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    },
     makeDispatcher,
   };
 });
@@ -52,9 +55,12 @@ const { mockDevice, makeDispatcher } = vi.hoisted(() => {
 
 vi.mock("@meshtastic/transport-node-serial", () => ({
   TransportNodeSerial: {
-    create: vi.fn().mockResolvedValue({
+    create: vi.fn().mockImplementation(async () => ({
       disconnect: vi.fn().mockResolvedValue(undefined),
-    }),
+      fromDevice: {
+        pipeTo: mockTransport.pipeTo,
+      },
+    })),
   },
 }));
 
@@ -87,9 +93,11 @@ vi.mock("@meshtastic/core", async (importOriginal) => {
         onMyNodeInfo: makeDispatcher(),
         onTelemetryPacket: makeDispatcher(),
       };
-      constructor() {
+      pipePromise: Promise<void>;
+      constructor(transport: { fromDevice: { pipeTo(destination: unknown): Promise<void> } }) {
         // Capture `this` so tests can fire events and inspect methods.
         mockDevice.ref = this as unknown as Record<string, unknown>;
+        this.pipePromise = transport.fromDevice.pipeTo({});
       }
     },
   };
@@ -186,6 +194,7 @@ describe("DeviceManager", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockTransport.pipeTo.mockResolvedValue(undefined);
     mockDevice.ref = null;
     db = await createTestDb();
     manager = new DeviceManager(db, { bot: { enabled: false } });
@@ -247,6 +256,36 @@ describe("DeviceManager", () => {
       const existingId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
       const device = await manager.connect("/dev/ttyUSB0", "Saved Node", existingId);
       expect(device.id).toBe(existingId);
+    });
+
+    it("handles a recoverable serial read rejection at the transport boundary", async () => {
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const abortError = new Error("device disconnected");
+      abortError.name = "AbortError";
+      mockTransport.pipeTo.mockRejectedValueOnce(abortError);
+
+      await manager.connect("/dev/ttyUSB0", "Field Node");
+      await expect(mockDevice.ref!.pipePromise).resolves.toBeUndefined();
+
+      expect(warning).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^\[devices\] serial read stopped \{"deviceId":"[^"]+","operation":"serial-read","err":\{"name":"AbortError","message":"device disconnected"\}\}$/,
+        ),
+      );
+      warning.mockRestore();
+    });
+
+    it("surfaces an unexpected serial read rejection as a transport:error event", async () => {
+      const fatalError = new Error("decoder invariant failed");
+      const surfaced = vi.fn();
+      manager.on("transport:error", surfaced);
+      mockTransport.pipeTo.mockRejectedValueOnce(fatalError);
+
+      await manager.connect("/dev/ttyUSB0", "Field Node");
+      await expect(mockDevice.ref!.pipePromise).resolves.toBeUndefined();
+
+      expect(surfaced).toHaveBeenCalledOnce();
+      expect(surfaced).toHaveBeenCalledWith(fatalError);
     });
   });
 
@@ -874,7 +913,9 @@ describe("DeviceManager", () => {
       await expectNoNodeMutationOrEvent();
       expect(warn).toHaveBeenCalledOnce();
       expect(warn).toHaveBeenCalledWith(
-        "[devices] rejected malformed nodeInfo packet: validation failed",
+        expect.stringMatching(
+          /^\[devices\] rejected malformed nodeInfo packet \{"deviceId":"[^"]+","operation":"validate-node-info"\}$/,
+        ),
       );
       warn.mockRestore();
     });
@@ -889,7 +930,9 @@ describe("DeviceManager", () => {
       await expectNoNodeMutationOrEvent();
       expect(warn).toHaveBeenCalledOnce();
       expect(warn).toHaveBeenCalledWith(
-        "[devices] rejected malformed nodeInfo packet: validation failed",
+        expect.stringMatching(
+          /^\[devices\] rejected malformed nodeInfo packet \{"deviceId":"[^"]+","operation":"validate-node-info"\}$/,
+        ),
       );
       warn.mockRestore();
     });
@@ -904,7 +947,9 @@ describe("DeviceManager", () => {
       await expectNoNodeMutationOrEvent();
       expect(warn).toHaveBeenCalledOnce();
       expect(warn).toHaveBeenCalledWith(
-        "[devices] rejected malformed position packet: validation failed",
+        expect.stringMatching(
+          /^\[devices\] rejected malformed position packet \{"deviceId":"[^"]+","operation":"validate-position"\}$/,
+        ),
       );
       warn.mockRestore();
     });
@@ -922,7 +967,9 @@ describe("DeviceManager", () => {
       await expectNoNodeMutationOrEvent();
       expect(warn).toHaveBeenCalledOnce();
       expect(warn).toHaveBeenCalledWith(
-        "[devices] rejected malformed position packet: validation failed",
+        expect.stringMatching(
+          /^\[devices\] rejected malformed position packet \{"deviceId":"[^"]+","operation":"validate-position"\}$/,
+        ),
       );
       warn.mockRestore();
     });
@@ -937,7 +984,9 @@ describe("DeviceManager", () => {
       await expectNoNodeMutationOrEvent();
       expect(warn).toHaveBeenCalledOnce();
       expect(warn).toHaveBeenCalledWith(
-        "[devices] rejected malformed telemetry packet: validation failed",
+        expect.stringMatching(
+          /^\[devices\] rejected malformed telemetry packet \{"deviceId":"[^"]+","operation":"validate-telemetry"\}$/,
+        ),
       );
       warn.mockRestore();
     });
@@ -967,7 +1016,9 @@ describe("DeviceManager", () => {
       await expectNoNodeMutationOrEvent();
       expect(warn).toHaveBeenCalledOnce();
       expect(warn).toHaveBeenCalledWith(
-        "[devices] rejected malformed telemetry packet: validation failed",
+        expect.stringMatching(
+          /^\[devices\] rejected malformed telemetry packet \{"deviceId":"[^"]+","operation":"validate-telemetry"\}$/,
+        ),
       );
       warn.mockRestore();
     });

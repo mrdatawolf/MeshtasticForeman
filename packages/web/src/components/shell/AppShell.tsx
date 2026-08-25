@@ -16,6 +16,7 @@ import { NodeOverridesPage } from "../../pages/NodeOverridesPage.js";
 import { NodesPage } from "../../pages/NodesPage.js";
 import { foremanClient } from "../../ws/client.js";
 
+import appShellStyles from "./AppShell.module.css";
 import { DeviceMenu } from "./DeviceMenu.js";
 import { GpsMenu } from "./GpsMenu.js";
 import { MainNavigation } from "./MainNavigation.js";
@@ -118,10 +119,10 @@ export function AppShell({
   })();
 
   return (
-    <div style={styles.page}>
-      <header style={styles.header}>
-        <img src={logo} alt="Meshtastic Foreman" style={styles.logo} />
-        <h1 style={styles.title}>Meshtastic Foreman</h1>
+    <div className={styles.page}>
+      <header className={styles.header}>
+        <img src={logo} alt="Meshtastic Foreman" className={styles.logo} />
+        <h1 className={styles.title}>Meshtastic Foreman</h1>
         <MainNavigation tab={tab} onNavigate={setTab} />
         <GpsMenu devices={devices} pending={gpsPending} setPending={setGpsPending} />
         <MqttMenu
@@ -165,17 +166,7 @@ export function AppShell({
         />
         <button
           onClick={() => setIntroOpen(true)}
-          style={{
-            background: "#0f172a",
-            border: "1px solid #1e293b",
-            color: "#475569",
-            padding: "0.25rem 0.55rem",
-            borderRadius: "0.375rem",
-            cursor: "pointer",
-            fontFamily: "monospace",
-            fontSize: "0.78rem",
-            flexShrink: 0,
-          }}
+          className={appShellStyles.introButton}
           title="Open introduction guide"
         >
           ?
@@ -184,7 +175,7 @@ export function AppShell({
       </header>
 
       {tab === "nodes" && (
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <div className={appShellStyles.tabPanelScroll}>
           <NodesPage
             devices={devices}
             nodes={effectiveNodes}
@@ -221,7 +212,7 @@ export function AppShell({
         />
       )}
       {tab === "messages" && (
-        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div className={appShellStyles.tabPanelColumn}>
           <MessagesPage
             devices={devices}
             nodes={effectiveNodes}
@@ -232,7 +223,7 @@ export function AppShell({
         </div>
       )}
       {tab === "activity" && (
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <div className={appShellStyles.tabPanelScroll}>
           <ActivityPage
             entries={activity}
             window={activityWindow}
@@ -243,7 +234,7 @@ export function AppShell({
         </div>
       )}
       {tab === "logs" && (
-        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div className={appShellStyles.tabPanelColumn}>
           <LogsPage
             entries={logs}
             levelFilter={logsLevel}
@@ -254,7 +245,7 @@ export function AppShell({
         </div>
       )}
       {tab === "overrides" && (
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <div className={appShellStyles.tabPanelScroll}>
           <NodeOverridesPage
             overrides={[...overrides.values()]}
             noLocationNodes={noLocationNodes}
@@ -263,7 +254,7 @@ export function AppShell({
         </div>
       )}
       {tab === "config" && (
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <div className={appShellStyles.tabPanelScroll}>
           <DeviceConfigPage
             devices={devices}
             configs={deviceConfigs}
@@ -273,7 +264,7 @@ export function AppShell({
         </div>
       )}
       {tab === "analytics" && (
-        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div className={appShellStyles.tabPanelColumn}>
           <AnalyticsPage nodes={effectiveNodes} mqttNodes={effectiveMqttNodes} devices={devices} />
         </div>
       )}
@@ -298,70 +289,15 @@ export function AppShell({
 
 function ApiDocsModal({ onClose }: { onClose: () => void }) {
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 200,
-        background: "rgba(0,0,0,0.75)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          background: "#0f172a",
-          border: "1px solid #1e293b",
-          borderRadius: "0.5rem",
-          width: "90vw",
-          maxWidth: "900px",
-          height: "90vh",
-          display: "flex",
-          flexDirection: "column",
-          boxShadow: "0 16px 48px rgba(0,0,0,0.8)",
-        }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0.6rem 1rem",
-            borderBottom: "1px solid #1e293b",
-            flexShrink: 0,
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "monospace",
-              color: "#94a3b8",
-              fontSize: "0.75rem",
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-            }}
-          >
-            API Reference
-          </span>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "1px solid #1e293b",
-              color: "#64748b",
-              cursor: "pointer",
-              fontSize: "0.8rem",
-              borderRadius: "0.25rem",
-              padding: "0.15rem 0.5rem",
-              fontFamily: "monospace",
-            }}
-          >
+    <div className={appShellStyles.modalOverlay} onClick={onClose}>
+      <div className={appShellStyles.modalPanel} onClick={(event) => event.stopPropagation()}>
+        <div className={appShellStyles.modalHeader}>
+          <span className={appShellStyles.modalTitle}>API Reference</span>
+          <button onClick={onClose} className={appShellStyles.modalClose}>
             ✕ close
           </button>
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: "1.25rem 1.75rem" }}>
+        <div className={appShellStyles.modalBody}>
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
             {apiPromisesRaw}
           </ReactMarkdown>
@@ -372,163 +308,38 @@ function ApiDocsModal({ onClose }: { onClose: () => void }) {
 }
 
 const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
-  h1: ({ children }) => (
-    <h1
-      style={{
-        color: "#f8fafc",
-        fontSize: "1.4rem",
-        fontFamily: "monospace",
-        borderBottom: "1px solid #1e293b",
-        paddingBottom: "0.4rem",
-        marginTop: "1.5rem",
-      }}
-    >
-      {children}
-    </h1>
-  ),
-  h2: ({ children }) => (
-    <h2
-      style={{
-        color: "#e2e8f0",
-        fontSize: "1.1rem",
-        fontFamily: "monospace",
-        borderBottom: "1px solid #1e293b",
-        paddingBottom: "0.25rem",
-        marginTop: "1.5rem",
-      }}
-    >
-      {children}
-    </h2>
-  ),
-  h3: ({ children }) => (
-    <h3
-      style={{
-        color: "#cbd5e1",
-        fontSize: "0.95rem",
-        fontFamily: "monospace",
-        marginTop: "1.25rem",
-      }}
-    >
-      {children}
-    </h3>
-  ),
-  h4: ({ children }) => (
-    <h4
-      style={{ color: "#94a3b8", fontSize: "0.875rem", fontFamily: "monospace", marginTop: "1rem" }}
-    >
-      {children}
-    </h4>
-  ),
-  p: ({ children }) => (
-    <p style={{ color: "#94a3b8", fontSize: "0.85rem", lineHeight: 1.65, margin: "0.5rem 0" }}>
-      {children}
-    </p>
-  ),
+  h1: ({ children }) => <h1 className={appShellStyles.mdH1}>{children}</h1>,
+  h2: ({ children }) => <h2 className={appShellStyles.mdH2}>{children}</h2>,
+  h3: ({ children }) => <h3 className={appShellStyles.mdH3}>{children}</h3>,
+  h4: ({ children }) => <h4 className={appShellStyles.mdH4}>{children}</h4>,
+  p: ({ children }) => <p className={appShellStyles.mdP}>{children}</p>,
   a: ({ href, children }) => (
-    <a href={href} style={{ color: "#3b82f6" }} target="_blank" rel="noreferrer">
+    <a href={href} className={appShellStyles.mdA} target="_blank" rel="noreferrer">
       {children}
     </a>
   ),
-  strong: ({ children }) => <strong style={{ color: "#e2e8f0" }}>{children}</strong>,
+  strong: ({ children }) => <strong className={appShellStyles.mdStrong}>{children}</strong>,
   code: ({ children, className }) =>
     className?.startsWith("language-") ? (
-      <code
-        style={{
-          display: "block",
-          background: "#0d1420",
-          border: "1px solid #1e293b",
-          borderRadius: "0.375rem",
-          padding: "0.75rem 1rem",
-          fontSize: "0.78rem",
-          color: "#94a3b8",
-          overflowX: "auto",
-          whiteSpace: "pre",
-        }}
-      >
-        {children}
-      </code>
+      <code className={appShellStyles.mdCodeBlock}>{children}</code>
     ) : (
-      <code
-        style={{
-          background: "#1e293b",
-          borderRadius: "0.2rem",
-          padding: "0.1rem 0.35rem",
-          fontSize: "0.8rem",
-          color: "#7dd3fc",
-        }}
-      >
-        {children}
-      </code>
+      <code className={appShellStyles.mdCodeInline}>{children}</code>
     ),
-  pre: ({ children }) => <pre style={{ margin: "0.6rem 0" }}>{children}</pre>,
+  pre: ({ children }) => <pre className={appShellStyles.mdPre}>{children}</pre>,
   blockquote: ({ children }) => (
-    <blockquote
-      style={{
-        borderLeft: "3px solid #334155",
-        paddingLeft: "1rem",
-        margin: "0.5rem 0",
-        color: "#64748b",
-        fontSize: "0.85rem",
-      }}
-    >
-      {children}
-    </blockquote>
+    <blockquote className={appShellStyles.mdBlockquote}>{children}</blockquote>
   ),
-  hr: () => <hr style={{ border: "none", borderTop: "1px solid #1e293b", margin: "1.25rem 0" }} />,
-  ul: ({ children }) => (
-    <ul
-      style={{ paddingLeft: "1.25rem", margin: "0.4rem 0", color: "#94a3b8", fontSize: "0.85rem" }}
-    >
-      {children}
-    </ul>
-  ),
-  ol: ({ children }) => (
-    <ol
-      style={{ paddingLeft: "1.25rem", margin: "0.4rem 0", color: "#94a3b8", fontSize: "0.85rem" }}
-    >
-      {children}
-    </ol>
-  ),
-  li: ({ children }) => <li style={{ margin: "0.15rem 0" }}>{children}</li>,
+  hr: () => <hr className={appShellStyles.mdHr} />,
+  ul: ({ children }) => <ul className={appShellStyles.mdUl}>{children}</ul>,
+  ol: ({ children }) => <ol className={appShellStyles.mdOl}>{children}</ol>,
+  li: ({ children }) => <li className={appShellStyles.mdLi}>{children}</li>,
   table: ({ children }) => (
-    <div style={{ overflowX: "auto", margin: "0.75rem 0" }}>
-      <table
-        style={{
-          borderCollapse: "collapse",
-          width: "100%",
-          fontSize: "0.8rem",
-          fontFamily: "monospace",
-        }}
-      >
-        {children}
-      </table>
+    <div className={appShellStyles.mdTableWrap}>
+      <table className={appShellStyles.mdTable}>{children}</table>
     </div>
   ),
-  thead: ({ children }) => <thead style={{ background: "#0d1420" }}>{children}</thead>,
-  th: ({ children }) => (
-    <th
-      style={{
-        color: "#64748b",
-        textAlign: "left",
-        padding: "0.35rem 0.75rem",
-        borderBottom: "1px solid #1e293b",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </th>
-  ),
-  td: ({ children }) => (
-    <td
-      style={{
-        color: "#94a3b8",
-        padding: "0.3rem 0.75rem",
-        borderBottom: "1px solid #0f172a",
-        verticalAlign: "top",
-      }}
-    >
-      {children}
-    </td>
-  ),
-  tr: ({ children }) => <tr style={{ borderBottom: "1px solid #1e293b" }}>{children}</tr>,
+  thead: ({ children }) => <thead className={appShellStyles.mdThead}>{children}</thead>,
+  th: ({ children }) => <th className={appShellStyles.mdTh}>{children}</th>,
+  td: ({ children }) => <td className={appShellStyles.mdTd}>{children}</td>,
+  tr: ({ children }) => <tr className={appShellStyles.mdTr}>{children}</tr>,
 };

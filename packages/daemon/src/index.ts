@@ -10,10 +10,12 @@ import { runMigrations } from "./db/migrations.js";
 import { clearDbLock } from "./db/open.js";
 import { DeviceManager } from "./device/device-manager.js";
 import { syncHwModels } from "./hw-models.js";
+import { createLogger } from "./logger.js";
 import { MqttGateway } from "./mqtt/gateway.js";
 import { registerAnalyticsRoutes } from "./routes/analytics.js";
 import { registerCoverageRoutes } from "./routes/coverage.js";
 import { registerDeviceRoutes } from "./routes/devices.js";
+import { registerHealthRoutes } from "./routes/health.js";
 import { registerProposalRoutes } from "./routes/proposals.js";
 import { registerWsRoute, type WsRouteHandle } from "./routes/websocket.js";
 
@@ -23,6 +25,11 @@ let app: FastifyInstance | undefined;
 let deviceManager: DeviceManager | undefined;
 let mqttGateway: MqttGateway | null | undefined;
 let wsHandle: WsRouteHandle | undefined;
+const shutdownLog = createLogger("shutdown");
+const dbLog = createLogger("db");
+const mqttLog = createLogger("mqtt");
+const foremanLog = createLogger("foreman");
+const hwModelsLog = createLogger("hw-models");
 
 type ShutdownSignal = "SIGTERM" | "SIGINT";
 type ShutdownStep =
@@ -49,10 +56,13 @@ export function createShutdownCoordinator(
   return async (signal: ShutdownSignal): Promise<never> => {
     let currentStep: ShutdownStep = "websocket clients";
     const startedAt = new Date();
-    console.log(`[shutdown] begun signal=${signal} timestamp=${startedAt.toISOString()}`);
+    shutdownLog.info({ operation: "shutdown", signal, startedAt }, "shutdown begun");
 
     const timeout = setTimeout(() => {
-      console.error(`[shutdown] timed out during ${currentStep}, forcing exit`);
+      shutdownLog.error(
+        { operation: "shutdown", step: currentStep },
+        "shutdown timed out; forcing exit",
+      );
       process.exit(124);
     }, timeoutMs);
     timeout.unref();
@@ -61,9 +71,9 @@ export function createShutdownCoordinator(
       currentStep = step;
       try {
         await action();
-        console.log(`[shutdown] ${step} complete`);
+        shutdownLog.info({ operation: "shutdown", step }, "shutdown step complete");
       } catch (err) {
-        console.error(`[shutdown] ${step} failed:`, err);
+        shutdownLog.error({ operation: "shutdown", step, err }, "shutdown step failed");
       }
     };
 
@@ -77,7 +87,10 @@ export function createShutdownCoordinator(
     await runStep("database lock", () => dependencies.clearDbLock());
 
     clearTimeout(timeout);
-    console.log(`[shutdown] complete durationMs=${Date.now() - startedAt.getTime()}`);
+    shutdownLog.info(
+      { operation: "shutdown", durationMs: Date.now() - startedAt.getTime() },
+      "shutdown complete",
+    );
     process.exit(0);
   };
 }
@@ -114,27 +127,11 @@ async function fatalError(label: string, err: unknown): Promise<never> {
   process.exit(1);
 }
 
-// The serial transport calls AbortController.abort() on disconnect, which rejects
-// any in-flight reads using that signal. Those rejections are unhandled inside the
-// transport's own machinery and would otherwise crash the process.
 process.on("unhandledRejection", (reason) => {
-  if (reason instanceof Error && reason.name === "AbortError") return;
   fatalError("unhandled rejection", reason);
 });
 
-// Serial port disconnect sequences can emit 'error' events on the SerialPort
-// EventEmitter after the port is already closed (e.g. "Port is not open",
-// ERR_STREAM_PREMATURE_CLOSE). These become uncaught exceptions that would
-// crash the process. We swallow only the known serial-disconnect error codes
-// so the daemon stays up and waits for the device to reconnect.
-const SERIAL_DISCONNECT_CODES = new Set(["ABORT_ERR", "ERR_STREAM_PREMATURE_CLOSE"]);
 process.on("uncaughtException", (err) => {
-  const code = (err as NodeJS.ErrnoException).code ?? "";
-  const msg = err.message ?? "";
-  if (SERIAL_DISCONNECT_CODES.has(code) || msg === "Port is not open") {
-    console.warn("[foreman] suppressed serial-disconnect error:", msg || code);
-    return;
-  }
   fatalError("uncaught exception", err);
 });
 
@@ -167,7 +164,7 @@ async function main() {
 
   // 1. Database
   await runMigrations(db);
-  console.log("[db] migrations complete");
+  dbLog.info({ operation: "migrate" }, "migrations complete");
 
   // 2. HTTP + WebSocket server
   app = Fastify({ logger: { level: "info" } });
@@ -184,6 +181,9 @@ async function main() {
 
   // 3. Device manager (owns all serial/TCP connections)
   deviceManager = new DeviceManager(db, { bot: config.bot });
+  deviceManager.on("transport:error", (err: unknown) => {
+    void fatalError("serial transport failure", err);
+  });
 
   // 4. MQTT gateway (optional — configured when MQTT_BROKER is set; only
   //    auto-started when ENABLE_MQTT=true so the system is lightweight by default)
@@ -202,10 +202,11 @@ async function main() {
     deviceManager.setMqttGateway(mqttGateway);
     if (config.mqtt.enabled === true) {
       mqttGateway.start();
-      console.log(`[mqtt] gateway started → ${config.mqtt.broker}`);
+      mqttLog.info({ operation: "start", broker: config.mqtt.broker }, "gateway started");
     } else {
-      console.log(
-        `[mqtt] gateway configured (ENABLE_MQTT is not true, not starting) → ${config.mqtt.broker}`,
+      mqttLog.info(
+        { operation: "configure", broker: config.mqtt.broker, enabled: false },
+        "gateway configured but not started",
       );
     }
   }
@@ -214,9 +215,9 @@ async function main() {
   if (config.meshtastic.port) {
     const port = config.meshtastic.port;
     const name = config.meshtastic.name ?? config.meshtastic.port;
-    console.log(`[foreman] auto-connecting to ${port}`);
+    foremanLog.info({ operation: "auto-connect", port }, "auto-connecting to device");
     await deviceManager.connect(port, name).catch((err) => {
-      console.error(`[foreman] failed to connect to ${port}:`, err.message);
+      foremanLog.error({ operation: "auto-connect", port, err }, "failed to connect to device");
     });
   } else {
     await deviceManager.reconnectSaved();
@@ -227,6 +228,7 @@ async function main() {
   await registerAnalyticsRoutes(app, db);
   await registerCoverageRoutes(app, db, { coverage: config.coverage });
   await registerProposalRoutes(app, db);
+  await registerHealthRoutes(app, db, mqttGateway);
   wsHandle = await registerWsRoute(app, deviceManager, mqttGateway, db);
 
   // Fallback to index.html for SPA routing
@@ -235,11 +237,16 @@ async function main() {
   });
 
   await app.listen({ port: config.api.port, host: config.api.host });
-  console.log(`[foreman] daemon listening on http://${config.api.host}:${config.api.port}`);
+  foremanLog.info(
+    { operation: "listen", host: config.api.host, port: config.api.port },
+    "daemon listening",
+  );
 
   // Background: sync hardware model names from the protobufs repo.
   // Runs after the server is up so it never delays startup.
-  syncHwModels(db).catch((err) => console.warn("[hw-models] unexpected error during sync:", err));
+  syncHwModels(db).catch((err) =>
+    hwModelsLog.warn({ operation: "sync", err }, "unexpected error during sync"),
+  );
 }
 
 if (!process.env.VITEST) {

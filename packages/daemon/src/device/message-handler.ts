@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { formatNodeId } from "@foreman/shared";
 import { Types } from "@meshtastic/core";
 
+import { createLogger } from "../logger.js";
+
 import type { PGlite } from "@electric-sql/pglite";
 import type { ServerEvent } from "@foreman/shared";
 import type { MeshDevice } from "@meshtastic/core";
@@ -15,6 +17,7 @@ export interface MessageHandlerDeps {
   getMeshDevice: (deviceId: string) => MeshDevice | undefined;
   getMyNodeId: (deviceId: string) => number | undefined;
 }
+const log = createLogger("bot");
 
 export async function handleMessage(
   deps: MessageHandlerDeps,
@@ -66,7 +69,10 @@ export async function handleMessage(
   });
   if (deps.botEnabled && packet.data?.startsWith("!")) {
     await handleBotCommand(deps, deviceId, packet).catch((err) =>
-      console.error("[bot] command handler error:", err),
+      log.error(
+        { deviceId, packetId: packet.id, operation: "handle-command", err },
+        "command handling failed",
+      ),
     );
   }
 }
@@ -148,5 +154,8 @@ async function handleBotCommand(
       replyToPacketId: 0,
     },
   });
-  console.log(`[bot] replied to !${cmd} → "${reply}" → ${formatNodeId(toNodeId)}`);
+  log.info(
+    { deviceId, packetId, operation: "reply", command: cmd, toNodeId: formatNodeId(toNodeId) },
+    "command reply sent",
+  );
 }

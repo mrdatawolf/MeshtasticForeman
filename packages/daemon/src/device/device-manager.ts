@@ -5,6 +5,11 @@ import { formatNodeId } from "@foreman/shared";
 import { MeshDevice, Types } from "@meshtastic/core";
 import { TransportNodeSerial } from "@meshtastic/transport-node-serial";
 
+import { mapDeviceRow, type DeviceRow } from "../db/repositories/devices.js";
+import { mapMessageRow, type MessageRow } from "../db/repositories/messages.js";
+import { mapNodeRow, type NodeRow } from "../db/repositories/nodes.js";
+import { createLogger } from "../logger.js";
+
 import {
   applyConfigSection as applyConfigurationSection,
   emitDeviceConfig,
@@ -32,6 +37,19 @@ export interface ConnectedDevice {
   connectedAt: string;
   meshDevice: MeshDevice;
   transport: TransportNodeSerial;
+}
+
+const SERIAL_DISCONNECT_CODES = new Set(["ABORT_ERR", "ERR_STREAM_PREMATURE_CLOSE"]);
+const log = createLogger("devices");
+
+function isRecoverableSerialDisconnect(reason: unknown): boolean {
+  if (!(reason instanceof Error)) return false;
+  const code = (reason as NodeJS.ErrnoException).code ?? "";
+  return (
+    reason.name === "AbortError" ||
+    SERIAL_DISCONNECT_CODES.has(code) ||
+    reason.message === "Port is not open"
+  );
 }
 
 /**
@@ -97,21 +115,19 @@ export class DeviceManager extends EventEmitter {
     );
     for (const row of rows) {
       await this.connect(row.port, row.name, row.id).catch((err) => {
-        console.warn(`[devices] failed to reconnect ${row.port}:`, err.message);
+        log.warn(
+          { operation: "reconnect-saved", port: row.port, err },
+          "failed to reconnect device",
+        );
       });
     }
   }
 
   async listDevices() {
-    const { rows } = await this.db.query<{
-      id: string;
-      name: string;
-      port: string;
-      hw_model: string | null;
-      firmware: string | null;
-      last_seen: string | null;
-    }>("SELECT id, name, port, hw_model, firmware, last_seen FROM devices ORDER BY created_at");
-    return rows;
+    const { rows } = await this.db.query<DeviceRow>(
+      "SELECT id, name, port, hw_model, firmware, last_seen FROM devices ORDER BY created_at",
+    );
+    return rows.map(mapDeviceRow);
   }
 
   async connect(port: string, name: string, existingId?: string): Promise<ConnectedDevice> {
@@ -154,6 +170,19 @@ export class DeviceManager extends EventEmitter {
       throw err;
     }
 
+    // @meshtastic/core starts this pipe without awaiting its promise. Intercept
+    // that specific stream instance so disconnect failures are handled at the
+    // serial boundary rather than becoming process-level unhandled rejections.
+    const originalPipeTo = transport.fromDevice.pipeTo.bind(transport.fromDevice);
+    transport.fromDevice.pipeTo = ((destination, options) =>
+      originalPipeTo(destination, options).catch((err: unknown) => {
+        if (isRecoverableSerialDisconnect(err)) {
+          log.warn({ deviceId: id, operation: "serial-read", err }, "serial read stopped");
+          return;
+        }
+        this.emit("transport:error", err);
+      })) as typeof transport.fromDevice.pipeTo;
+
     // MeshDevice constructor starts piping the fromDevice stream immediately
     const meshDevice = new MeshDevice(transport);
 
@@ -175,7 +204,12 @@ export class DeviceManager extends EventEmitter {
         },
         id,
         pkt,
-      ).catch((err) => console.error(`[devices] message error on ${name}:`, err));
+      ).catch((err) =>
+        log.error(
+          { deviceId: id, packetId: pkt.id, operation: "handle-message", err },
+          "message handling failed",
+        ),
+      );
     });
 
     // Protobuf types come from @meshtastic/protobufs which is bundled into core;
@@ -192,37 +226,67 @@ export class DeviceManager extends EventEmitter {
         },
         id,
         pkt,
-      ).catch((err) => console.error(`[devices] raw packet error on ${name}:`, err));
+      ).catch((err) =>
+        log.error(
+          { deviceId: id, packetId: pkt.id, operation: "handle-raw-packet", err },
+          "raw packet handling failed",
+        ),
+      );
     });
 
     meshDevice.events.onNodeInfoPacket.subscribe((rawNodeInfo: unknown) => {
       const nodeInfo = adaptNodeInfo(rawNodeInfo);
       if (nodeInfo === null) {
-        console.warn("[devices] rejected malformed nodeInfo packet: validation failed");
+        log.warn(
+          { deviceId: id, operation: "validate-node-info" },
+          "rejected malformed nodeInfo packet",
+        );
         return;
       }
       handleNodeInfo(
         { db: this.db, emit: (event) => this.emit("event", event) },
         id,
         nodeInfo,
-      ).catch((err) => console.error(`[devices] node info error on ${name}:`, err));
+      ).catch((err) =>
+        log.error(
+          { deviceId: id, operation: "handle-node-info", err },
+          "node info handling failed",
+        ),
+      );
     });
 
     meshDevice.events.onPositionPacket.subscribe((rawPacket: unknown) => {
       const pkt = adaptPosition(rawPacket);
       if (pkt === null) {
-        console.warn("[devices] rejected malformed position packet: validation failed");
+        log.warn(
+          { deviceId: id, operation: "validate-position" },
+          "rejected malformed position packet",
+        );
         return;
       }
       handlePosition({ db: this.db, emit: (event) => this.emit("event", event) }, id, pkt).catch(
-        (err) => console.error(`[devices] position error on ${name}:`, err),
+        (err) =>
+          log.error(
+            { deviceId: id, operation: "handle-position", err },
+            "position handling failed",
+          ),
       );
     });
 
     meshDevice.events.onDeviceStatus.subscribe((status: Types.DeviceStatusEnum) => {
-      console.log(`[devices] status ${name} → ${Types.DeviceStatusEnum[status] ?? status}`);
+      log.info(
+        {
+          deviceId: id,
+          operation: "device-status",
+          status: Types.DeviceStatusEnum[status] ?? status,
+        },
+        "device status changed",
+      );
       void this._handleDeviceStatus(id, name, port, transport, status).catch((err) =>
-        console.warn(`[devices] disconnect cleanup failed for ${name}:`, err),
+        log.warn(
+          { deviceId: id, operation: "disconnect-cleanup", err },
+          "disconnect cleanup failed",
+        ),
       );
     });
 
@@ -235,18 +299,27 @@ export class DeviceManager extends EventEmitter {
         // Device is advertising a file on its local filesystem (map tiles,
         // ringtones, UI assets, etc.).  Informational only — log and move on.
         const f = msg.payloadVariant.value;
-        console.log(
-          `[devices] fileInfo ${name}: "${f?.fileName ?? "?"}" (${f?.sizeBytes ?? "??"} bytes)`,
+        log.info(
+          { deviceId: id, operation: "file-info", fileName: f?.fileName, sizeBytes: f?.sizeBytes },
+          "device file advertised",
         );
         return;
       }
-      console.log(`[devices] fromRadio ${name} variant=${variant}`);
+      log.info({ deviceId: id, operation: "from-radio", variant }, "radio frame received");
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onQueueStatus.subscribe((status: any) => {
-      console.log(
-        `[devices] queue status on ${name}: res=${status.res} free=${status.free}/${status.maxlen} packetId=${status.meshPacketId}`,
+      log.info(
+        {
+          deviceId: id,
+          packetId: status.meshPacketId,
+          operation: "queue-status",
+          result: status.res,
+          free: status.free,
+          maxLength: status.maxlen,
+        },
+        "queue status received",
       );
     });
 
@@ -260,34 +333,48 @@ export class DeviceManager extends EventEmitter {
         },
         id,
         pkt,
-      ).catch((err) => console.error(`[devices] traceroute save error:`, err));
+      ).catch((err) =>
+        log.error(
+          { deviceId: id, packetId: pkt.id, operation: "save-traceroute", err },
+          "traceroute save failed",
+        ),
+      );
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onDeviceMetadataPacket.subscribe(({ data }: any) => {
       this._handleMetadata(id, data).catch((err) =>
-        console.error(`[devices] metadata error on ${name}:`, err),
+        log.error({ deviceId: id, operation: "handle-metadata", err }, "metadata handling failed"),
       );
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onConfigPacket.subscribe((pkt: any) => {
       handleConfigPacket(this._configurationDeps(), id, name, pkt).catch((err) =>
-        console.error(`[devices] config packet error on ${name}:`, err),
+        log.error(
+          { deviceId: id, operation: "handle-config-packet", err },
+          "config packet handling failed",
+        ),
       );
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onModuleConfigPacket.subscribe((pkt: any) => {
       handleModuleConfigPacket(this._configurationDeps(), id, name, pkt).catch((err) =>
-        console.error(`[devices] module config packet error on ${name}:`, err),
+        log.error(
+          { deviceId: id, operation: "handle-module-config-packet", err },
+          "module config packet handling failed",
+        ),
       );
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onChannelPacket.subscribe((pkt: any) => {
       handleChannelPacket(this._configurationDeps(), id, name, pkt).catch((err) =>
-        console.error(`[devices] channel packet error on ${name}:`, err),
+        log.error(
+          { deviceId: id, operation: "handle-channel-packet", err },
+          "channel packet handling failed",
+        ),
       );
     });
 
@@ -296,14 +383,20 @@ export class DeviceManager extends EventEmitter {
       const nodeNum: number = info?.myNodeNum ?? 0;
       if (nodeNum !== 0) {
         this.myNodeIds.set(id, nodeNum);
-        console.log(`[devices] myNodeInfo ${name} nodeNum=${formatNodeId(nodeNum)}`);
+        log.info(
+          { deviceId: id, operation: "own-node-info", nodeId: formatNodeId(nodeNum) },
+          "own node info received",
+        );
       }
     });
 
     meshDevice.events.onTelemetryPacket.subscribe((rawPacket: unknown) => {
       const pkt = adaptTelemetry(rawPacket);
       if (pkt === null) {
-        console.warn("[devices] rejected malformed telemetry packet: validation failed");
+        log.warn(
+          { deviceId: id, operation: "validate-telemetry" },
+          "rejected malformed telemetry packet",
+        );
         return;
       }
       handleTelemetry(
@@ -320,16 +413,21 @@ export class DeviceManager extends EventEmitter {
         id,
         name,
         pkt,
-      ).catch((err) => console.error(`[devices] telemetry error on ${name}:`, err));
+      ).catch((err) =>
+        log.error(
+          { deviceId: id, operation: "handle-telemetry", err },
+          "telemetry handling failed",
+        ),
+      );
     });
 
     // Attach to MQTT gateway BEFORE configure so it catches onMyNodeInfo/onChannelPacket
     this.mqttGateway?.attachDevice(id, meshDevice);
 
     // Send configure request — device will begin streaming its config back
-    console.log(`[devices] configure start ${name}`);
+    log.info({ deviceId: id, operation: "configure" }, "device configuration started");
     await meshDevice.configure();
-    console.log(`[devices] configure done ${name}`);
+    log.info({ deviceId: id, operation: "configure" }, "device configuration completed");
 
     // Request the device's own position immediately after configure.
     // This ensures GPS data arrives even if the device hasn't broadcast a position yet.
@@ -338,7 +436,7 @@ export class DeviceManager extends EventEmitter {
       meshDevice
         .requestPosition(ownNodeId)
         .catch((err: unknown) =>
-          console.warn(`[devices] requestPosition failed for ${name}:`, err),
+          log.warn({ deviceId: id, operation: "request-position", err }, "position request failed"),
         );
     }
 
@@ -347,7 +445,7 @@ export class DeviceManager extends EventEmitter {
     meshDevice.setHeartbeatInterval(30_000);
 
     this._emitStatus(id, name, port, "connected", connectedAt);
-    console.log(`[devices] connected ${name} on ${port} (id=${id})`);
+    log.info({ deviceId: id, operation: "connect", name, port }, "device connected");
 
     // Emit config snapshot now that all onConfigPacket/onModuleConfigPacket/onChannelPacket
     // handlers have fired and their DB writes are queued ahead of this read.
@@ -379,7 +477,7 @@ export class DeviceManager extends EventEmitter {
     await device.transport.disconnect().catch(() => {});
 
     this._emitStatus(deviceId, device.name, device.port, "disconnected");
-    console.log(`[devices] disconnected ${device.name}`);
+    log.info({ deviceId, operation: "disconnect" }, "device disconnected");
   }
 
   /**
@@ -401,7 +499,10 @@ export class DeviceManager extends EventEmitter {
     );
     for (const result of results) {
       if (result.status === "rejected") {
-        console.error("[devices] shutdown disconnect failed:", result.reason);
+        log.error(
+          { operation: "shutdown-disconnect", err: result.reason },
+          "shutdown disconnect failed",
+        );
       }
     }
   }
@@ -435,39 +536,13 @@ export class DeviceManager extends EventEmitter {
   }
 
   async listNodes(deviceId: string): Promise<NodeInfo[]> {
-    const { rows } = await this.db.query<{
-      node_id: number;
-      long_name: string | null;
-      short_name: string | null;
-      mac_address: string | null;
-      hw_model: number | null;
-      public_key: string | null;
-      last_heard: string | null;
-      snr: number | null;
-      hops_away: number | null;
-      latitude: number | null;
-      longitude: number | null;
-      altitude: number | null;
-    }>(
+    const { rows } = await this.db.query<NodeRow>(
       `SELECT node_id, long_name, short_name, mac_address, hw_model, public_key,
               last_heard, snr, hops_away, latitude, longitude, altitude
        FROM nodes WHERE device_id = $1 ORDER BY last_heard DESC NULLS LAST`,
       [deviceId],
     );
-    return rows.map((r) => ({
-      nodeId: r.node_id,
-      longName: r.long_name,
-      shortName: r.short_name,
-      macAddress: r.mac_address,
-      hwModel: r.hw_model,
-      publicKey: r.public_key,
-      lastHeard: r.last_heard,
-      snr: r.snr,
-      hopsAway: r.hops_away,
-      latitude: r.latitude,
-      longitude: r.longitude,
-      altitude: r.altitude,
-    }));
+    return rows.map(mapNodeRow);
   }
 
   async getMessageHistory(
@@ -499,45 +574,9 @@ export class DeviceManager extends EventEmitter {
     query += ` ORDER BY rx_time DESC LIMIT $${p}`;
     params.push(opts.limit);
 
-    const { rows } = await this.db.query<{
-      id: string;
-      packet_id: number;
-      from_node_id: number;
-      to_node_id: number;
-      channel_index: number;
-      text: string | null;
-      rx_time: string;
-      rx_snr: number | null;
-      rx_rssi: number | null;
-      hop_limit: number | null;
-      want_ack: boolean;
-      via_mqtt: boolean;
-      role: string;
-      ack_status: string | null;
-      ack_at: string | null;
-      ack_error: string | null;
-      reply_to_packet_id: number;
-    }>(query, params);
+    const { rows } = await this.db.query<MessageRow>(query, params);
 
-    return rows.map((r) => ({
-      id: r.id,
-      packetId: r.packet_id,
-      fromNodeId: r.from_node_id,
-      toNodeId: r.to_node_id,
-      channelIndex: r.channel_index,
-      text: r.text,
-      rxTime: r.rx_time,
-      rxSnr: r.rx_snr,
-      rxRssi: r.rx_rssi,
-      hopLimit: r.hop_limit,
-      wantAck: r.want_ack,
-      viaMqtt: r.via_mqtt,
-      role: r.role as Message["role"],
-      ackStatus: r.ack_status as Message["ackStatus"],
-      ackAt: r.ack_at,
-      ackError: r.ack_error,
-      replyToPacketId: r.reply_to_packet_id ?? 0,
-    }));
+    return rows.map(mapMessageRow);
   }
 
   async deleteConversation(deviceId: string, nodeId: number): Promise<void> {
@@ -576,16 +615,22 @@ export class DeviceManager extends EventEmitter {
       const last = this.lastPacketMs.get(deviceId) ?? 0;
       const silentMs = Date.now() - last;
       if (silentMs >= STALE_MS) {
-        console.log(
-          `[devices] watchdog: ${name} silent for ${Math.round(silentMs / 1000)}s — re-running configure()`,
+        log.info(
+          { deviceId, operation: "watchdog-configure", silentMs },
+          "device silent; re-running configuration",
         );
         this.lastPacketMs.set(deviceId, Date.now()); // prevent hammering
         try {
           await meshDevice.configure();
-          console.log(`[devices] watchdog: configure() done for ${name}`);
+          log.info(
+            { deviceId, operation: "watchdog-configure" },
+            "watchdog configuration completed",
+          );
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.warn(`[devices] watchdog: configure() failed for ${name}: ${msg}`);
+          log.warn(
+            { deviceId, operation: "watchdog-configure", err },
+            "watchdog configuration failed",
+          );
         }
       }
     }, INTERVAL);
@@ -649,7 +694,10 @@ export class DeviceManager extends EventEmitter {
       // unavailable even though the manager considers it disconnected.
       if (device) await device.transport.disconnect().catch(() => {});
       this._emitStatus(deviceId, name, port, "disconnected");
-      console.log(`[devices] ${name} disconnected — scheduling reconnect in 5s`);
+      log.info(
+        { deviceId, operation: "schedule-reconnect", delayMs: 5000 },
+        "device disconnected; scheduling reconnect",
+      );
       this._scheduleReconnect(deviceId, port, name);
     }
   }
@@ -664,7 +712,10 @@ export class DeviceManager extends EventEmitter {
 
     // Exponential backoff: 5s, 10s, 20s, 40s, capped at 60s
     const delayMs = Math.min(5000 * Math.pow(2, attempt - 1), 60_000);
-    console.log(`[devices] reconnect attempt ${attempt} for ${name} in ${delayMs / 1000}s`);
+    log.info(
+      { deviceId, operation: "schedule-reconnect", attempt, delayMs },
+      "reconnect scheduled",
+    );
 
     const timer = setTimeout(async () => {
       this.reconnectTimers.delete(port);
@@ -673,13 +724,12 @@ export class DeviceManager extends EventEmitter {
         this.reconnectAttempts.delete(port);
         return; // already reconnected by another path
       }
-      console.log(`[devices] attempting reconnect for ${name} on ${port} (attempt ${attempt})`);
+      log.info({ deviceId, operation: "reconnect", attempt, port }, "attempting reconnect");
       try {
         await this.connect(port, name, deviceId);
         this.reconnectAttempts.delete(port); // success — reset backoff
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[devices] reconnect failed for ${port}:`, msg);
+        log.warn({ deviceId, operation: "reconnect", attempt, port, err }, "reconnect failed");
         this._emitStatus(deviceId, name, port, "disconnected");
         // Schedule another attempt — keeps retrying until the device comes back
         this._scheduleReconnect(deviceId, port, name);

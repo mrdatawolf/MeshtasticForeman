@@ -82,7 +82,7 @@ describe("coordinated shutdown", () => {
 
     expect(process.exit).toHaveBeenCalledWith(124);
     expect(console.error).toHaveBeenCalledWith(
-      "[shutdown] timed out during MQTT gateway, forcing exit",
+      '[shutdown] shutdown timed out; forcing exit {"operation":"shutdown","step":"MQTT gateway"}',
     );
     expect(harness.db.close).not.toHaveBeenCalled();
     expect(harness.clearDbLock).not.toHaveBeenCalled();

@@ -5,7 +5,13 @@ import { formatRelativeTime } from "../lib/relativeTime.js";
 import { useConversation, loadConversation, addOptimisticMessage } from "../store/messages.js";
 import { foremanClient } from "../ws/client.js";
 
+import styles from "./NodeDetailPanel.module.css";
+
 import type { NodeInfo, MqttNode, DeviceInfo, Message } from "@foreman/shared";
+
+function cx(...classes: Array<string | false | null | undefined>): string {
+  return classes.filter(Boolean).join(" ");
+}
 
 interface Props {
   nodeId: number;
@@ -55,6 +61,16 @@ function formatLastHeard(iso: string | null) {
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function actionBtnClass(active: boolean, variant?: "danger" | "green" | "pushRight"): string {
+  return cx(
+    styles.actionBtn,
+    active && styles.actionBtnActive,
+    variant === "danger" && styles.actionBtnDanger,
+    variant === "green" && styles.actionBtnGreen,
+    variant === "pushRight" && styles.actionBtnPushRight,
+  );
 }
 
 export function NodeDetailPanel({
@@ -173,31 +189,29 @@ export function NodeDetailPanel({
   const isMqttOnly = !mesh;
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.panel} onClick={(e) => e.stopPropagation()}>
+    <div className={styles.overlay} onClick={onClose}>
+      <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div style={styles.header}>
+        <div className={styles.header}>
           <div>
-            <div style={styles.headerName}>
+            <div className={styles.headerName}>
               {resolveNodeName(nodeId, primary, { fallback: "Unknown" })}
             </div>
-            <div style={styles.headerSub}>
-              <span style={styles.mono}>{formatNodeId(nodeId)}</span>
+            <div className={styles.headerSub}>
+              <span className={styles.mono}>{formatNodeId(nodeId)}</span>
               {primary.shortName && primary.longName && (
-                <span style={{ color: "#64748b", marginLeft: "0.5rem" }}>
-                  ({primary.shortName})
-                </span>
+                <span className={styles.shortNameHint}>({primary.shortName})</span>
               )}
             </div>
           </div>
-          <button style={styles.closeBtn} onClick={onClose}>
+          <button className={styles.closeBtn} onClick={onClose}>
             ✕
           </button>
         </div>
 
-        <div style={styles.body}>
+        <div className={styles.body}>
           {/* Details grid */}
-          <div style={styles.detailGrid}>
+          <div className={styles.detailGrid}>
             <Detail label="Node ID" value={formatNodeId(nodeId)} mono />
             <Detail
               label="Hardware"
@@ -251,16 +265,16 @@ export function NodeDetailPanel({
 
           {/* Actions */}
           {deviceId && !isMqttOnly && (
-            <div style={styles.actions}>
+            <div className={styles.actions}>
               <button
-                style={actionBtnStyle(pendingAction === "position")}
+                className={actionBtnClass(pendingAction === "position")}
                 disabled={!!pendingAction}
                 onClick={requestPosition}
               >
                 {pendingAction === "position" ? "Requesting…" : "📍 Request Position"}
               </button>
               <button
-                style={actionBtnStyle(pendingAction === "traceroute")}
+                className={actionBtnClass(pendingAction === "traceroute")}
                 disabled={!!pendingAction}
                 onClick={requestTraceroute}
               >
@@ -268,7 +282,7 @@ export function NodeDetailPanel({
               </button>
               {onMessage && (
                 <button
-                  style={actionBtnStyle(false)}
+                  className={actionBtnClass(false)}
                   onClick={() => {
                     onClose();
                     onMessage(nodeId);
@@ -279,19 +293,16 @@ export function NodeDetailPanel({
               )}
               {confirmRemove ? (
                 <>
-                  <button
-                    style={{ ...actionBtnStyle(false), color: "#f87171", borderColor: "#7f1d1d" }}
-                    onClick={removeNode}
-                  >
+                  <button className={actionBtnClass(false, "danger")} onClick={removeNode}>
                     Confirm Reset
                   </button>
-                  <button style={actionBtnStyle(false)} onClick={() => setConfirmRemove(false)}>
+                  <button className={actionBtnClass(false)} onClick={() => setConfirmRemove(false)}>
                     Cancel
                   </button>
                 </>
               ) : (
                 <button
-                  style={{ ...actionBtnStyle(pendingAction === "remove"), marginLeft: "auto" }}
+                  className={actionBtnClass(pendingAction === "remove", "pushRight")}
                   disabled={!!pendingAction}
                   onClick={() => setConfirmRemove(true)}
                   title="Remove from radio nodeDB and clear local cache"
@@ -304,9 +315,9 @@ export function NodeDetailPanel({
 
           {/* Coverage map — available for any node with GPS, regardless of connection state */}
           {onCoverageMap && primary.latitude != null && primary.longitude != null && (
-            <div style={{ ...styles.actions, marginTop: "0.3rem" }}>
+            <div className={cx(styles.actions, styles.actionsSpaced)}>
               <button
-                style={{ ...actionBtnStyle(false), borderColor: "#166534", color: "#86efac" }}
+                className={actionBtnClass(false, "green")}
                 onClick={() => {
                   onClose();
                   onCoverageMap(nodeId);
@@ -319,13 +330,13 @@ export function NodeDetailPanel({
 
           {/* Traceroute result */}
           {traceroute && (
-            <div style={styles.traceResult}>
-              <span style={{ color: "#60a5fa", fontWeight: "bold" }}>Route: </span>
+            <div className={styles.traceResult}>
+              <span className={styles.routeLabel}>Route: </span>
               {traceroute.route.length === 0
                 ? "Direct"
                 : traceroute.route.map((id) => formatNodeId(id)).join(" → ")}
               {traceroute.routeBack.length > 0 && (
-                <span style={{ color: "#64748b", marginLeft: "0.75rem" }}>
+                <span className={styles.routeBackLabel}>
                   ← {traceroute.routeBack.map((id) => formatNodeId(id)).join(" ← ")}
                 </span>
               )}
@@ -335,35 +346,43 @@ export function NodeDetailPanel({
           {/* Messages */}
           {deviceId && !isMqttOnly && (
             <>
-              <div style={styles.sectionLabel}>Messages</div>
-              <div style={styles.messageList}>
+              <div className={styles.sectionLabel}>Messages</div>
+              <div className={styles.messageList}>
                 {messages.length === 0 ? (
-                  <div style={styles.noMessages}>No messages with this node.</div>
+                  <div className={styles.noMessages}>No messages with this node.</div>
                 ) : (
                   messages.map((m) => {
                     const outgoing = m.role === "sent";
                     return (
-                      <div key={m.id} style={messageBubbleStyle(outgoing)}>
-                        {m.role === "relayed" && <div style={styles.relayedLabel}>relayed</div>}
-                        <div style={{ ...styles.msgText, opacity: m.role === "relayed" ? 0.5 : 1 }}>
-                          {m.text ?? <em style={{ color: "#475569" }}>encrypted</em>}
+                      <div
+                        key={m.id}
+                        className={cx(styles.msgBubble, outgoing && styles.msgBubbleOutgoing)}
+                      >
+                        {m.role === "relayed" && <div className={styles.relayedLabel}>relayed</div>}
+                        <div
+                          className={cx(
+                            styles.msgText,
+                            m.role === "relayed" && styles.msgTextRelayed,
+                          )}
+                        >
+                          {m.text ?? <em className={styles.encryptedHint}>encrypted</em>}
                         </div>
-                        <div style={styles.msgMeta}>
+                        <div className={styles.msgMeta}>
                           {formatTime(m.rxTime)}
                           {m.rxSnr != null && ` · SNR ${m.rxSnr.toFixed(1)}`}
                           {m.viaMqtt && " · MQTT"}
                           {outgoing && m.ackStatus === "pending" && (
-                            <span style={styles.ackPending} title="Waiting for ACK">
+                            <span className={styles.ackPending} title="Waiting for ACK">
                               ⏳
                             </span>
                           )}
                           {outgoing && m.ackStatus === "acked" && (
-                            <span style={styles.ackOk} title="Delivered">
+                            <span className={styles.ackOk} title="Delivered">
                               ✓
                             </span>
                           )}
                           {outgoing && m.ackStatus === "error" && (
-                            <span style={styles.ackErr} title={m.ackError ?? "Delivery failed"}>
+                            <span className={styles.ackErr} title={m.ackError ?? "Delivery failed"}>
                               ✗
                             </span>
                           )}
@@ -376,9 +395,9 @@ export function NodeDetailPanel({
               </div>
 
               {/* Compose */}
-              <div style={styles.compose}>
+              <div className={styles.compose}>
                 <select
-                  style={styles.channelSelect}
+                  className={styles.channelSelect}
                   value={channel}
                   onChange={(e) => setChannel(Number(e.target.value))}
                   title="Channel"
@@ -390,7 +409,7 @@ export function NodeDetailPanel({
                   ))}
                 </select>
                 <input
-                  style={styles.msgInput}
+                  className={styles.msgInput}
                   placeholder="Send a message…"
                   value={msgText}
                   onChange={(e) => setMsgText(e.target.value)}
@@ -403,7 +422,10 @@ export function NodeDetailPanel({
                   maxLength={228}
                 />
                 <button
-                  style={sendBtnStyle(sending || !msgText.trim())}
+                  className={cx(
+                    styles.sendBtn,
+                    (sending || !msgText.trim()) && styles.sendBtnDisabled,
+                  )}
                   disabled={sending || !msgText.trim()}
                   onClick={sendMessage}
                 >
@@ -421,228 +443,8 @@ export function NodeDetailPanel({
 function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <>
-      <span style={styles.detailLabel}>{label}</span>
-      <span
-        style={{
-          ...styles.detailValue,
-          ...(mono ? { fontFamily: "monospace", color: "#94a3b8" } : {}),
-        }}
-      >
-        {value}
-      </span>
+      <span className={styles.detailLabel}>{label}</span>
+      <span className={cx(styles.detailValue, mono && styles.detailValueMono)}>{value}</span>
     </>
   );
 }
-
-function actionBtnStyle(active: boolean): React.CSSProperties {
-  return {
-    background: active ? "#1e3a5f" : "#1e293b",
-    border: `1px solid ${active ? "#3b82f6" : "#334155"}`,
-    color: active ? "#60a5fa" : "#94a3b8",
-    padding: "0.35rem 0.8rem",
-    borderRadius: "0.375rem",
-    cursor: active ? "not-allowed" : "pointer",
-    fontFamily: "monospace",
-    fontSize: "0.8rem",
-  };
-}
-
-function messageBubbleStyle(outgoing: boolean): React.CSSProperties {
-  return {
-    alignSelf: outgoing ? "flex-end" : "flex-start",
-    maxWidth: "80%",
-    background: outgoing ? "#1e3a5f" : "#1e293b",
-    border: `1px solid ${outgoing ? "#2563eb" : "#334155"}`,
-    borderRadius: "0.5rem",
-    padding: "0.4rem 0.65rem",
-  };
-}
-
-function sendBtnStyle(disabled: boolean): React.CSSProperties {
-  return {
-    background: disabled ? "#1e293b" : "#1d4ed8",
-    border: "none",
-    color: disabled ? "#475569" : "#fff",
-    padding: "0.4rem 0.9rem",
-    borderRadius: "0.375rem",
-    cursor: disabled ? "not-allowed" : "pointer",
-    fontFamily: "monospace",
-    fontSize: "0.8rem",
-    flexShrink: 0,
-  };
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.5)",
-    zIndex: 200,
-    display: "flex",
-    justifyContent: "flex-end",
-  },
-  panel: {
-    width: "min(480px, 100vw)",
-    height: "100%",
-    background: "#0f172a",
-    borderLeft: "1px solid #1e293b",
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    padding: "1rem 1.25rem",
-    borderBottom: "1px solid #1e293b",
-    flexShrink: 0,
-  },
-  headerName: {
-    fontSize: "1rem",
-    fontWeight: "bold",
-    color: "#f1f5f9",
-  },
-  headerSub: {
-    marginTop: "0.2rem",
-    fontSize: "0.8rem",
-    display: "flex",
-    alignItems: "center",
-  },
-  closeBtn: {
-    background: "none",
-    border: "none",
-    color: "#64748b",
-    cursor: "pointer",
-    fontSize: "1rem",
-    padding: "0.2rem",
-    lineHeight: 1,
-  },
-  body: {
-    flex: 1,
-    overflowY: "auto",
-    padding: "1rem 1.25rem",
-    display: "flex",
-    flexDirection: "column",
-    gap: "1rem",
-  },
-  detailGrid: {
-    display: "grid",
-    gridTemplateColumns: "9rem 1fr",
-    rowGap: "0.4rem",
-    columnGap: "0.75rem",
-  },
-  detailLabel: {
-    color: "#475569",
-    fontSize: "0.78rem",
-    alignSelf: "center",
-  },
-  detailValue: {
-    color: "#e2e8f0",
-    fontSize: "0.82rem",
-    wordBreak: "break-all",
-  },
-  actions: {
-    display: "flex",
-    gap: "0.5rem",
-    flexWrap: "wrap",
-  },
-  traceResult: {
-    background: "#0f2a4a",
-    border: "1px solid #1e3a5f",
-    borderRadius: "0.375rem",
-    padding: "0.5rem 0.75rem",
-    fontSize: "0.78rem",
-    fontFamily: "monospace",
-    color: "#94a3b8",
-    wordBreak: "break-all",
-  },
-  sectionLabel: {
-    fontSize: "0.65rem",
-    color: "#334155",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-  },
-  messageList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.5rem",
-    minHeight: "6rem",
-    maxHeight: "16rem",
-    overflowY: "auto",
-    background: "#020617",
-    border: "1px solid #1e293b",
-    borderRadius: "0.375rem",
-    padding: "0.75rem",
-  },
-  noMessages: {
-    color: "#334155",
-    fontSize: "0.8rem",
-    textAlign: "center",
-    margin: "auto",
-  },
-  msgText: {
-    color: "#e2e8f0",
-    fontSize: "0.82rem",
-    lineHeight: "1.4",
-  },
-  msgMeta: {
-    color: "#475569",
-    fontSize: "0.68rem",
-    marginTop: "0.2rem",
-    display: "flex",
-    alignItems: "center",
-    gap: "0.3rem",
-  },
-  relayedLabel: {
-    color: "#475569",
-    fontSize: "0.62rem",
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.06em",
-    marginBottom: "0.15rem",
-  },
-  ackPending: {
-    fontSize: "0.7rem",
-    opacity: 0.6,
-  },
-  ackOk: {
-    color: "#22c55e",
-    fontSize: "0.75rem",
-  },
-  ackErr: {
-    color: "#ef4444",
-    fontSize: "0.75rem",
-    cursor: "help",
-  },
-  compose: {
-    display: "flex",
-    gap: "0.4rem",
-    alignItems: "center",
-  },
-  channelSelect: {
-    background: "#1e293b",
-    border: "1px solid #334155",
-    color: "#94a3b8",
-    borderRadius: "0.375rem",
-    padding: "0.4rem 0.3rem",
-    fontFamily: "monospace",
-    fontSize: "0.75rem",
-    flexShrink: 0,
-  },
-  msgInput: {
-    flex: 1,
-    background: "#1e293b",
-    border: "1px solid #334155",
-    color: "#e2e8f0",
-    borderRadius: "0.375rem",
-    padding: "0.4rem 0.6rem",
-    fontFamily: "monospace",
-    fontSize: "0.8rem",
-    outline: "none",
-  },
-  mono: {
-    fontFamily: "monospace",
-    fontSize: "0.8rem",
-    color: "#94a3b8",
-  },
-};

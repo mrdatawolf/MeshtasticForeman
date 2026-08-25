@@ -37,6 +37,8 @@ export function MapCanvas({
       ref={mapRef}
       key={hasGpsNodes ? "has-gps" : "no-gps"}
       initialViewState={initialView}
+      // react-map-gl's <Map> only accepts a `style` prop for its container (no
+      // `className`), so this one full-size layout style can't move to a CSS module.
       style={{ width: "100%", height: "100%" }}
       mapStyle={mapStyle}
       attributionControl={false}

@@ -20,8 +20,10 @@ import { fileURLToPath } from "node:url";
 
 import { runMigrations } from "../db/migrations.js";
 import { openDb, clearDbLock } from "../db/open.js";
+import { createLogger } from "../logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const log = createLogger("import");
 const CACHE_DIR = resolve(__dirname, "../../../../TD_cache");
 
 function resolveImportFile(): string {
@@ -35,8 +37,10 @@ function resolveImportFile(): string {
   try {
     entries = readdirSync(CACHE_DIR);
   } catch {
-    console.error(`[import] TD_cache/ directory not found at ${CACHE_DIR}`);
-    console.error(`[import] Run 'pnpm cache:export' first, or pass an explicit file path.`);
+    log.error(
+      { operation: "resolve-import", cacheDir: CACHE_DIR },
+      "terrain cache directory not found; run cache:export or pass a file",
+    );
     process.exit(1);
   }
 
@@ -46,8 +50,10 @@ function resolveImportFile(): string {
     .reverse();
 
   if (candidates.length === 0) {
-    console.error(`[import] No elevation_cache_*.sql files found in ${CACHE_DIR}`);
-    console.error(`[import] Run 'pnpm cache:export' first, or pass an explicit file path.`);
+    log.error(
+      { operation: "resolve-import", cacheDir: CACHE_DIR },
+      "no terrain cache exports found; run cache:export or pass a file",
+    );
     process.exit(1);
   }
 
@@ -56,13 +62,13 @@ function resolveImportFile(): string {
 
 async function main(): Promise<void> {
   const filePath = resolveImportFile();
-  console.log(`[import] Reading: ${filePath}`);
+  log.info({ operation: "read-import", filePath }, "reading terrain cache import");
 
   let sql: string;
   try {
     sql = readFileSync(filePath, "utf8");
   } catch (err) {
-    console.error(`[import] Could not read file: ${err}`);
+    log.error({ operation: "read-import", filePath, err }, "could not read terrain cache import");
     process.exit(1);
   }
 
@@ -76,8 +82,7 @@ async function main(): Promise<void> {
   const before = await db.query<{ n: string }>("SELECT COUNT(*) AS n FROM elevation_cache");
   const rowsBefore = Number(before.rows[0]?.n ?? 0);
 
-  console.log(`[import] Rows before: ${rowsBefore}`);
-  console.log(`[import] Executing import…`);
+  log.info({ operation: "import", rowsBefore }, "executing terrain cache import");
 
   // Wrap the whole file in a transaction for speed (thousands of individual
   // upserts are dramatically faster inside a single transaction).
@@ -89,10 +94,13 @@ async function main(): Promise<void> {
   await db.close();
 
   const added = rowsAfter - rowsBefore;
-  console.log(`[import] Done. Rows after: ${rowsAfter} (${added >= 0 ? "+" : ""}${added} net new)`);
+  log.info(
+    { operation: "import", rowsBefore, rowsAfter, netNew: added },
+    "terrain cache import complete",
+  );
 }
 
 main().catch((err) => {
-  console.error("[import] Fatal:", err);
+  log.error({ operation: "import", err }, "terrain cache import failed");
   process.exit(1);
 });

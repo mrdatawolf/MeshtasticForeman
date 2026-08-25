@@ -18,9 +18,12 @@ import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 
+import { createLogger } from "../logger.js";
+
 import type { PGlite, Results } from "@electric-sql/pglite";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const log = createLogger("db");
 
 export const DEFAULT_DATA_DIR =
   process.env.PGLITE_DIR ?? join(__dirname, "../../../../pglite-data");
@@ -55,13 +58,17 @@ class PGliteProxy {
     );
 
     worker.on("error", (err) => {
-      console.error("[db] PGlite worker error:", err.message);
+      log.error({ operation: "worker", err }, "PGlite worker error");
       this._killPending(err);
     });
 
     worker.on("exit", (code) => {
       this.dead = true;
-      if (code !== 0) console.error(`[db] PGlite worker exited with code ${code}`);
+      if (code !== 0)
+        log.error(
+          { operation: "worker-exit", exitCode: code },
+          "PGlite worker exited unexpectedly",
+        );
       this._killPending(new Error(`PGlite worker exited with code ${code}`));
     });
   }
@@ -166,7 +173,7 @@ class PGliteProxy {
 export function clearDbLock(dataDir = DEFAULT_DATA_DIR): void {
   const lockFile = join(dataDir, "postmaster.pid");
   if (existsSync(lockFile)) {
-    console.log(`[db] Removing stale lock file: ${lockFile}`);
+    log.info({ operation: "remove-stale-lock", lockFile }, "removing stale database lock");
     unlinkSync(lockFile);
   }
 }
@@ -203,6 +210,6 @@ export async function openDb(dataDir = DEFAULT_DATA_DIR): Promise<PGlite> {
     });
   });
 
-  console.log(`[db] PGlite ready at ${dataDir}`);
+  log.info({ operation: "open", dataDir }, "PGlite ready");
   return new PGliteProxy(worker) as unknown as PGlite;
 }

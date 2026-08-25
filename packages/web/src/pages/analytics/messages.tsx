@@ -17,10 +17,12 @@ import {
 
 import * as analyticsApi from "../../api/analytics.js";
 
+import { cx, styles } from "./analyticsStyles.js";
 import {
   ChartCard,
   Empty,
   GRID_COLOR,
+  LEGEND_WRAPPER_STYLE,
   Loading,
   ROLE_COLORS,
   RangeBtn,
@@ -30,8 +32,8 @@ import {
   formatTs,
   nodeColor,
   nodeName,
-  styles,
 } from "./components.js";
+import localStyles from "./messages.module.css";
 import { useAnalyticsQuery } from "./useAnalyticsQuery.js";
 
 import type {
@@ -106,9 +108,9 @@ export function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes
   );
 
   return (
-    <div style={styles.grid}>
+    <div className={styles.grid}>
       {/* Range selector spanning full width */}
-      <div style={{ gridColumn: "1 / -1" }}>
+      <div className={styles.gridSpan}>
         <RangeBtn options={["6h", "24h", "7d", "30d"]} value={since} onChange={setSince} />
       </div>
 
@@ -128,7 +130,7 @@ export function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes
                 {...TOOLTIP_STYLE}
                 labelFormatter={(v) => new Date(v as string).toLocaleString()}
               />
-              <Legend wrapperStyle={styles.legendWrap} />
+              <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
               <Area
                 type="monotone"
                 dataKey="received"
@@ -166,11 +168,11 @@ export function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes
           <Empty message="No sent messages with ACK requested" />
         ) : (
           <>
-            <div style={styles.deliverySummary}>
+            <div className={styles.deliverySummary}>
               {delivery.total > 0 && (
-                <span style={{ color: "#94a3b8" }}>
+                <span className={localStyles.deliveredText}>
                   {delivery.acked} / {delivery.total} delivered
-                  <span style={{ color: "#64748b" }}>
+                  <span className={localStyles.deliveredPercent}>
                     {" "}
                     ({Math.round((delivery.acked / delivery.total) * 100)}%)
                   </span>
@@ -191,16 +193,16 @@ export function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes
                   ))}
                 </Pie>
                 <Tooltip {...TOOLTIP_STYLE} />
-                <Legend wrapperStyle={styles.legendWrap} />
+                <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
               </PieChart>
             </ResponsiveContainer>
             {delivery.errorTypes.length > 0 && (
-              <div style={{ marginTop: "0.5rem" }}>
-                <div style={styles.subLabel}>Error breakdown</div>
+              <div className={localStyles.errorBreakdown}>
+                <div className={styles.subLabel}>Error breakdown</div>
                 {delivery.errorTypes.map((e) => (
-                  <div key={e.type} style={styles.errorRow}>
-                    <span style={{ color: "#f87171" }}>{e.type}</span>
-                    <span style={{ color: "#64748b" }}>{e.count}</span>
+                  <div key={e.type} className={styles.errorRow}>
+                    <span className={localStyles.errorType}>{e.type}</span>
+                    <span className={localStyles.errorCount}>{e.count}</span>
                   </div>
                 ))}
               </div>
@@ -222,7 +224,7 @@ export function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes
               <XAxis dataKey="label" tick={TICK_STYLE} />
               <YAxis tick={TICK_STYLE} allowDecimals={false} />
               <Tooltip {...TOOLTIP_STYLE} />
-              <Legend wrapperStyle={styles.legendWrap} />
+              <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
               <Bar dataKey="received" name="Received" stackId="a" fill={ROLE_COLORS.received} />
               <Bar dataKey="sent" name="Sent" stackId="a" fill={ROLE_COLORS.sent} />
               <Bar dataKey="relayed" name="Relayed" stackId="a" fill={ROLE_COLORS.relayed} />
@@ -249,7 +251,7 @@ export function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes
                 tick={{ ...TICK_STYLE, fontSize: 10 }}
               />
               <Tooltip {...TOOLTIP_STYLE} />
-              <Legend wrapperStyle={styles.legendWrap} />
+              <Legend wrapperStyle={LEGEND_WRAPPER_STYLE} />
               <Bar dataKey="received" name="Received" stackId="a" fill={ROLE_COLORS.received} />
               <Bar dataKey="sent" name="Sent" stackId="a" fill={ROLE_COLORS.sent} />
               <Bar dataKey="relayed" name="Relayed" stackId="a" fill={ROLE_COLORS.relayed} />
@@ -266,14 +268,15 @@ export function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes
           <Empty message="No ACKed messages in this window" />
         ) : (
           <>
-            <div style={styles.latencySummary}>
+            <div className={styles.latencySummary}>
               <span>
-                Median: <strong style={{ color: "#e2e8f0" }}>{formatMs(latency.medianMs)}</strong>
+                Median:{" "}
+                <strong className={localStyles.strongValue}>{formatMs(latency.medianMs)}</strong>
               </span>
               <span>
-                p95: <strong style={{ color: "#e2e8f0" }}>{formatMs(latency.p95Ms)}</strong>
+                p95: <strong className={localStyles.strongValue}>{formatMs(latency.p95Ms)}</strong>
               </span>
-              <span style={{ color: "#64748b" }}>{latency.totalSamples} samples</span>
+              <span className={localStyles.samplesNote}>{latency.totalSamples} samples</span>
             </div>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={latency.buckets}>
@@ -346,22 +349,13 @@ export function ActivityTimelineTab({
   }, [data, topNodes]);
 
   return (
-    <div style={styles.grid}>
-      <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: "1rem" }}>
+    <div className={styles.grid}>
+      <div className={cx(styles.gridSpan, styles.controlsRow)}>
         <RangeBtn options={["24h", "7d", "30d"]} value={since} onChange={setSince} />
         {localNodeIds.size > 0 && (
           <button
             onClick={() => setShowLocal((v) => !v)}
-            style={{
-              padding: "0.25rem 0.75rem",
-              fontSize: "0.75rem",
-              borderRadius: "0.375rem",
-              border: "1px solid",
-              borderColor: showLocal ? "#3b82f6" : "#475569",
-              background: showLocal ? "#1d4ed8" : "transparent",
-              color: showLocal ? "#fff" : "#94a3b8",
-              cursor: "pointer",
-            }}
+            className={cx(localStyles.localToggle, showLocal && localStyles.localToggleActive)}
           >
             {showLocal ? "Hide local device" : "Show local device"}
           </button>

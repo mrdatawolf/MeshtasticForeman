@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 
 import { formatNodeId, resolveNodeName } from "@foreman/shared";
 
+import { mapNodeRow, type NodeRow } from "../db/repositories/nodes.js";
+import { createLogger } from "../logger.js";
+
 import type { AdaptedNodeInfo, AdaptedPosition } from "./meshtastic-adapter.js";
 import type { PGlite } from "@electric-sql/pglite";
 import type { ServerEvent } from "@foreman/shared";
@@ -11,6 +14,7 @@ export interface NodeUpdateHandlerDeps {
   db: PGlite;
   emit: (event: ServerEvent) => void;
 }
+const log = createLogger("devices");
 
 export async function handleNodeInfo(
   deps: NodeUpdateHandlerDeps,
@@ -19,8 +23,14 @@ export async function handleNodeInfo(
 ): Promise<void> {
   const nodeId: number = nodeInfo.num ?? 0;
   if (nodeId === 0) return;
-  console.log(
-    `[devices] nodeInfo ${formatNodeId(nodeId)} "${resolveNodeName(nodeId, nodeInfo.user ?? {}, { fallback: "?" })}"`,
+  log.info(
+    {
+      deviceId,
+      operation: "node-info",
+      nodeId: formatNodeId(nodeId),
+      nodeName: resolveNodeName(nodeId, nodeInfo.user ?? {}, { fallback: "?" }),
+    },
+    "node info received",
   );
   const macBytes = nodeInfo.user?.macaddr;
   const macAddress =
@@ -118,35 +128,18 @@ export async function handlePosition(
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
     [randomUUID(), deviceId, fromNodeId, lat, lon, alt, speed, groundTrack, satsInView, rxTime],
   );
-  const { rows } = await deps.db.query<{
-    node_id: number;
-    long_name: string | null;
-    short_name: string | null;
-    mac_address: string | null;
-    hw_model: number | null;
-    public_key: string | null;
-    last_heard: string | null;
-    snr: number | null;
-    hops_away: number | null;
-  }>(
+  const { rows } = await deps.db.query<NodeRow>(
     `SELECT node_id, long_name, short_name, mac_address, hw_model, public_key,
-            last_heard, snr, hops_away FROM nodes WHERE device_id = $1 AND node_id = $2`,
+            last_heard, snr, hops_away, latitude, longitude, altitude
+     FROM nodes WHERE device_id = $1 AND node_id = $2`,
     [deviceId, fromNodeId],
   );
   if (!rows[0]) return;
-  const r = rows[0];
+  const node = mapNodeRow(rows[0]);
   deps.emit({
     type: "node:update",
     payload: {
-      nodeId: r.node_id,
-      longName: r.long_name,
-      shortName: r.short_name,
-      macAddress: r.mac_address,
-      hwModel: r.hw_model,
-      publicKey: r.public_key,
-      lastHeard: r.last_heard,
-      snr: r.snr,
-      hopsAway: r.hops_away,
+      ...node,
       latitude: lat,
       longitude: lon,
       altitude: alt,

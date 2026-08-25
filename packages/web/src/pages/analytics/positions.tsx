@@ -4,6 +4,7 @@ import MapGL, { Source, Layer, NavigationControl } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import * as analyticsApi from "../../api/analytics.js";
 
+import { cx, styles } from "./analyticsStyles.js";
 import {
   ChartCard,
   Empty,
@@ -12,12 +13,13 @@ import {
   RangeBtn,
   nodeColor,
   nodeName,
-  styles,
 } from "./components.js";
+import localStyles from "./positions.module.css";
 import { useAnalyticsQuery } from "./useAnalyticsQuery.js";
 
 import type { PositionRecord } from "../../api/analytics.js";
 import type { MqttNode, NodeInfo } from "@foreman/shared";
+import type { CSSProperties } from "react";
 
 // Tab 8 — Position History & Trail Map
 // ---------------------------------------------------------------------------
@@ -101,17 +103,9 @@ export function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNode
   );
 
   return (
-    <div style={styles.grid}>
+    <div className={styles.grid}>
       {/* Controls */}
-      <div
-        style={{
-          gridColumn: "1 / -1",
-          display: "flex",
-          alignItems: "center",
-          gap: "1rem",
-          flexWrap: "wrap",
-        }}
-      >
+      <div className={cx(styles.gridSpan, styles.controlsRow, styles.controlsRowWrap)}>
         <RangeBtn
           options={["1h", "6h", "24h", "7d", "30d", "all"]}
           value={since}
@@ -120,15 +114,7 @@ export function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNode
         <select
           value={selectedNodeId ?? ""}
           onChange={(e) => setSelectedNodeId(e.target.value ? Number(e.target.value) : null)}
-          style={{
-            background: "#0f172a",
-            color: "#e2e8f0",
-            border: "1px solid #1e293b",
-            borderRadius: "0.25rem",
-            padding: "0.15rem 0.4rem",
-            fontFamily: "monospace",
-            fontSize: "0.72rem",
-          }}
+          className={localStyles.select}
         >
           <option value="">All nodes</option>
           {nodeIds.map((id) => (
@@ -138,7 +124,7 @@ export function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNode
           ))}
         </select>
         {data && (
-          <span style={{ color: "#64748b", fontSize: "0.7rem", fontFamily: "monospace" }}>
+          <span className={localStyles.mutedNote}>
             {data.length.toLocaleString()} fixes · {nodeIds.length} node
             {nodeIds.length !== 1 ? "s" : ""}
           </span>
@@ -152,9 +138,11 @@ export function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNode
         ) : data.length === 0 ? (
           <Empty message="No position fixes recorded yet. Position data is saved when nodes broadcast GPS packets." />
         ) : (
-          <div style={{ height: 420, borderRadius: "0.375rem", overflow: "hidden" }}>
+          <div className={localStyles.mapWrap}>
             <MapGL
               initialViewState={TRAIL_VIEW}
+              // react-map-gl's <Map> only accepts a `style` prop (verified via its
+              // .d.ts) — no `className` alternative exists, see TASK-022b precedent.
               style={{ width: "100%", height: "100%" }}
               mapStyle={MAP_STYLE}
               attributionControl={false}
@@ -197,15 +185,8 @@ export function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNode
         ) : tableRows.length === 0 ? (
           <Empty />
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                borderCollapse: "collapse",
-                fontFamily: "monospace",
-                fontSize: "0.68rem",
-                width: "100%",
-              }}
-            >
+          <div className={localStyles.tableScroll}>
+            <table className={localStyles.table}>
               <thead>
                 <tr>
                   {[
@@ -218,7 +199,7 @@ export function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNode
                     "Sats",
                     "Recorded",
                   ].map((h) => (
-                    <th key={h} style={styles.matrixHeader}>
+                    <th key={h} className={styles.matrixHeader}>
                       {h}
                     </th>
                   ))}
@@ -226,30 +207,25 @@ export function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNode
               </thead>
               <tbody>
                 {tableRows.map((r) => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid #1e293b" }}>
-                    <td style={styles.matrixRowHeader}>
+                  <tr key={r.id} className={localStyles.tr}>
+                    <td className={styles.matrixRowHeader}>
                       <span
-                        style={{
-                          display: "inline-block",
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          background: nodeColor(r.nodeId),
-                          marginRight: 5,
-                          verticalAlign: "middle",
-                        }}
+                        className={localStyles.nodeDot}
+                        style={{ "--dot-color": nodeColor(r.nodeId) } as CSSProperties}
                       />
                       {nodeName(r.nodeId, nodes, mqttNodes)}
                     </td>
-                    <td style={styles.matrixCell}>{r.latitude.toFixed(5)}</td>
-                    <td style={styles.matrixCell}>{r.longitude.toFixed(5)}</td>
-                    <td style={styles.matrixCell}>{r.altitude ?? "—"}</td>
-                    <td style={styles.matrixCell}>{r.speed != null ? r.speed.toFixed(1) : "—"}</td>
-                    <td style={styles.matrixCell}>
+                    <td className={styles.matrixCell}>{r.latitude.toFixed(5)}</td>
+                    <td className={styles.matrixCell}>{r.longitude.toFixed(5)}</td>
+                    <td className={styles.matrixCell}>{r.altitude ?? "—"}</td>
+                    <td className={styles.matrixCell}>
+                      {r.speed != null ? r.speed.toFixed(1) : "—"}
+                    </td>
+                    <td className={styles.matrixCell}>
                       {r.groundTrack != null ? r.groundTrack.toFixed(0) : "—"}
                     </td>
-                    <td style={styles.matrixCell}>{r.satsInView ?? "—"}</td>
-                    <td style={styles.matrixCell}>{new Date(r.recordedAt).toLocaleString()}</td>
+                    <td className={styles.matrixCell}>{r.satsInView ?? "—"}</td>
+                    <td className={styles.matrixCell}>{new Date(r.recordedAt).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>

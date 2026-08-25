@@ -4,8 +4,8 @@ Owner role: Implementer
 Assigned agent: openai-coder
 Proposed by: jarvis
 Proposed date: 2026-08-24
-Approved by:
-Approved date:
+Approved by: Patrick
+Approved date: 08/25/26
 Related contracts: **CONTRACT-009 recommended** (ambiguous defaults, high-risk — irreversible data loss if pruning is wrong, exactly what change-classification.md flags)
 Related ADRs: None
 Dependencies: TASK-012 (consolidated PGlite proxy — pruning logic should live against the single db module), TASK-028 (repository modules — natural home for per-entity retention logic)

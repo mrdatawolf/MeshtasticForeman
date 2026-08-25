@@ -5,12 +5,15 @@ import { formatNodeId } from "@foreman/shared";
 import { Protobuf } from "@meshtastic/core";
 
 import { activityLog } from "../activity/log.js";
+import { createLogger } from "../logger.js";
 
 import { decrypt } from "./codec.js";
 import { haversineMeters, type NodePersistence, type NodeWriteMeta } from "./node-persistence.js";
 import { parseInboundTopic } from "./topic-parsing.js";
 
 import type { PGlite } from "@electric-sql/pglite";
+
+const log = createLogger("mqtt");
 
 export interface InboundHandlingDeps {
   db: PGlite;
@@ -55,30 +58,43 @@ export async function handleInbound(
     return;
   }
   if (parsed.kind === "skip") {
-    console.log(`[mqtt] inbound skip (not 2/e): ${topic}`);
+    log.info(
+      { operation: "skip-inbound", topic, reason: "unsupported-topic" },
+      "inbound message skipped",
+    );
     return;
   }
   const { channelName, gatewayId, regionPath } = parsed;
-  console.log(
-    `[mqtt] inbound topic=${topic} channel=${channelName} gw=${gatewayId} region=${regionPath}`,
+  log.info(
+    { operation: "receive-inbound", topic, channelName, gatewayId, regionPath },
+    "inbound message received",
   );
 
   let envelope: Protobuf.Mqtt.ServiceEnvelope;
   try {
     envelope = fromBinary(Protobuf.Mqtt.ServiceEnvelopeSchema, payload);
-  } catch (err) {
-    console.log(`[mqtt] inbound envelope parse failed: ${err}`);
+  } catch {
+    log.warn({ operation: "parse-envelope" }, "inbound envelope parse failed");
     return;
   }
   const pkt = envelope.packet;
   if (!pkt) {
-    console.log("[mqtt] inbound: no packet in envelope");
+    log.warn(
+      { operation: "parse-envelope", reason: "missing-packet" },
+      "inbound envelope has no packet",
+    );
     return;
   }
   const fromNum = pkt.from ?? 0;
   const packetId = pkt.id ?? 0;
-  console.log(
-    `[mqtt] inbound pkt from=${formatNodeId(fromNum)} variant=${pkt.payloadVariant?.case}`,
+  log.info(
+    {
+      packetId,
+      operation: "parse-inbound-packet",
+      fromNodeId: formatNodeId(fromNum),
+      variant: pkt.payloadVariant?.case,
+    },
+    "inbound packet parsed",
   );
 
   let data: Protobuf.Mesh.Data;
@@ -94,19 +110,37 @@ export async function handleInbound(
       );
       data = fromBinary(Protobuf.Mesh.DataSchema, plain);
     } catch {
-      console.log(`[mqtt] privately encrypted data from=${formatNodeId(fromNum)}`);
+      log.info(
+        {
+          packetId,
+          operation: "decrypt-inbound",
+          fromNodeId: formatNodeId(fromNum),
+          result: "unavailable",
+        },
+        "inbound packet could not be decrypted with channel key",
+      );
       return;
     }
   } else {
-    console.log(
-      `[mqtt] inbound skip unknown variant=${pkt.payloadVariant?.case} from=${formatNodeId(fromNum)}`,
+    log.info(
+      {
+        packetId,
+        operation: "skip-inbound",
+        fromNodeId: formatNodeId(fromNum),
+        variant: pkt.payloadVariant?.case,
+        reason: "unknown-variant",
+      },
+      "inbound packet skipped",
     );
     return;
   }
 
   const portname =
     (Protobuf.Portnums.PortNum as Record<number, string>)[data.portnum] ?? String(data.portnum);
-  console.log(`[mqtt] inbound decoded portnum=${portname} from=${formatNodeId(fromNum)}`);
+  log.info(
+    { packetId, operation: "decode-inbound", portnum: portname, fromNodeId: formatNodeId(fromNum) },
+    "inbound packet decoded",
+  );
   const rxTime =
     pkt.rxTime && pkt.rxTime > 0
       ? new Date(pkt.rxTime * 1000).toISOString()
@@ -163,11 +197,19 @@ export async function upsertFromData(
     const lat = pos.latitudeI != null ? pos.latitudeI / 1e7 : null;
     const lon = pos.longitudeI != null ? pos.longitudeI / 1e7 : null;
     const alt = pos.altitude ?? null;
-    console.log(
-      `[mqtt] POSITION_APP from=${formatNodeId(nodeId)} latI=${pos.latitudeI ?? "null"} lonI=${pos.longitudeI ?? "null"} → lat=${lat} lon=${lon}`,
+    log.info(
+      {
+        operation: "process-position",
+        nodeId: formatNodeId(nodeId),
+        hasCoordinates: lat !== null && lon !== null,
+      },
+      "inbound position processed",
     );
     if (lat === null || lon === null || (lat === 0 && lon === 0)) {
-      console.log(`[mqtt] POSITION_APP dropped (lat=${lat} lon=${lon})`);
+      log.info(
+        { operation: "drop-position", nodeId: formatNodeId(nodeId), reason: "invalid-coordinates" },
+        "inbound position dropped",
+      );
       return;
     }
     const own = deps.getOwnLatLon();
@@ -197,12 +239,15 @@ export async function handleJsonInbound(
   try {
     msg = JSON.parse(payload.toString("utf8"));
   } catch {
-    console.log("[mqtt] json inbound: failed to parse JSON");
+    log.warn({ operation: "parse-json-inbound" }, "JSON inbound parse failed");
     return;
   }
   const fromNode = typeof msg.from === "number" ? msg.from : null;
   if (!fromNode) {
-    console.log("[mqtt] json inbound: missing 'from' field");
+    log.warn(
+      { operation: "parse-json-inbound", reason: "missing-from" },
+      "JSON inbound missing sender",
+    );
     return;
   }
   const type = typeof msg.type === "string" ? msg.type : null;
@@ -217,8 +262,15 @@ export async function handleJsonInbound(
   const tsRaw = typeof msg.timestamp === "number" ? msg.timestamp : null;
   const rxTime = tsRaw ? new Date(tsRaw * 1000).toISOString() : new Date().toISOString();
   const pld = msg.payload && typeof msg.payload === "object" ? msg.payload : null;
-  console.log(
-    `[mqtt] json inbound type=${type ?? "unknown"} from=${sender ?? formatNodeId(fromNode)} channel=${channelName}`,
+  log.info(
+    {
+      packetId: packetId ?? undefined,
+      operation: "process-json-inbound",
+      type,
+      fromNodeId: sender ?? formatNodeId(fromNode),
+      channelName,
+    },
+    "JSON inbound processed",
   );
   await deps.db.query(
     `INSERT INTO mqtt_json_packets

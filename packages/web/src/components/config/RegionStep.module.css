@@ -1,0 +1,28 @@
+.column {
+  margin-top: 1rem;
+}
+
+.columnTitle {
+  color: #64748b;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 0.4rem;
+}
+
+.optionsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.5rem;
+}
+
+.regionLabel {
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.regionDesc {
+  color: #64748b;
+  font-size: 0.72rem;
+}

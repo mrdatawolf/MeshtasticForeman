@@ -1,0 +1,192 @@
+/*
+ * Shared styling for the map feature's floating control panels (the
+ * traceroute panel in MapPage, and the coverage/proposal panels in
+ * MapControls/ProposalControls) — these three panels historically shared the
+ * same `controlPanel`/`summaryPill`/`controlLabel` style objects and
+ * `ageFilterBtnStyle` helper function (each file had its own copy).
+ */
+
+.controlPanel {
+  background: #0f172acc;
+  backdrop-filter: blur(4px);
+  color: #e2e8f0;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
+}
+
+.summaryPill {
+  font-size: 0.7rem;
+  color: #cbd5e1;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.3rem;
+  padding: 0.15rem 0.45rem;
+  font-family: monospace;
+}
+
+.controlLabel {
+  color: #94a3b8;
+  margin-right: 0.15rem;
+  font-size: 0.7rem;
+}
+
+/* Same as .controlLabel but with the right margin removed (e.g. "Age:"/"Preset:"/"Range:" row labels). */
+.controlLabelFlush {
+  margin-right: 0;
+}
+
+.controlRow {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+/* The "advanced"/expanded row under a control panel's always-visible summary row. */
+.advancedRow {
+  flex-wrap: wrap;
+  padding-top: 0.15rem;
+  border-top: 1px solid #1e293b;
+}
+
+/* ageFilterBtnStyle(active) base + active state */
+.ageFilterBtn {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.7rem;
+  border-radius: 0.3rem;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.ageFilterBtnActive {
+  border: 1px solid #60a5fa;
+  background: #1e3a5f;
+  color: #93c5fd;
+}
+
+/* Caret ("▲"/"▼") expand/collapse buttons use tighter horizontal padding. */
+.ageFilterBtnCaret {
+  padding: 0.2rem 0.35rem;
+}
+
+/* Inactive + "off" state gets a slightly muted label color (e.g. traceroute/coverage On/Off). */
+.ageFilterBtnOff {
+  color: #64748b;
+}
+
+/* Color variants applied together with .ageFilterBtnActive for specific toggles. */
+.toggleGreen {
+  border-color: #86efac;
+  color: #86efac;
+  background: #14532d;
+}
+
+.togglePurple {
+  border-color: #a78bfa;
+  color: #a78bfa;
+  background: #2e1065;
+}
+
+.toggleTeal {
+  border-color: #34d399;
+  color: #34d399;
+  background: #052e16;
+}
+
+.toggleAmber {
+  border-color: #f59e0b;
+  color: #f59e0b;
+  background: #422006;
+}
+
+/* The always-visible "← All nodes" button: inactive background, green border/text only. */
+.focusedNodeBtn {
+  border-color: #86efac;
+  color: #86efac;
+}
+
+.focusedNodeName {
+  color: #86efac;
+  font-size: 0.7rem;
+  font-family: monospace;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusText {
+  font-size: 0.7rem;
+  font-family: monospace;
+}
+
+.statusPending {
+  color: #fbbf24;
+}
+
+.statusError {
+  color: #fca5a5;
+}
+
+.statusOk {
+  color: #86efac;
+}
+
+.divider {
+  color: #475569;
+  margin: 0 0.1rem;
+  font-size: 0.8rem;
+}
+
+.proposalListWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-top: 0.15rem;
+  border-top: 1px solid #1e293b;
+  width: 100%;
+}
+
+.proposalRow {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+/* p.visible toggle button — smaller padding + fixed min-width, combined with .ageFilterBtn(Active)/.toggleAmber */
+.proposalVisibleBtn {
+  padding: 0.15rem 0.4rem;
+  min-width: 2.5rem;
+}
+
+.proposalName {
+  flex: 1;
+  color: #cbd5e1;
+  font-size: 0.7rem;
+  font-family: monospace;
+}
+
+.proposalMeta {
+  color: #64748b;
+  font-size: 0.65rem;
+  font-family: monospace;
+}
+
+/* Delete-proposal button — combined with .ageFilterBtn (inactive). */
+.dangerBtn {
+  padding: 0.15rem 0.4rem;
+  color: #ef4444;
+}
+
+/* "Copy All GeoJSON" button — combined with .ageFilterBtn (inactive). */
+.copyAllBtn {
+  margin-top: 0.1rem;
+  text-align: center;
+  width: 100%;
+}

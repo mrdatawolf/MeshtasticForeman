@@ -4,8 +4,8 @@ Owner role: Implementer
 Assigned agent: openai-coder
 Proposed by: contract-architect (via Claude, orchestrating session), per CONTRACT-012's Open question #3
 Proposed date: 2026-08-24
-Approved by:
-Approved date:
+Approved by: Patrick
+Approved date: 08/25/26
 Related contracts: CONTRACT-012 (documents this as a known, deliberately-preserved
 gap under TASK-021's "behavior-preserving only" scope; this task is the
 fast-follow that closes it, matching the TASK-039/CONTRACT-001 precedent)

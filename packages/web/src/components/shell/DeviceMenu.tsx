@@ -3,14 +3,17 @@ import { useRef, useState } from "react";
 import { useClickOutside } from "../../hooks/useClickOutside.js";
 import { formatRelativeTime } from "../../lib/relativeTime.js";
 
+import deviceStyles from "./DeviceMenu.module.css";
 import {
-  deviceActionBtn,
-  hdrFilterBtn,
+  badgeClass,
+  deviceActionClass,
+  hdrFilterActiveWhiteClass,
+  hdrFilterClass,
   KNOWN_TAGS,
-  menuBtnStyle,
-  menuNavBtn,
+  menuBtnClass,
+  menuNavClass,
   styles,
-  TAG_COLORS,
+  TAG_COLOR_CLASS,
 } from "./shellStyles.js";
 
 import type { ActivitySource, ActivityWindow, LogsLevel, Tab, TagFilter } from "./types.js";
@@ -45,37 +48,22 @@ interface Props {
   onOpenApiDocs: () => void;
 }
 
-function batteryColor(level: number) {
-  return level <= 20 ? "#ef4444" : level <= 50 ? "#f59e0b" : "#22c55e";
+function batteryClass(level: number) {
+  return level <= 20
+    ? deviceStyles.batteryLow
+    : level <= 50
+      ? deviceStyles.batteryMid
+      : deviceStyles.batteryHigh;
 }
 function BatteryBar({ level }: { level: number }) {
-  const color = batteryColor(level);
+  const levelClass = batteryClass(level);
   return (
-    <span
-      style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", marginLeft: "auto" }}
-    >
-      <span style={{ color, fontSize: "0.7rem" }}>{level}%</span>
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          width: "2.5rem",
-          height: "0.65rem",
-          border: `1px solid ${color}`,
-          borderRadius: "0.15rem",
-          padding: "0.08rem",
-          position: "relative",
-        }}
-      >
+    <span className={deviceStyles.batteryWrap}>
+      <span className={`${deviceStyles.batteryPercent} ${levelClass}`}>{level}%</span>
+      <span className={`${deviceStyles.batteryBarOuter} ${levelClass}`}>
         <span
-          style={{
-            display: "block",
-            width: `${level}%`,
-            height: "100%",
-            background: color,
-            borderRadius: "0.08rem",
-            transition: "width 0.5s ease",
-          }}
+          className={`${deviceStyles.batteryBarFill} ${levelClass}`}
+          style={{ "--battery-width": `${level}%` } as React.CSSProperties}
         />
       </span>
     </span>
@@ -92,6 +80,14 @@ async function apiConnect(port: string, name: string) {
   });
 }
 
+function statusClass(status: DeviceInfo["status"]) {
+  return status === "connected"
+    ? deviceStyles.statusConnected
+    : status === "connecting"
+      ? deviceStyles.statusConnecting
+      : deviceStyles.statusDisconnected;
+}
+
 export function DeviceMenu(props: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -102,75 +98,48 @@ export function DeviceMenu(props: Props) {
   };
   const hasTabFilters = props.tab === "map" || props.tab === "activity" || props.tab === "logs";
   return (
-    <div ref={ref} style={styles.menuContainer}>
+    <div ref={ref} className={styles.menuContainer}>
       <button
         onClick={() => setOpen((value) => !value)}
-        style={menuBtnStyle(open, props.connected)}
+        className={menuBtnClass(open, props.connected)}
       >
-        <span style={{ color: props.connected ? "#22c55e" : "#ef4444", fontSize: "0.65rem" }}>
-          ●
-        </span>
-        API<span style={{ color: "#475569", marginLeft: "0.3rem", fontSize: "0.65rem" }}>▾</span>
+        <span className={props.connected ? deviceStyles.apiDotOn : deviceStyles.apiDotOff}>●</span>
+        API<span className={styles.caret}>▾</span>
       </button>
       {open && (
-        <div style={styles.menuPanel}>
-          <div style={styles.menuSection}>
-            <span style={styles.menuSectionLabel}>Devices</span>
+        <div className={styles.menuPanel}>
+          <div className={styles.menuSection}>
+            <span className={styles.menuSectionLabel}>Devices</span>
             {props.devices.length === 0 ? (
-              <span style={{ color: "#475569", fontSize: "0.72rem" }}>
-                No devices — POST /api/devices/connect
-              </span>
+              <span className={styles.muted72}>No devices — POST /api/devices/connect</span>
             ) : (
               props.devices.map((device) => (
-                <div
-                  key={device.id}
-                  style={{
-                    ...styles.menuDevice,
-                    flexDirection: "column",
-                    alignItems: "flex-start",
-                    gap: "0.25rem",
-                  }}
-                >
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: "0.4rem", width: "100%" }}
-                  >
-                    <span
-                      style={{
-                        color:
-                          device.status === "connected"
-                            ? "#22c55e"
-                            : device.status === "connecting"
-                              ? "#f59e0b"
-                              : "#ef4444",
-                      }}
-                    >
-                      ●
-                    </span>
-                    <span style={{ color: "#e2e8f0", fontWeight: "bold" }}>{device.port}</span>
-                    <span style={{ color: "#64748b", textTransform: "capitalize" }}>
-                      {device.status}
-                    </span>
+                <div key={device.id} className={deviceStyles.deviceEntry}>
+                  <div className={deviceStyles.deviceRow}>
+                    <span className={statusClass(device.status)}>●</span>
+                    <span className={deviceStyles.deviceId}>{device.port}</span>
+                    <span className={deviceStyles.deviceStatusLabel}>{device.status}</span>
                     {device.firmwareVersion && (
-                      <span style={{ color: "#475569" }}>fw {device.firmwareVersion}</span>
+                      <span className={deviceStyles.deviceMeta}>fw {device.firmwareVersion}</span>
                     )}
                     {device.lastSeenAt && (
-                      <span style={{ color: "#475569" }}>
+                      <span className={deviceStyles.deviceMeta}>
                         {formatRelativeTime(device.lastSeenAt)}
                       </span>
                     )}
                     {device.batteryLevel != null && <BatteryBar level={device.batteryLevel} />}
                   </div>
-                  <div style={{ display: "flex", gap: "0.3rem" }}>
+                  <div className={deviceStyles.deviceActions}>
                     {device.status === "connected" ? (
                       <button
-                        style={deviceActionBtn("disconnect")}
+                        className={deviceActionClass("disconnect")}
                         onClick={() => apiDisconnect(device.id)}
                       >
                         Disconnect
                       </button>
                     ) : (
                       <button
-                        style={deviceActionBtn("connect")}
+                        className={deviceActionClass("connect")}
                         onClick={() => apiConnect(device.port, device.name)}
                         disabled={device.status === "connecting"}
                       >
@@ -182,24 +151,26 @@ export function DeviceMenu(props: Props) {
               ))
             )}
           </div>
-          <div style={styles.menuDivider} />
-          <div style={styles.menuSection}>
-            <span style={styles.menuSectionLabel}>Navigate</span>
+          <div className={styles.menuDivider} />
+          <div className={styles.menuSection}>
+            <span className={styles.menuSectionLabel}>Navigate</span>
             <button
-              style={menuNavBtn(props.tab === "activity")}
+              className={menuNavClass(props.tab === "activity")}
               onClick={() => navigate("activity")}
             >
               Activity
               {props.activity.length > 0 && (
-                <span style={styles.menuCount}>{props.activity.length}</span>
+                <span className={styles.menuCount}>{props.activity.length}</span>
               )}
             </button>
-            <button style={menuNavBtn(props.tab === "logs")} onClick={() => navigate("logs")}>
+            <button className={menuNavClass(props.tab === "logs")} onClick={() => navigate("logs")}>
               Logs
-              {props.logs.length > 0 && <span style={styles.menuCount}>{props.logs.length}</span>}
+              {props.logs.length > 0 && (
+                <span className={styles.menuCount}>{props.logs.length}</span>
+              )}
             </button>
             <button
-              style={menuNavBtn(false)}
+              className={menuNavClass(false)}
               onClick={() => {
                 props.onOpenApiDocs();
                 setOpen(false);
@@ -208,71 +179,64 @@ export function DeviceMenu(props: Props) {
               API Docs
             </button>
           </div>
-          {hasTabFilters && <div style={styles.menuDivider} />}
+          {hasTabFilters && <div className={styles.menuDivider} />}
           {props.tab === "map" && (
-            <div style={styles.menuSection}>
-              <span style={styles.menuSectionLabel}>Map filters</span>
+            <div className={styles.menuSection}>
+              <span className={styles.menuSectionLabel}>Map filters</span>
               <button
-                style={hdrFilterBtn(props.showMesh)}
+                className={hdrFilterClass(props.showMesh)}
                 onClick={() => props.setShowMesh((value) => !value)}
               >
-                <span
-                  style={{ ...styles.dotBase, border: "2px solid #94a3b8", background: "#0f172a" }}
-                />
+                <span className={`${styles.dotBase} ${deviceStyles.dotMesh}`} />
                 Mesh
                 {props.mappableMeshCount > 0 && (
-                  <span style={styles.hdrCount}>{props.mappableMeshCount}</span>
+                  <span className={styles.hdrCount}>{props.mappableMeshCount}</span>
                 )}
               </button>
               <button
-                style={hdrFilterBtn(props.showMqtt)}
+                className={hdrFilterClass(props.showMqtt)}
                 onClick={() => props.setShowMqtt((value) => !value)}
               >
-                <span
-                  style={{ ...styles.dotBase, border: "2px dashed #94a3b8", background: "#0f172a" }}
-                />
+                <span className={`${styles.dotBase} ${deviceStyles.dotMqtt}`} />
                 MQTT
                 {props.mappableMqttCount > 0 && (
-                  <span style={styles.hdrCount}>{props.mappableMqttCount}</span>
+                  <span className={styles.hdrCount}>{props.mappableMqttCount}</span>
                 )}
               </button>
             </div>
           )}
           {props.tab === "activity" && (
-            <div style={styles.menuSection}>
-              <span style={styles.menuSectionLabel}>Activity filters</span>
-              <span style={styles.filterLabel}>Window:</span>
+            <div className={styles.menuSection}>
+              <span className={styles.menuSectionLabel}>Activity filters</span>
+              <span className={styles.filterLabel}>Window:</span>
               {(["5m", "15m", "1h", "all"] as ActivityWindow[]).map((window) => (
                 <button
                   key={window}
-                  style={hdrFilterBtn(props.activityWindow === window)}
+                  className={hdrFilterClass(props.activityWindow === window)}
                   onClick={() => props.setActivityWindow(window)}
                 >
                   {window}
                 </button>
               ))}
-              <span style={{ ...styles.filterLabel, marginLeft: "0.4rem" }}>Source:</span>
+              <span className={`${styles.filterLabel} ${styles.mlMed}`}>Source:</span>
               {(["all", "mesh", "mqtt"] as ActivitySource[]).map((source) => (
                 <button
                   key={source}
-                  style={{
-                    ...hdrFilterBtn(props.activitySource === source),
-                    color:
-                      props.activitySource === source
-                        ? "#fff"
-                        : source === "mesh"
-                          ? "#60a5fa"
-                          : source === "mqtt"
-                            ? "#34d399"
-                            : undefined,
-                  }}
+                  className={hdrFilterActiveWhiteClass(
+                    props.activitySource === source,
+                    source === "mesh"
+                      ? styles.colorMesh
+                      : source === "mqtt"
+                        ? styles.colorMqtt
+                        : undefined,
+                  )}
                   onClick={() => props.setActivitySource(source)}
                 >
                   {source}
                 </button>
               ))}
               <button
-                style={{ ...hdrFilterBtn(props.activityPaused), marginLeft: "0.25rem" }}
+                className={`${hdrFilterClass(props.activityPaused)} ${styles.mlSmall}`}
                 onClick={() => props.setActivityPaused((value) => !value)}
               >
                 {props.activityPaused ? "▶ Resume" : "⏸ Pause"}
@@ -280,31 +244,28 @@ export function DeviceMenu(props: Props) {
             </div>
           )}
           {props.tab === "logs" && (
-            <div style={styles.menuSection}>
-              <span style={styles.menuSectionLabel}>Log filters</span>
-              <span style={styles.filterLabel}>Level:</span>
+            <div className={styles.menuSection}>
+              <span className={styles.menuSectionLabel}>Log filters</span>
+              <span className={styles.filterLabel}>Level:</span>
               {(["all", "log", "warn", "error"] as LogsLevel[]).map((level) => (
                 <button
                   key={level}
-                  style={{
-                    ...hdrFilterBtn(props.logsLevel === level),
-                    color:
-                      props.logsLevel === level
-                        ? "#fff"
-                        : level === "warn"
-                          ? "#fbbf24"
-                          : level === "error"
-                            ? "#f87171"
-                            : undefined,
-                  }}
+                  className={hdrFilterActiveWhiteClass(
+                    props.logsLevel === level,
+                    level === "warn"
+                      ? styles.colorWarn
+                      : level === "error"
+                        ? styles.colorError
+                        : undefined,
+                  )}
                   onClick={() => props.setLogsLevel(level)}
                 >
                   {level}
                 </button>
               ))}
-              <span style={{ ...styles.filterLabel, marginLeft: "0.4rem" }}>Tag:</span>
+              <span className={`${styles.filterLabel} ${styles.mlMed}`}>Tag:</span>
               <button
-                style={hdrFilterBtn(props.logsTag === "all")}
+                className={hdrFilterClass(props.logsTag === "all")}
                 onClick={() => props.setLogsTag("all")}
               >
                 all
@@ -312,37 +273,32 @@ export function DeviceMenu(props: Props) {
               {KNOWN_TAGS.map((tag) => (
                 <button
                   key={tag}
-                  style={{
-                    ...hdrFilterBtn(props.logsTag === tag),
-                    color: props.logsTag === tag ? "#fff" : TAG_COLORS[tag],
-                  }}
+                  className={hdrFilterActiveWhiteClass(props.logsTag === tag, TAG_COLOR_CLASS[tag])}
                   onClick={() => props.setLogsTag(tag)}
                 >
                   {tag}
                   {props.logTagCounts[tag] ? (
-                    <span style={styles.hdrCount}>{props.logTagCounts[tag]}</span>
+                    <span className={styles.hdrCount}>{props.logTagCounts[tag]}</span>
                   ) : null}
                 </button>
               ))}
               <button
-                style={{ ...hdrFilterBtn(props.logsPaused), marginLeft: "0.25rem" }}
+                className={`${hdrFilterClass(props.logsPaused)} ${styles.mlSmall}`}
                 onClick={() => props.setLogsPaused((value) => !value)}
               >
                 {props.logsPaused ? "▶ Resume" : "⏸ Pause"}
               </button>
             </div>
           )}
-          <div style={styles.menuDivider} />
-          <div style={{ ...styles.menuSection, justifyContent: "flex-end" }}>
-            <span style={{ ...styles.badge, background: props.connected ? "#22c55e" : "#ef4444" }}>
+          <div className={styles.menuDivider} />
+          <div className={`${styles.menuSection} ${styles.justifyEnd}`}>
+            <span className={badgeClass(props.connected)}>
               {props.connected ? "API connected" : "API disconnected"}
             </span>
           </div>
-          <div style={styles.menuDivider} />
-          <div style={{ padding: "0.4rem 0.75rem", textAlign: "right" }}>
-            <span style={{ color: "#1e293b", fontSize: "0.65rem", fontFamily: "monospace" }}>
-              v{__APP_VERSION__}
-            </span>
+          <div className={styles.menuDivider} />
+          <div className={deviceStyles.versionRow}>
+            <span className={deviceStyles.versionText}>v{__APP_VERSION__}</span>
           </div>
         </div>
       )}

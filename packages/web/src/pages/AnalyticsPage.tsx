@@ -1,12 +1,13 @@
 import { useState } from "react";
 
-import { styles } from "./analytics/components.js";
+import { styles } from "./analytics/analyticsStyles.js";
 import { ActivityTimelineTab, MessagesTab } from "./analytics/messages.js";
 import { NetworkTab } from "./analytics/network.js";
 import { PacketsTab } from "./analytics/packets.js";
 import { PositionsTab } from "./analytics/positions.js";
 import { LinkQualityTab, SignalTab } from "./analytics/signal.js";
 import { TelemetryTab } from "./analytics/telemetry.js";
+import pageStyles from "./AnalyticsPage.module.css";
 
 import type { DeviceInfo, MqttNode, NodeInfo } from "@foreman/shared";
 
@@ -24,11 +25,16 @@ interface Props {
   mqttNodes: MqttNode[];
   devices: DeviceInfo[];
 }
+
+function cx(...classes: Array<string | false | null | undefined>): string {
+  return classes.filter(Boolean).join(" ");
+}
+
 export function AnalyticsPage({ nodes, mqttNodes, devices }: Props) {
   const [tab, setTab] = useState<AnalyticsTab>("messages");
   return (
-    <div style={styles.page}>
-      <div style={styles.subNav}>
+    <div className={styles.page}>
+      <div className={styles.subNav}>
         {(
           [
             "messages",
@@ -41,7 +47,11 @@ export function AnalyticsPage({ nodes, mqttNodes, devices }: Props) {
             "positions",
           ] as AnalyticsTab[]
         ).map((t) => (
-          <button key={t} style={subTabStyle(tab === t)} onClick={() => setTab(t)}>
+          <button
+            key={t}
+            className={cx(pageStyles.tab, tab === t && pageStyles.tabActive)}
+            onClick={() => setTab(t)}
+          >
             {t === "linkquality"
               ? "Link Quality"
               : t === "timeline"
@@ -64,17 +74,4 @@ export function AnalyticsPage({ nodes, mqttNodes, devices }: Props) {
       {tab === "positions" && <PositionsTab nodes={nodes} mqttNodes={mqttNodes} />}
     </div>
   );
-}
-function subTabStyle(active: boolean): React.CSSProperties {
-  return {
-    background: "transparent",
-    color: active ? "#e2e8f0" : "#64748b",
-    border: "none",
-    borderBottom: active ? "2px solid #3b82f6" : "2px solid transparent",
-    padding: "0.3rem 0.9rem",
-    cursor: "pointer",
-    fontFamily: "monospace",
-    fontSize: "0.8rem",
-    marginBottom: "-1px",
-  };
 }

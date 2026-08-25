@@ -5,6 +5,7 @@ import { Buffer } from "node:buffer";
 import { Protobuf } from "@meshtastic/core";
 
 import { toPlainObject } from "../decode-payload.js";
+import { createLogger } from "../logger.js";
 
 import type { PGlite } from "@electric-sql/pglite";
 import type { Channel, DeviceConfig, ServerEvent } from "@foreman/shared";
@@ -15,6 +16,7 @@ export interface ConfigurationHandlerDeps {
   emit: (event: ServerEvent) => void;
   getMeshDevice: (deviceId: string) => MeshDevice | undefined;
 }
+const log = createLogger("devices");
 
 // SDK config packet types remain intentionally unchanged from DeviceManager.
 export async function handleConfigPacket(
@@ -33,7 +35,10 @@ export async function handleConfigPacket(
      WHERE id = $3`,
     [section, JSON.stringify(value), deviceId],
   );
-  console.log(`[devices] radio config ${name} section=${section}`);
+  log.info(
+    { deviceId, operation: "receive-radio-config", section },
+    "radio configuration received",
+  );
 }
 
 export async function handleModuleConfigPacket(
@@ -52,7 +57,10 @@ export async function handleModuleConfigPacket(
      WHERE id = $3`,
     [section, JSON.stringify(value), deviceId],
   );
-  console.log(`[devices] module config ${name} section=${section}`);
+  log.info(
+    { deviceId, operation: "receive-module-config", section },
+    "module configuration received",
+  );
 }
 
 export async function handleChannelPacket(
@@ -75,7 +83,10 @@ export async function handleChannelPacket(
        SET name = EXCLUDED.name, role = EXCLUDED.role, psk = EXCLUDED.psk`,
     [deviceId, idx, chName, role, psk],
   );
-  console.log(`[devices] channel ${name} idx=${idx} name=${chName ?? "(none)"} role=${role}`);
+  log.info(
+    { deviceId, operation: "receive-channel", channelIndex: idx, channelName: chName, role },
+    "channel configuration received",
+  );
 }
 
 export async function getDeviceConfig(db: PGlite, deviceId: string): Promise<DeviceConfig | null> {
@@ -119,14 +130,12 @@ export async function applyConfigSection(
 ): Promise<void> {
   const meshDevice = deps.getMeshDevice(deviceId);
   if (!meshDevice) throw new Error(`Device ${deviceId} not connected`);
-   
+
   const { create } = (await import("@bufbuild/protobuf")) as any;
   if (namespace === "radio") {
-     
     const ConfigSchema = (Protobuf.Config as any).ConfigSchema;
     await meshDevice.setConfig(create(ConfigSchema, { payloadVariant: { case: section, value } }));
   } else {
-     
     const ModuleConfigSchema = (Protobuf.ModuleConfig as any).ModuleConfigSchema;
     await meshDevice.setModuleConfig(
       create(ModuleConfigSchema, { payloadVariant: { case: section, value } }),
@@ -138,6 +147,6 @@ export async function applyConfigSection(
     `UPDATE devices SET ${col} = jsonb_set(COALESCE(${col}, '{}'), ARRAY[$1], $2::jsonb) WHERE id = $3`,
     [section, JSON.stringify(value), deviceId],
   );
-  console.log(`[devices] applied ${namespace} config section=${section} device=${deviceId}`);
+  log.info({ deviceId, operation: "apply-config", namespace, section }, "configuration applied");
   await emitDeviceConfig(deps, deviceId);
 }

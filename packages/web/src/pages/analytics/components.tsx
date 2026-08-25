@@ -1,8 +1,11 @@
 import { resolveNodeName } from "@foreman/shared";
 import { lazy, Suspense } from "react";
 
+import { cx, rangeBtnClass, styles } from "./analyticsStyles.js";
+
 import type { MqttNode, NodeInfo } from "@foreman/shared";
 import type React from "react";
+import type { CSSProperties } from "react";
 
 const ForceGraph2D = lazy(() => import("react-force-graph-2d"));
 
@@ -52,20 +55,17 @@ export function formatMs(ms: number | null): string {
 export const MAP_STYLE =
   import.meta.env.VITE_MAP_STYLE ?? "https://tiles.openfreemap.org/styles/liberty";
 
-// Inject a single keyframe rule for the loading spinner (once per page load).
-if (typeof document !== "undefined" && !document.getElementById("analytics-spinner-kf")) {
-  const s = document.createElement("style");
-  s.id = "analytics-spinner-kf";
-  s.textContent =
-    "@keyframes analytics-spin{to{transform:rotate(360deg)}}" +
-    ".analytics-spinner{width:22px;height:22px;border:2px solid #1e293b;" +
-    "border-top-color:#3b82f6;border-radius:50%;" +
-    "animation:analytics-spin 0.75s linear infinite}";
-  document.head.appendChild(s);
-}
-
 // ---------------------------------------------------------------------------
 // Recharts dark-theme constants
+//
+// These are config objects fed to recharts props (`tick`, `wrapperStyle`,
+// the Tooltip `contentStyle`/`labelStyle`/`itemStyle` props), not DOM
+// `style`/`className` attributes we render ourselves — recharts' own
+// TypeScript definitions (`XAxis`'s `tick?: TickProp<...>`, `Tooltip`'s
+// `contentStyle?: CSSProperties` etc., `Legend`'s `wrapperStyle?:
+// CSSProperties`) only accept plain objects/CSSProperties here, with no
+// `className` alternative, so these stay as-is (same library-constraint
+// category as MapPage's react-map-gl `style` props, see TASK-022b).
 // ---------------------------------------------------------------------------
 
 export const GRID_COLOR = "#1e293b";
@@ -80,6 +80,12 @@ export const TOOLTIP_STYLE = {
   },
   labelStyle: { color: "#94a3b8" },
   itemStyle: { color: "#e2e8f0" },
+};
+/** Legend's `wrapperStyle` prop — same library constraint as above. */
+export const LEGEND_WRAPPER_STYLE: CSSProperties = {
+  fontSize: "0.7rem",
+  fontFamily: "monospace",
+  color: "#94a3b8",
 };
 
 export const ROLE_COLORS = { received: "#60a5fa", sent: "#34d399", relayed: "#a78bfa" };
@@ -110,21 +116,24 @@ export function ChartCard({
   fullWidth?: boolean;
 }) {
   return (
-    <div style={{ ...styles.card, gridColumn: fullWidth ? "1 / -1" : undefined }}>
-      <div style={styles.cardTitle}>{title}</div>
+    <div className={cx(styles.card, fullWidth && styles.cardFullWidth)}>
+      <div className={styles.cardTitle}>{title}</div>
       {children}
     </div>
   );
 }
 
 export function Empty({ message = "No data" }: { message?: string }) {
-  return <div style={styles.empty}>{message}</div>;
+  return <div className={styles.empty}>{message}</div>;
 }
 
 export function Loading({ height }: { height?: number } = {}) {
   return (
-    <div style={{ ...styles.empty, height: height ?? 160 }}>
-      <div className="analytics-spinner" />
+    <div
+      className={styles.empty}
+      style={{ "--loading-height": `${height ?? 160}px` } as CSSProperties}
+    >
+      <div className={styles.spinner} />
     </div>
   );
 }
@@ -139,9 +148,9 @@ export function RangeBtn({
   onChange: (v: string) => void;
 }) {
   return (
-    <div style={{ display: "flex", gap: "0.25rem", marginBottom: "0.6rem" }}>
+    <div className={styles.rangeBtnRow}>
       {options.map((o) => (
-        <button key={o} style={rangeStyle(value === o)} onClick={() => onChange(o)}>
+        <button key={o} className={rangeBtnClass(value === o)} onClick={() => onChange(o)}>
           {o}
         </button>
       ))}
@@ -164,18 +173,10 @@ export function MeshGraph({
   height?: number;
   emptyMessage?: string;
 }) {
+  const heightVar = { "--mesh-height": `${height}px` } as CSSProperties;
   if (graphData.nodes.length === 0) {
     return (
-      <div
-        style={{
-          height,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#475569",
-          fontSize: "0.75rem",
-        }}
-      >
+      <div className={styles.meshPlaceholder} style={heightVar}>
         {emptyMessage}
       </div>
     );
@@ -183,16 +184,7 @@ export function MeshGraph({
   return (
     <Suspense
       fallback={
-        <div
-          style={{
-            height,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#475569",
-            fontSize: "0.75rem",
-          }}
-        >
+        <div className={styles.meshPlaceholder} style={heightVar}>
           Loading graph…
         </div>
       }
@@ -223,139 +215,3 @@ export function MeshGraph({
     </Suspense>
   );
 }
-
-// ---------------------------------------------------------------------------
-function rangeStyle(active: boolean): React.CSSProperties {
-  return {
-    background: active ? "#1e3a5f" : "#0f172a",
-    color: active ? "#60a5fa" : "#64748b",
-    border: `1px solid ${active ? "#3b82f6" : "#1e293b"}`,
-    padding: "0.15rem 0.5rem",
-    borderRadius: "0.25rem",
-    cursor: "pointer",
-    fontFamily: "monospace",
-    fontSize: "0.72rem",
-  };
-}
-
-export const styles: Record<string, React.CSSProperties> = {
-  page: {
-    padding: "1rem 1.5rem",
-    display: "flex",
-    flexDirection: "column",
-    height: "100%",
-    boxSizing: "border-box",
-    overflowY: "auto",
-  },
-  subNav: {
-    display: "flex",
-    gap: "0.1rem",
-    borderBottom: "1px solid #1e293b",
-    marginBottom: "1rem",
-    flexShrink: 0,
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, 1fr)",
-    gap: "1rem",
-    alignItems: "start",
-  },
-  card: {
-    background: "#0f172a",
-    borderRadius: "0.5rem",
-    padding: "1rem",
-    border: "1px solid #1e293b",
-  },
-  cardTitle: {
-    fontSize: "0.7rem",
-    fontWeight: "bold",
-    letterSpacing: "0.08em",
-    textTransform: "uppercase" as const,
-    color: "#64748b",
-    paddingBottom: "0.5rem",
-    borderBottom: "1px solid #1e293b",
-    marginBottom: "0.75rem",
-  },
-  empty: {
-    height: "160px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "#475569",
-    fontSize: "0.75rem",
-    fontFamily: "monospace",
-  },
-  legendWrap: {
-    fontSize: "0.7rem",
-    fontFamily: "monospace",
-    color: "#94a3b8",
-  },
-  subLabel: {
-    fontSize: "0.65rem",
-    fontWeight: "bold",
-    letterSpacing: "0.06em",
-    textTransform: "uppercase" as const,
-    color: "#475569",
-    marginBottom: "0.3rem",
-    marginTop: "0.5rem",
-  },
-  errorRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    fontSize: "0.72rem",
-    fontFamily: "monospace",
-    padding: "0.1rem 0",
-  },
-  deliverySummary: {
-    fontSize: "0.72rem",
-    fontFamily: "monospace",
-    color: "#94a3b8",
-    marginBottom: "0.25rem",
-  },
-  latencySummary: {
-    display: "flex",
-    gap: "1.5rem",
-    fontSize: "0.72rem",
-    fontFamily: "monospace",
-    color: "#64748b",
-    marginBottom: "0.5rem",
-  },
-  matrixCorner: {
-    padding: "0.2rem 0.4rem",
-    background: "#020617",
-  },
-  matrixHeader: {
-    padding: "0.2rem 0.4rem",
-    textAlign: "center" as const,
-    color: "#94a3b8",
-    background: "#020617",
-    borderBottom: "1px solid #1e293b",
-    fontWeight: "normal",
-    whiteSpace: "nowrap" as const,
-    maxWidth: "5rem",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  matrixRowHeader: {
-    padding: "0.2rem 0.5rem",
-    color: "#94a3b8",
-    background: "#020617",
-    borderRight: "1px solid #1e293b",
-    whiteSpace: "nowrap" as const,
-    maxWidth: "8rem",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  matrixCell: {
-    padding: "0.2rem 0.4rem",
-    textAlign: "center" as const,
-    fontSize: "0.62rem",
-    color: "#64748b",
-    border: "1px solid #0f172a",
-  },
-  logCell: {
-    padding: "0.25rem 0.5rem",
-    color: "#94a3b8",
-    whiteSpace: "nowrap" as const,
-  },
-};

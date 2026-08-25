@@ -5,9 +5,9 @@ import {
   DEFAULT_RADIUS_KM,
   MODEM_PRESET_RADIUS_KM,
 } from "./mapCoverageConfig.js";
+import { ageFilterBtnClass, cx, onOffBtnClass, statusClass, styles } from "./mapStyles.js";
 
 import type { DeviceConfig } from "@foreman/shared";
-import type React from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 interface MapControlsProps {
@@ -98,39 +98,28 @@ export function MapControls({
           if (done < total)
             return {
               text: `⛰ ${done}/${total}`,
-              color: "#fbbf24",
+              className: statusClass(done, total, errors),
               title: "Computing terrain line-of-sight…",
             };
           return {
             text: errors > 0 ? `⛰ ${errors} failed` : "⛰ ready",
-            color: errors > 0 ? "#fca5a5" : "#86efac",
+            className: statusClass(done, total, errors),
             title: undefined,
           };
         })();
 
-        const rowStyle: React.CSSProperties = {
-          display: "flex",
-          gap: "0.3rem",
-          alignItems: "center",
-        };
-
         return (
-          <div style={{ ...styles.controlPanel }}>
+          <div className={styles.controlPanel}>
             {/* Simple row — always visible */}
-            <div style={rowStyle}>
-              <span style={styles.controlLabel}>Coverage:</span>
+            <div className={styles.controlRow}>
+              <span className={styles.controlLabel}>Coverage:</span>
 
-              <span style={styles.summaryPill}>
+              <span className={styles.summaryPill}>
                 {summaryPresetLabel} · {summaryRangeLabel}
               </span>
 
               <button
-                style={{
-                  ...ageFilterBtnStyle(terrainMode),
-                  ...(terrainMode
-                    ? { borderColor: "#86efac", color: "#86efac", background: "#14532d" }
-                    : {}),
-                }}
+                className={ageFilterBtnClass(terrainMode, "green")}
                 onClick={() => setTerrainMode((v) => !v)}
                 title={
                   terrainMode
@@ -142,12 +131,7 @@ export function MapControls({
               </button>
 
               <button
-                style={{
-                  ...ageFilterBtnStyle(coverageUnion),
-                  ...(coverageUnion
-                    ? { borderColor: "#a78bfa", color: "#a78bfa", background: "#2e1065" }
-                    : {}),
-                }}
+                className={ageFilterBtnClass(coverageUnion, "purple")}
                 onClick={() => setCoverageUnion((v) => !v)}
                 title={
                   coverageUnion
@@ -159,10 +143,7 @@ export function MapControls({
               </button>
 
               <button
-                style={{
-                  ...ageFilterBtnStyle(showCoverage),
-                  ...(showCoverage ? {} : { color: "#64748b" }),
-                }}
+                className={onOffBtnClass(showCoverage)}
                 onClick={() => setShowCoverage((v) => !v)}
                 title={showCoverage ? "Hide coverage overlay" : "Show coverage overlay"}
               >
@@ -170,7 +151,7 @@ export function MapControls({
               </button>
 
               <button
-                style={{ ...ageFilterBtnStyle(coverageExpanded), padding: "0.2rem 0.35rem" }}
+                className={cx(ageFilterBtnClass(coverageExpanded), styles.ageFilterBtnCaret)}
                 onClick={() => setCoverageExpanded((v) => !v)}
                 title={
                   coverageExpanded
@@ -184,11 +165,7 @@ export function MapControls({
               {effectiveFocusedNodeId != null && (
                 <>
                   <button
-                    style={{
-                      ...ageFilterBtnStyle(false),
-                      borderColor: "#86efac",
-                      color: "#86efac",
-                    }}
+                    className={cx(styles.ageFilterBtn, styles.focusedNodeBtn)}
                     onClick={() => {
                       setLocalFocusedNodeId(null);
                       onClearFocusedNode?.();
@@ -198,32 +175,13 @@ export function MapControls({
                     ← All nodes
                   </button>
                   {effectiveFocusedNodeName && (
-                    <span
-                      style={{
-                        color: "#86efac",
-                        fontSize: "0.7rem",
-                        fontFamily: "monospace",
-                        maxWidth: "10rem",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {effectiveFocusedNodeName}
-                    </span>
+                    <span className={styles.focusedNodeName}>{effectiveFocusedNodeName}</span>
                   )}
                 </>
               )}
 
               {terrainStatus && (
-                <span
-                  style={{
-                    color: terrainStatus.color,
-                    fontSize: "0.7rem",
-                    fontFamily: "monospace",
-                  }}
-                  title={terrainStatus.title}
-                >
+                <span className={terrainStatus.className} title={terrainStatus.title}>
                   {terrainStatus.text}
                 </span>
               )}
@@ -231,18 +189,11 @@ export function MapControls({
 
             {/* Advanced row — shown when expanded */}
             {coverageExpanded && (
-              <div
-                style={{
-                  ...rowStyle,
-                  flexWrap: "wrap",
-                  paddingTop: "0.15rem",
-                  borderTop: "1px solid #1e293b",
-                }}
-              >
-                <span style={{ ...styles.controlLabel, marginRight: 0 }}>Preset:</span>
+              <div className={cx(styles.controlRow, styles.advancedRow)}>
+                <span className={cx(styles.controlLabel, styles.controlLabelFlush)}>Preset:</span>
 
                 <button
-                  style={ageFilterBtnStyle(presetFilter === null)}
+                  className={ageFilterBtnClass(presetFilter === null)}
                   onClick={() => setPresetFilter?.(null)}
                   title="Show all presets at their own default range"
                 >
@@ -252,7 +203,7 @@ export function MapControls({
                 {availablePresets.map((p) => (
                   <button
                     key={p}
-                    style={ageFilterBtnStyle(presetFilter === p)}
+                    className={ageFilterBtnClass(presetFilter === p)}
                     onClick={() => {
                       const next = presetFilter === p ? null : p;
                       setPresetFilter?.(next);
@@ -269,14 +220,14 @@ export function MapControls({
 
                 {presetFilter !== null && (
                   <>
-                    <span style={{ color: "#475569", margin: "0 0.1rem", fontSize: "0.8rem" }}>
-                      |
+                    <span className={styles.divider}>|</span>
+                    <span className={cx(styles.controlLabel, styles.controlLabelFlush)}>
+                      Range:
                     </span>
-                    <span style={{ ...styles.controlLabel, marginRight: 0 }}>Range:</span>
                     {COVERAGE_RADII_KM.map((km) => (
                       <button
                         key={km}
-                        style={ageFilterBtnStyle(coverageRadiusKm === km)}
+                        className={ageFilterBtnClass(coverageRadiusKm === km)}
                         onClick={() => {
                           setCoverageRadiusKm(km);
                           setUserPickedRadius(true);
@@ -291,16 +242,9 @@ export function MapControls({
 
                 {showMqtt && (
                   <>
-                    <span style={{ color: "#475569", margin: "0 0.1rem", fontSize: "0.8rem" }}>
-                      |
-                    </span>
+                    <span className={styles.divider}>|</span>
                     <button
-                      style={{
-                        ...ageFilterBtnStyle(coverageMqtt),
-                        ...(coverageMqtt
-                          ? { borderColor: "#34d399", color: "#34d399", background: "#052e16" }
-                          : {}),
-                      }}
+                      className={ageFilterBtnClass(coverageMqtt, "teal")}
                       onClick={() => setCoverageMqtt((v) => !v)}
                       title={
                         coverageMqtt
@@ -320,40 +264,3 @@ export function MapControls({
     </>
   );
 }
-
-function ageFilterBtnStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: "0.2rem 0.45rem",
-    fontSize: "0.7rem",
-    borderRadius: "0.3rem",
-    border: active ? "1px solid #60a5fa" : "1px solid #334155",
-    background: active ? "#1e3a5f" : "#1e293b",
-    color: active ? "#93c5fd" : "#94a3b8",
-    cursor: "pointer",
-  };
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  controlPanel: {
-    background: "#0f172acc",
-    backdropFilter: "blur(4px)",
-    color: "#e2e8f0",
-    padding: "0.4rem 0.6rem",
-    borderRadius: "0.5rem",
-    fontSize: "0.75rem",
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.35rem",
-    alignItems: "flex-start",
-  },
-  summaryPill: {
-    fontSize: "0.7rem",
-    color: "#cbd5e1",
-    background: "#1e293b",
-    border: "1px solid #334155",
-    borderRadius: "0.3rem",
-    padding: "0.15rem 0.45rem",
-    fontFamily: "monospace",
-  },
-  controlLabel: { color: "#94a3b8", marginRight: "0.15rem", fontSize: "0.7rem" },
-};

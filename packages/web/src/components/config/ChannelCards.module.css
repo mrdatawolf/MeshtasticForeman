@@ -1,0 +1,43 @@
+.wrap {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.headerRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.chLabel {
+  color: #64748b;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+}
+
+.roleLabel {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+.roleLabelPrimary {
+  color: #22c55e;
+}
+
+.name {
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  font-weight: bold;
+  margin-bottom: 0.2rem;
+}
+
+.namePlaceholder {
+  color: #475569;
+}
+
+.pskLine {
+  color: #475569;
+  font-size: 0.72rem;
+  font-family: monospace;
+}

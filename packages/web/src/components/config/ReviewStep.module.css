@@ -1,0 +1,88 @@
+.stepCenteredApplied {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.stepCenteredEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.checkmark {
+  color: #22c55e;
+  font-size: 2rem;
+}
+
+.appliedTitle {
+  color: #e2e8f0;
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.appliedSub {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.emptyMessage {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.changesList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.changeCard {
+  background: #0d1420;
+  border: 1px solid #1e293b;
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+
+.changeCardHeader {
+  background: #0f172a;
+  padding: 0.3rem 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  border-bottom: 1px solid #1e293b;
+}
+
+.changeSectionKey {
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  font-weight: bold;
+}
+
+.changeCardBody {
+  padding: 0.4rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.changeRow {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+}
+
+.changeKey {
+  color: #7a8fa6;
+  width: 13rem;
+  flex-shrink: 0;
+}
+
+.changeVal {
+  color: #4ade80;
+}

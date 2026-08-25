@@ -8,7 +8,9 @@ import { formatNodeId } from "@foreman/shared";
 import { Protobuf } from "@meshtastic/core";
 
 import { activityLog } from "../activity/log.js";
+import { mapNodeRow, type NodeRow } from "../db/repositories/nodes.js";
 import { decodePayload } from "../decode-payload.js";
+import { createLogger } from "../logger.js";
 
 import type { PGlite } from "@electric-sql/pglite";
 import type { ServerEvent } from "@foreman/shared";
@@ -20,6 +22,7 @@ export interface RawPacketHandlerDeps {
   getMyNodeId: (deviceId: string) => number | undefined;
   setLastPacketMs: (deviceId: string, value: number) => void;
 }
+const log = createLogger("devices");
 
 // Protobuf packet typing remains intentionally unchanged from DeviceManager.
 export async function handleRawPacket(
@@ -58,8 +61,16 @@ export async function handleRawPacket(
   const fromNodeId: number = p.from ?? 0;
   const isMqttEcho = p.viaMqtt ?? false;
   deps.setLastPacketMs(deviceId, Date.now());
-  console.log(
-    `[devices] raw pkt from=${formatNodeId(fromNodeId)} portnum=${portnumName} viaMqtt=${isMqttEcho}`,
+  log.info(
+    {
+      deviceId,
+      packetId: p.id ?? 0,
+      operation: "receive-raw-packet",
+      fromNodeId: formatNodeId(fromNodeId),
+      portnum: portnumName,
+      viaMqtt: isMqttEcho,
+    },
+    "raw packet received",
   );
   if (fromNodeId !== 0) {
     activityLog.add({
@@ -80,41 +91,19 @@ export async function handleRawPacket(
       [fromNodeId, deviceId, rxTime],
     );
 
-    const { rows } = await deps.db.query<{
-      node_id: number;
-      long_name: string | null;
-      short_name: string | null;
-      mac_address: string | null;
-      hw_model: number | null;
-      public_key: string | null;
-      snr: number | null;
-      hops_away: number | null;
-      latitude: number | null;
-      longitude: number | null;
-      altitude: number | null;
-    }>(
+    const { rows } = await deps.db.query<NodeRow>(
       `SELECT node_id, long_name, short_name, mac_address, hw_model, public_key,
-              snr, hops_away, latitude, longitude, altitude
+              last_heard, snr, hops_away, latitude, longitude, altitude
        FROM nodes WHERE device_id = $1 AND node_id = $2`,
       [deviceId, fromNodeId],
     );
     if (rows[0]) {
-      const r = rows[0];
+      const node = mapNodeRow(rows[0]);
       deps.emit({
         type: "node:update",
         payload: {
-          nodeId: r.node_id,
-          longName: r.long_name,
-          shortName: r.short_name,
-          macAddress: r.mac_address,
-          hwModel: r.hw_model,
-          publicKey: r.public_key,
+          ...node,
           lastHeard: rxTime,
-          snr: r.snr,
-          hopsAway: r.hops_away,
-          latitude: r.latitude,
-          longitude: r.longitude,
-          altitude: r.altitude,
         },
       });
     }
@@ -201,13 +190,23 @@ export async function handleRawPacket(
                 ackError,
               },
             });
-            console.log(
-              `[devices] ACK ${isAck ? "✓" : "✗"} for packet ${requestId}${ackError ? ` (${ackError})` : ""}`,
+            log.info(
+              {
+                deviceId,
+                packetId: requestId,
+                operation: "receive-ack",
+                acknowledged: isAck,
+                ackError,
+              },
+              "packet acknowledgement received",
             );
           }
         }
       } catch (err) {
-        console.warn("[devices] failed to decode routing packet:", err);
+        log.warn(
+          { deviceId, packetId: p.id ?? 0, operation: "decode-routing-packet", err },
+          "routing packet decode failed",
+        );
       }
     }
   }

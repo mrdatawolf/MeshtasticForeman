@@ -1,5 +1,7 @@
 import { Buffer } from "node:buffer";
 
+import { mapMqttNodeRow, type MqttNodeRow } from "../db/repositories/mqtt-nodes.js";
+
 import type { PGlite } from "@electric-sql/pglite";
 import type { MqttNode } from "@foreman/shared";
 import type { Protobuf } from "@meshtastic/core";
@@ -145,39 +147,22 @@ export class NodePersistence {
   }
 
   async emitNodeUpdate(nodeId: number, meta: NodeWriteMeta): Promise<void> {
-    const { rows } = await this.db.query<{
-      node_id: number;
-      long_name: string | null;
-      short_name: string | null;
-      hw_model: number | null;
-      public_key: string | null;
-      latitude: number | null;
-      longitude: number | null;
-      altitude: number | null;
-      distance_m: number | null;
-    }>(
-      `SELECT node_id, long_name, short_name, hw_model, public_key,
-              latitude, longitude, altitude, distance_m FROM mqtt_nodes WHERE node_id = $1`,
+    const { rows } = await this.db.query<MqttNodeRow>(
+      `SELECT node_id, long_name, short_name, hw_model, public_key, last_heard,
+              latitude, longitude, altitude, last_gateway, region_path, channel_name,
+              snr, hops_away, distance_m FROM mqtt_nodes WHERE node_id = $1`,
       [nodeId],
     );
     if (!rows[0]) return;
-    const r = rows[0];
+    const node = mapMqttNodeRow(rows[0]);
     this.emit("mqtt_node:update", {
-      nodeId: r.node_id,
-      longName: r.long_name,
-      shortName: r.short_name,
-      hwModel: r.hw_model,
-      publicKey: r.public_key,
+      ...node,
       lastHeard: meta.rxTime,
-      latitude: r.latitude,
-      longitude: r.longitude,
-      altitude: r.altitude,
       lastGateway: meta.gatewayId,
       regionPath: meta.regionPath,
       channelName: meta.channelName,
       snr: meta.snr,
       hopsAway: meta.hopsAway,
-      distanceM: r.distance_m,
     });
   }
 }
