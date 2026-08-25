@@ -1,3 +1,4 @@
+import type { DaemonConfig } from "../config.js";
 import type { PGlite } from "@electric-sql/pglite";
 import type { FastifyInstance } from "fastify";
 
@@ -7,11 +8,6 @@ import type { FastifyInstance } from "fastify";
 
 /** Effective Earth radius (m) for radio propagation — 4/3 × 6371 km */
 const EARTH_RADIUS_EFF_M = 8_500_000;
-
-/** Elevation API endpoint. Override with ELEVATION_API_URL env var to point
- *  at a self-hosted Open-Elevation instance for faster, offline operation. */
-const ELEVATION_API_URL =
-  process.env.ELEVATION_API_URL ?? "https://api.open-elevation.com/api/v1/lookup";
 
 /** Persist elevation lookups for 6 months.  Terrain changes negligibly over
  *  that window and we want to be a good citizen to public elevation APIs. */
@@ -51,6 +47,7 @@ function elevKey(lat: number, lon: number): string {
 async function fetchElevations(
   db: PGlite,
   points: Array<{ lat: number; lon: number }>,
+  elevationApiUrl: string,
 ): Promise<number[]> {
   const results = new Array<number>(points.length).fill(0);
   const needDb: Array<{ idx: number; lat: number; lon: number }> = [];
@@ -124,7 +121,7 @@ async function fetchElevations(
         const backoffMs = Math.min(500 * 2 ** (attempt - 1), 8_000);
         await new Promise((r) => setTimeout(r, backoffMs));
       }
-      res = await fetch(ELEVATION_API_URL, {
+      res = await fetch(elevationApiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -200,7 +197,11 @@ function destinationPoint(
 // Route
 // ---------------------------------------------------------------------------
 
-export async function registerCoverageRoutes(app: FastifyInstance, db: PGlite) {
+export async function registerCoverageRoutes(
+  app: FastifyInstance,
+  db: PGlite,
+  config: Pick<DaemonConfig, "coverage">,
+) {
   /**
    * GET /api/coverage/viewshed
    *
@@ -267,7 +268,7 @@ export async function registerCoverageRoutes(app: FastifyInstance, db: PGlite) {
     // ── Fetch all elevations in one batched call ───────────────────────────
     let elevations: number[];
     try {
-      elevations = await fetchElevations(db, allPoints);
+      elevations = await fetchElevations(db, allPoints, config.coverage.elevationApiUrl);
     } catch (err) {
       console.error("[coverage] elevation fetch failed:", err);
       return reply.status(502).send({
@@ -375,7 +376,7 @@ export async function registerCoverageRoutes(app: FastifyInstance, db: PGlite) {
       return reply.status(400).send({ error: "Invalid lat/lon" });
     }
 
-    const [elevationM] = await fetchElevations(db, [{ lat, lon }]);
+    const [elevationM] = await fetchElevations(db, [{ lat, lon }], config.coverage.elevationApiUrl);
     return { elevationM };
   });
 

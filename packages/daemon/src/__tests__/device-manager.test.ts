@@ -156,7 +156,7 @@ describe("DeviceManager", () => {
     vi.clearAllMocks();
     mockDevice.ref = null;
     db = await createTestDb();
-    manager = new DeviceManager(db);
+    manager = new DeviceManager(db, { bot: { enabled: false } });
     emitted = collectEvents(manager);
   });
 

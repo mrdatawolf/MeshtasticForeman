@@ -10,6 +10,7 @@ import { TransportNodeSerial } from "@meshtastic/transport-node-serial";
 import { activityLog } from "../activity/log.js";
 import { toPlainObject, decodePayload } from "../decode-payload.js";
 
+import type { DaemonConfig } from "../config.js";
 import type { MqttGateway } from "../mqtt/gateway.js";
 import type { PGlite } from "@electric-sql/pglite";
 import type {
@@ -65,7 +66,10 @@ export class DeviceManager extends EventEmitter {
   /** Correlates packetId → replyId for in-flight text packets between onMeshPacket and onMessagePacket */
   private pendingReplyIds = new Map<number, number>();
 
-  constructor(private readonly db: PGlite) {
+  constructor(
+    private readonly db: PGlite,
+    private readonly config: Pick<DaemonConfig, "bot">,
+  ) {
     super();
   }
 
@@ -683,7 +687,7 @@ export class DeviceManager extends EventEmitter {
     this.emit("event", event);
 
     // Bot command handler — only active when BOT_ENABLED=true
-    if (process.env.BOT_ENABLED === "true" && packet.data?.startsWith("!")) {
+    if (this.config.bot.enabled && packet.data?.startsWith("!")) {
       await this._handleBotCommand(deviceId, packet).catch((err) =>
         console.error("[bot] command handler error:", err),
       );

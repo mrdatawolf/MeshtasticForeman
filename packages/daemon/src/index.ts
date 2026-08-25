@@ -1,12 +1,10 @@
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import fastifyCors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify from "fastify";
 
 import { consoleLog } from "./activity/console-log.js";
+import { loadConfig } from "./config.js";
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrations.js";
 import { DeviceManager } from "./device/device-manager.js";
@@ -17,11 +15,6 @@ import { registerCoverageRoutes } from "./routes/coverage.js";
 import { registerDeviceRoutes } from "./routes/devices.js";
 import { registerProposalRoutes } from "./routes/proposals.js";
 import { registerWsRoute } from "./routes/websocket.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const PORT = Number(process.env.API_PORT ?? 3750);
-const HOST = process.env.API_HOST ?? "0.0.0.0";
 
 /**
  * Pause the terminal, show an error, and wait for any keypress before
@@ -80,6 +73,8 @@ process.on("uncaughtException", (err) => {
 });
 
 async function main() {
+  const config = loadConfig();
+
   // Capture all console.log/warn/error into the in-memory ring buffer
   // before anything else logs, so no lines are missed.
   consoleLog.install();
@@ -96,44 +91,43 @@ async function main() {
 
   // Serve built frontend from web package (in production)
   // WEB_DIST env var allows Electron packaging to override the default path
-  const webDist = process.env.WEB_DIST ?? join(__dirname, "../../web/dist");
   await app.register(fastifyStatic, {
-    root: webDist,
+    root: config.api.webDist,
     wildcard: false,
   });
 
   // 3. Device manager (owns all serial/TCP connections)
-  const deviceManager = new DeviceManager(db);
+  const deviceManager = new DeviceManager(db, { bot: config.bot });
 
   // 4. MQTT gateway (optional — configured when MQTT_BROKER is set; only
   //    auto-started when ENABLE_MQTT=true so the system is lightweight by default)
   let mqttGateway: MqttGateway | null = null;
-  if (process.env.MQTT_BROKER) {
+  if (config.mqtt.broker) {
     mqttGateway = new MqttGateway(
       {
-        broker: process.env.MQTT_BROKER,
-        port: Number(process.env.MQTT_PORT ?? 1883),
-        username: process.env.MQTT_USER ?? "meshdev",
-        password: process.env.MQTT_PASS ?? "large4cats",
-        rootTopic: process.env.MQTT_ROOT ?? "msh/US",
+        broker: config.mqtt.broker,
+        port: config.mqtt.port,
+        username: config.mqtt.username,
+        password: config.mqtt.password,
+        rootTopic: config.mqtt.rootTopic,
       },
       db,
     );
     deviceManager.setMqttGateway(mqttGateway);
-    if (process.env.ENABLE_MQTT === "true") {
+    if (config.mqtt.enabled === true) {
       mqttGateway.start();
-      console.log(`[mqtt] gateway started → ${process.env.MQTT_BROKER}`);
+      console.log(`[mqtt] gateway started → ${config.mqtt.broker}`);
     } else {
       console.log(
-        `[mqtt] gateway configured (ENABLE_MQTT is not true, not starting) → ${process.env.MQTT_BROKER}`,
+        `[mqtt] gateway configured (ENABLE_MQTT is not true, not starting) → ${config.mqtt.broker}`,
       );
     }
   }
 
   // Auto-connect to device specified in env (takes priority over DB-saved devices)
-  if (process.env.MESHTASTIC_PORT) {
-    const port = process.env.MESHTASTIC_PORT;
-    const name = process.env.MESHTASTIC_NAME ?? port;
+  if (config.meshtastic.port) {
+    const port = config.meshtastic.port;
+    const name = config.meshtastic.name ?? config.meshtastic.port;
     console.log(`[foreman] auto-connecting to ${port}`);
     await deviceManager.connect(port, name).catch((err) => {
       console.error(`[foreman] failed to connect to ${port}:`, err.message);
@@ -145,7 +139,7 @@ async function main() {
   // 4. Routes
   await registerDeviceRoutes(app, deviceManager, mqttGateway, db);
   await registerAnalyticsRoutes(app, db);
-  await registerCoverageRoutes(app, db);
+  await registerCoverageRoutes(app, db, { coverage: config.coverage });
   await registerProposalRoutes(app, db);
   await registerWsRoute(app, deviceManager, mqttGateway, db);
 
@@ -154,8 +148,8 @@ async function main() {
     reply.sendFile("index.html");
   });
 
-  await app.listen({ port: PORT, host: HOST });
-  console.log(`[foreman] daemon listening on http://${HOST}:${PORT}`);
+  await app.listen({ port: config.api.port, host: config.api.host });
+  console.log(`[foreman] daemon listening on http://${config.api.host}:${config.api.port}`);
 
   // Background: sync hardware model names from the protobufs repo.
   // Runs after the server is up so it never delays startup.
