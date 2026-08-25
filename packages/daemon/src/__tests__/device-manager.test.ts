@@ -566,6 +566,127 @@ describe("DeviceManager", () => {
   });
 
   // -------------------------------------------------------------------------
+  describe("malformed Meshtastic payload rejection", () => {
+    async function expectNoNodeMutationOrEvent() {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const { rows: nodes } = await db.query("SELECT node_id FROM nodes");
+      const { rows: positions } = await db.query("SELECT id FROM position_history");
+      expect(nodes).toHaveLength(0);
+      expect(positions).toHaveLength(0);
+      expect(emitted.filter((event) => event.type === "node:update")).toHaveLength(0);
+      expect(emitted.filter((event) => event.type === "device:status")).toHaveLength(0);
+    }
+
+    it.each(["not an object", null])("rejects non-object node info: %p", async (payload) => {
+      await manager.connect("/dev/ttyUSB0", "Node");
+      emitted.length = 0;
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      getFakeEvents().onNodeInfoPacket.dispatch(payload);
+
+      await expectNoNodeMutationOrEvent();
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        "[devices] rejected malformed nodeInfo packet: validation failed",
+      );
+      warn.mockRestore();
+    });
+
+    it("rejects node info with a non-numeric num", async () => {
+      await manager.connect("/dev/ttyUSB0", "Node");
+      emitted.length = 0;
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      getFakeEvents().onNodeInfoPacket.dispatch({ num: "12345" });
+
+      await expectNoNodeMutationOrEvent();
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        "[devices] rejected malformed nodeInfo packet: validation failed",
+      );
+      warn.mockRestore();
+    });
+
+    it("rejects a position packet missing data", async () => {
+      await manager.connect("/dev/ttyUSB0", "Node");
+      emitted.length = 0;
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      getFakeEvents().onPositionPacket.dispatch({ from: 12345 });
+
+      await expectNoNodeMutationOrEvent();
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        "[devices] rejected malformed position packet: validation failed",
+      );
+      warn.mockRestore();
+    });
+
+    it("rejects a position packet with non-numeric coordinates", async () => {
+      await manager.connect("/dev/ttyUSB0", "Node");
+      emitted.length = 0;
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      getFakeEvents().onPositionPacket.dispatch({
+        from: 12345,
+        data: { latitudeI: "376766660", longitudeI: "-1220000000" },
+      });
+
+      await expectNoNodeMutationOrEvent();
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        "[devices] rejected malformed position packet: validation failed",
+      );
+      warn.mockRestore();
+    });
+
+    it("rejects a telemetry packet missing data", async () => {
+      await manager.connect("/dev/ttyUSB0", "Node");
+      emitted.length = 0;
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      getFakeEvents().onTelemetryPacket.dispatch({ from: 12345 });
+
+      await expectNoNodeMutationOrEvent();
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        "[devices] rejected malformed telemetry packet: validation failed",
+      );
+      warn.mockRestore();
+    });
+
+    it("accepts sparse telemetry with an empty data object and preserves the handler's early return", async () => {
+      await manager.connect("/dev/ttyUSB0", "Node");
+      emitted.length = 0;
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      getFakeEvents().onTelemetryPacket.dispatch({ from: 12345, data: {} });
+
+      await expectNoNodeMutationOrEvent();
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it("rejects telemetry with a non-numeric battery level", async () => {
+      await manager.connect("/dev/ttyUSB0", "Node");
+      emitted.length = 0;
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      getFakeEvents().onTelemetryPacket.dispatch({
+        from: 12345,
+        data: { variant: { case: "deviceMetrics", value: { batteryLevel: "85" } } },
+      });
+
+      await expectNoNodeMutationOrEvent();
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        "[devices] rejected malformed telemetry packet: validation failed",
+      );
+      warn.mockRestore();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   describe("metadata handling (onDeviceMetadataPacket)", () => {
     it("updates hw_model and firmware in devices table", async () => {
       const connected = await manager.connect("/dev/ttyUSB0", "Node");

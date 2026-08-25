@@ -10,7 +10,10 @@ import { TransportNodeSerial } from "@meshtastic/transport-node-serial";
 import { activityLog } from "../activity/log.js";
 import { toPlainObject, decodePayload } from "../decode-payload.js";
 
+import { adaptNodeInfo, adaptPosition, adaptTelemetry } from "./meshtastic-adapter.js";
+
 import type { DaemonConfig } from "../config.js";
+import type { AdaptedNodeInfo, AdaptedPosition, AdaptedTelemetry } from "./meshtastic-adapter.js";
 import type { MqttGateway } from "../mqtt/gateway.js";
 import type { PGlite } from "@electric-sql/pglite";
 import type {
@@ -174,15 +177,23 @@ export class DeviceManager extends EventEmitter {
       );
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    meshDevice.events.onNodeInfoPacket.subscribe((nodeInfo: any) => {
+    meshDevice.events.onNodeInfoPacket.subscribe((rawNodeInfo: unknown) => {
+      const nodeInfo = adaptNodeInfo(rawNodeInfo);
+      if (nodeInfo === null) {
+        console.warn("[devices] rejected malformed nodeInfo packet: validation failed");
+        return;
+      }
       this._handleNodeInfo(id, nodeInfo).catch((err) =>
         console.error(`[devices] node info error on ${name}:`, err),
       );
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    meshDevice.events.onPositionPacket.subscribe((pkt: any) => {
+    meshDevice.events.onPositionPacket.subscribe((rawPacket: unknown) => {
+      const pkt = adaptPosition(rawPacket);
+      if (pkt === null) {
+        console.warn("[devices] rejected malformed position packet: validation failed");
+        return;
+      }
       this._handlePosition(id, pkt).catch((err) =>
         console.error(`[devices] position error on ${name}:`, err),
       );
@@ -276,8 +287,12 @@ export class DeviceManager extends EventEmitter {
       }
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    meshDevice.events.onTelemetryPacket.subscribe((pkt: any) => {
+    meshDevice.events.onTelemetryPacket.subscribe((rawPacket: unknown) => {
+      const pkt = adaptTelemetry(rawPacket);
+      if (pkt === null) {
+        console.warn("[devices] rejected malformed telemetry packet: validation failed");
+        return;
+      }
       this._handleTelemetry(id, name, pkt).catch((err) =>
         console.error(`[devices] telemetry error on ${name}:`, err),
       );
@@ -1032,17 +1047,14 @@ export class DeviceManager extends EventEmitter {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async _handleNodeInfo(deviceId: string, nodeInfo: any) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const n = nodeInfo as any;
-    const nodeId: number = n.num ?? 0;
+  private async _handleNodeInfo(deviceId: string, nodeInfo: AdaptedNodeInfo): Promise<void> {
+    const nodeId: number = nodeInfo.num ?? 0;
     if (nodeId === 0) return;
     console.log(
-      `[devices] nodeInfo ${formatNodeId(nodeId)} "${resolveNodeName(nodeId, n.user ?? {}, { fallback: "?" })}"`,
+      `[devices] nodeInfo ${formatNodeId(nodeId)} "${resolveNodeName(nodeId, nodeInfo.user ?? {}, { fallback: "?" })}"`,
     );
 
-    const macBytes: Uint8Array | undefined = n.user?.macaddr;
+    const macBytes: Uint8Array | undefined = nodeInfo.user?.macaddr;
     const macAddress =
       macBytes && macBytes.length > 0
         ? Array.from(macBytes)
@@ -1050,11 +1062,11 @@ export class DeviceManager extends EventEmitter {
             .join(":")
         : null;
 
-    const pubKeyBytes: Uint8Array | undefined = n.user?.publicKey;
+    const pubKeyBytes: Uint8Array | undefined = nodeInfo.user?.publicKey;
     const publicKey =
       pubKeyBytes && pubKeyBytes.length > 0 ? Buffer.from(pubKeyBytes).toString("hex") : null;
 
-    const lastHeardSec: number = n.lastHeard ?? 0;
+    const lastHeardSec: number = nodeInfo.lastHeard ?? 0;
     const lastHeard = lastHeardSec > 0 ? new Date(lastHeardSec * 1000).toISOString() : null;
 
     await this.db.query(
@@ -1073,14 +1085,14 @@ export class DeviceManager extends EventEmitter {
       [
         nodeId,
         deviceId,
-        n.user?.longName ?? null,
-        n.user?.shortName ?? null,
+        nodeInfo.user?.longName ?? null,
+        nodeInfo.user?.shortName ?? null,
         macAddress,
-        n.user?.hwModel ?? null,
+        nodeInfo.user?.hwModel ?? null,
         publicKey,
         lastHeard,
-        n.snr || null,
-        n.hopsAway ?? null,
+        nodeInfo.snr || null,
+        nodeInfo.hopsAway ?? null,
       ],
     );
 
@@ -1099,14 +1111,14 @@ export class DeviceManager extends EventEmitter {
       type: "node:update",
       payload: {
         nodeId,
-        longName: n.user?.longName ?? null,
-        shortName: n.user?.shortName ?? null,
+        longName: nodeInfo.user?.longName ?? null,
+        shortName: nodeInfo.user?.shortName ?? null,
         macAddress,
-        hwModel: n.user?.hwModel ?? null,
+        hwModel: nodeInfo.user?.hwModel ?? null,
         publicKey,
         lastHeard,
-        snr: n.snr || null,
-        hopsAway: n.hopsAway ?? null,
+        snr: nodeInfo.snr || null,
+        hopsAway: nodeInfo.hopsAway ?? null,
         latitude: pos?.latitude ?? null,
         longitude: pos?.longitude ?? null,
         altitude: pos?.altitude ?? null,
@@ -1115,8 +1127,7 @@ export class DeviceManager extends EventEmitter {
     this.emit("event", event);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async _handlePosition(deviceId: string, pkt: any) {
+  private async _handlePosition(deviceId: string, pkt: AdaptedPosition): Promise<void> {
     const fromNodeId: number = pkt.from ?? 0;
     if (fromNodeId === 0) return;
 
@@ -1355,8 +1366,11 @@ export class DeviceManager extends EventEmitter {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async _handleTelemetry(deviceId: string, name: string, pkt: any) {
+  private async _handleTelemetry(
+    deviceId: string,
+    name: string,
+    pkt: AdaptedTelemetry,
+  ): Promise<void> {
     const variant = pkt?.data?.variant;
     if (variant?.case !== "deviceMetrics") return;
 

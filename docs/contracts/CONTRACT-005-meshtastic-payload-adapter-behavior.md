@@ -428,3 +428,17 @@ indicator is required or authorized by this contract.
    payloads turn out to be frequent enough in practice to flood the log
    view, that would be a follow-up tuning concern, not something this
    contract pre-emptively solves with unrequested rate-limiting logic.
+5. **Resolved 2026-08-24 — missing `data` entirely, both boundaries.** This
+   contract's own Required behavior section (position: "falsy `pkt.data` is
+   today's early-return") and its Validation requirements checklist (listing
+   "a dispatched value missing `data` entirely" as a required malformed-input
+   test case) disagreed with each other for `onPositionPacket`, and the
+   implementation split the difference — position rejected it, telemetry
+   silently accepted it. Patrick decided: **reject with a warning,
+   consistently, at both boundaries.** `AdaptedTelemetry.data` is no longer
+   optional (matching `AdaptedPosition.data`); a telemetry payload with `data`
+   present but empty (`{}`) is still accepted as sparse, only a payload
+   missing `data` entirely is rejected. The Required behavior section's
+   position-specific "falsy `pkt.data` is today's early-return" framing above
+   is superseded by this resolution — treat the Validation requirements
+   checklist as authoritative on this specific point going forward.
