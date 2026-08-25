@@ -6,6 +6,8 @@ import { z } from "zod";
 
 import { getHwModels } from "../hw-models.js";
 
+import { deviceIdSchema, nodeIdSchema, sendValidationError } from "./schemas.js";
+
 import type { DeviceManager } from "../device/device-manager.js";
 import type { MqttGateway } from "../mqtt/gateway.js";
 import type { PGlite } from "@electric-sql/pglite";
@@ -26,6 +28,17 @@ const nodeOverrideBodySchema = z.object({
   longitude: z.number().min(-180).max(180).nullable().optional(),
   altitude: z.number().int().nullable().optional(),
   notes: z.string().max(512).nullable().optional(),
+});
+
+const deviceParamsSchema = z.object({ id: deviceIdSchema });
+const messageParamsSchema = z.object({
+  id: deviceIdSchema,
+  nodeId: nodeIdSchema({ sign: "nonnegative" }),
+});
+const nodeOverrideParamsSchema = z.object({ nodeId: nodeIdSchema() });
+const traceroutesQuerySchema = z.object({
+  since: z.string().optional(),
+  deviceId: deviceIdSchema.optional(),
 });
 
 export async function registerDeviceRoutes(
@@ -54,20 +67,24 @@ export async function registerDeviceRoutes(
   app.post("/api/devices/connect", async (req, reply) => {
     const result = connectBodySchema.safeParse(req.body);
     if (!result.success) {
-      return reply.status(400).send({ error: result.error.flatten() });
+      return sendValidationError(reply, result.error);
     }
     const device = await deviceManager.connect(result.data.port, result.data.name);
     return device;
   });
 
-  app.get("/api/devices/:id/nodes", async (req, _reply) => {
-    const { id } = req.params as { id: string };
+  app.get("/api/devices/:id/nodes", async (req, reply) => {
+    const result = deviceParamsSchema.safeParse(req.params);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { id } = result.data;
     const nodes = await deviceManager.listNodes(id);
     return nodes;
   });
 
   app.get("/api/devices/:id/config", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const result = deviceParamsSchema.safeParse(req.params);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { id } = result.data;
     const config = await deviceManager.getDeviceConfig(id);
     if (!config) return reply.status(404).send({ error: "Device not found" });
     return config;
@@ -79,17 +96,17 @@ export async function registerDeviceRoutes(
   });
 
   app.delete("/api/devices/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const result = deviceParamsSchema.safeParse(req.params);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { id } = result.data;
     await deviceManager.disconnect(id);
     return reply.status(204).send();
   });
 
   app.delete("/api/devices/:id/messages/:nodeId", async (req, reply) => {
-    const { id, nodeId: rawNodeId } = req.params as { id: string; nodeId: string };
-    const nodeId = Number(rawNodeId);
-    if (!Number.isInteger(nodeId) || nodeId < 0) {
-      return reply.status(400).send({ error: "Invalid nodeId" });
-    }
+    const result = messageParamsSchema.safeParse(req.params);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { id, nodeId } = result.data;
     await deviceManager.deleteConversation(id, nodeId);
     return reply.status(204).send();
   });
@@ -121,13 +138,12 @@ export async function registerDeviceRoutes(
   });
 
   app.put("/api/node-overrides/:nodeId", async (req, reply) => {
+    const paramsResult = nodeOverrideParamsSchema.safeParse(req.params);
+    if (!paramsResult.success) return sendValidationError(reply, paramsResult.error);
     if (!db) return reply.status(503).send({ error: "DB not available" });
-    const nodeId = Number((req.params as { nodeId: string }).nodeId);
-    if (!Number.isInteger(nodeId) || nodeId <= 0) {
-      return reply.status(400).send({ error: "Invalid nodeId" });
-    }
+    const { nodeId } = paramsResult.data;
     const result = nodeOverrideBodySchema.safeParse(req.body);
-    if (!result.success) return reply.status(400).send({ error: result.error.flatten() });
+    if (!result.success) return sendValidationError(reply, result.error);
     const {
       aliasName = null,
       latitude = null,
@@ -159,8 +175,10 @@ export async function registerDeviceRoutes(
   });
 
   app.delete("/api/node-overrides/:nodeId", async (req, reply) => {
+    const result = nodeOverrideParamsSchema.safeParse(req.params);
+    if (!result.success) return sendValidationError(reply, result.error);
     if (!db) return reply.status(503).send({ error: "DB not available" });
-    const nodeId = Number((req.params as { nodeId: string }).nodeId);
+    const { nodeId } = result.data;
     await db.query("DELETE FROM node_overrides WHERE node_id = $1", [nodeId]);
     return reply.status(204).send();
   });
@@ -170,8 +188,10 @@ export async function registerDeviceRoutes(
   // ---------------------------------------------------------------------------
 
   app.get("/api/traceroutes", async (req, reply) => {
+    const result = traceroutesQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
     if (!db) return reply.status(503).send({ error: "DB not available" });
-    const { since, deviceId: filterDevice } = req.query as { since?: string; deviceId?: string };
+    const { since, deviceId: filterDevice } = result.data;
 
     const conditions: string[] = [];
     const params: unknown[] = [];

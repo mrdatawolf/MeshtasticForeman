@@ -1,3 +1,7 @@
+import { z } from "zod";
+
+import { deviceIdSchema, sendValidationError } from "./schemas.js";
+
 import type { PGlite } from "@electric-sql/pglite";
 import type { CoverageProposal } from "@foreman/shared";
 import type { FastifyInstance } from "fastify";
@@ -17,6 +21,23 @@ interface ProposalRow {
   visible: boolean;
   created_at: string;
 }
+
+const proposalBodySchema = z.object({
+  name: z.string().trim().min(1),
+  lat: z.coerce.number().finite().min(-90).max(90),
+  lon: z.coerce.number().finite().min(-180).max(180),
+  altitudeM: z.coerce.number().finite().default(2),
+  modemPreset: z.coerce.number().finite().min(0).max(8).default(0),
+  notes: z
+    .string()
+    .trim()
+    .transform((value) => value || null)
+    .nullable()
+    .optional(),
+  visible: z.boolean().optional(),
+});
+const proposalPatchBodySchema = proposalBodySchema.partial();
+const proposalParamsSchema = z.object({ id: deviceIdSchema });
 
 function rowToProposal(row: ProposalRow): CoverageProposal {
   return {
@@ -47,23 +68,9 @@ export async function registerProposalRoutes(app: FastifyInstance, db: PGlite) {
 
   // POST /api/proposals — create a new proposal
   app.post("/api/proposals", async (req, reply) => {
-    const body = req.body as Record<string, unknown>;
-
-    const name = typeof body.name === "string" ? body.name.trim() : "";
-    const lat = Number(body.lat);
-    const lon = Number(body.lon);
-    const altitudeM = body.altitudeM !== undefined ? Number(body.altitudeM) : 2;
-    const modemPreset = body.modemPreset !== undefined ? Number(body.modemPreset) : 0;
-    const notes = typeof body.notes === "string" ? body.notes.trim() || null : null;
-
-    if (!name) return reply.status(400).send({ error: "name is required" });
-    if (!isFinite(lat) || lat < -90 || lat > 90)
-      return reply.status(400).send({ error: "invalid lat" });
-    if (!isFinite(lon) || lon < -180 || lon > 180)
-      return reply.status(400).send({ error: "invalid lon" });
-    if (!isFinite(altitudeM)) return reply.status(400).send({ error: "invalid altitudeM" });
-    if (!isFinite(modemPreset) || modemPreset < 0 || modemPreset > 8)
-      return reply.status(400).send({ error: "invalid modemPreset" });
+    const result = proposalBodySchema.safeParse(req.body);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { name, lat, lon, altitudeM, modemPreset, notes = null } = result.data;
 
     const { rows } = await db.query<ProposalRow>(
       `INSERT INTO coverage_proposals (name, lat, lon, altitude_m, modem_preset, notes)
@@ -78,8 +85,12 @@ export async function registerProposalRoutes(app: FastifyInstance, db: PGlite) {
 
   // PATCH /api/proposals/:id — partial update
   app.patch("/api/proposals/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const body = req.body as Record<string, unknown>;
+    const paramsResult = proposalParamsSchema.safeParse(req.params);
+    if (!paramsResult.success) return sendValidationError(reply, paramsResult.error);
+    const bodyResult = proposalPatchBodySchema.safeParse(req.body);
+    if (!bodyResult.success) return sendValidationError(reply, bodyResult.error);
+    const { id } = paramsResult.data;
+    const body = bodyResult.data;
 
     // Fetch existing row first
     const existing = await db.query<ProposalRow>("SELECT * FROM coverage_proposals WHERE id = $1", [
@@ -89,27 +100,13 @@ export async function registerProposalRoutes(app: FastifyInstance, db: PGlite) {
 
     const current = existing.rows[0];
 
-    const name = typeof body.name === "string" ? body.name.trim() || current.name : current.name;
-    const lat = body.lat !== undefined ? Number(body.lat) : current.lat;
-    const lon = body.lon !== undefined ? Number(body.lon) : current.lon;
-    const altitudeM = body.altitudeM !== undefined ? Number(body.altitudeM) : current.altitude_m;
-    const modemPreset =
-      body.modemPreset !== undefined ? Number(body.modemPreset) : current.modem_preset;
-    const notes =
-      body.notes !== undefined
-        ? typeof body.notes === "string"
-          ? body.notes.trim() || null
-          : null
-        : current.notes;
-    const visible = body.visible !== undefined ? Boolean(body.visible) : current.visible;
-
-    if (!isFinite(lat) || lat < -90 || lat > 90)
-      return reply.status(400).send({ error: "invalid lat" });
-    if (!isFinite(lon) || lon < -180 || lon > 180)
-      return reply.status(400).send({ error: "invalid lon" });
-    if (!isFinite(altitudeM)) return reply.status(400).send({ error: "invalid altitudeM" });
-    if (!isFinite(modemPreset) || modemPreset < 0 || modemPreset > 8)
-      return reply.status(400).send({ error: "invalid modemPreset" });
+    const name = body.name ?? current.name;
+    const lat = body.lat ?? current.lat;
+    const lon = body.lon ?? current.lon;
+    const altitudeM = body.altitudeM ?? current.altitude_m;
+    const modemPreset = body.modemPreset !== undefined ? body.modemPreset : current.modem_preset;
+    const notes = body.notes !== undefined ? body.notes : current.notes;
+    const visible = body.visible ?? current.visible;
 
     const { rows } = await db.query<ProposalRow>(
       `UPDATE coverage_proposals
@@ -124,7 +121,9 @@ export async function registerProposalRoutes(app: FastifyInstance, db: PGlite) {
 
   // DELETE /api/proposals/:id — remove a proposal
   app.delete("/api/proposals/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const result = proposalParamsSchema.safeParse(req.params);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { id } = result.data;
 
     const { rows } = await db.query<ProposalRow>(
       "DELETE FROM coverage_proposals WHERE id = $1 RETURNING id",

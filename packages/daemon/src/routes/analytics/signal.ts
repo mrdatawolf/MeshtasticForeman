@@ -1,7 +1,21 @@
+import { z } from "zod";
+
+import { deviceIdSchema, nodeIdSchema, sendValidationError } from "../schemas.js";
+
 import { buildFilters, parseSince } from "./shared.js";
 
 import type { PGlite } from "@electric-sql/pglite";
 import type { FastifyInstance } from "fastify";
+
+const snrHistoryQuerySchema = z.object({
+  since: z.string().default("24h"),
+  nodeId: nodeIdSchema({ sign: "any" }).optional(),
+  deviceId: deviceIdSchema.optional(),
+});
+const linkQualityQuerySchema = z.object({
+  since: z.string().default("7d"),
+  deviceId: deviceIdSchema.optional(),
+});
 
 export function buildSnrHistoryQuery(opts: { since?: string; deviceId?: string; nodeId?: number }) {
   const conditions: string[] = [];
@@ -44,18 +58,10 @@ export function buildLinkQualityQuery(opts: { since?: string; deviceId?: string 
 
 export async function registerSignalRoutes(app: FastifyInstance, db: PGlite) {
   app.get("/api/analytics/snr-history", async (req, reply) => {
-    const {
-      since = "24h",
-      nodeId,
-      deviceId,
-    } = req.query as { since?: string; nodeId?: string; deviceId?: string };
-    let parsedNodeId: number | undefined;
-    if (nodeId) {
-      parsedNodeId = Number(nodeId);
-      if (!Number.isFinite(parsedNodeId))
-        return reply.status(400).send({ error: "Invalid nodeId" });
-    }
-    const query = buildSnrHistoryQuery({ since, deviceId, nodeId: parsedNodeId });
+    const result = snrHistoryQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, nodeId, deviceId } = result.data;
+    const query = buildSnrHistoryQuery({ since, deviceId, nodeId });
     const { rows } = await db.query<{
       ts: string;
       node_id: string;
@@ -72,8 +78,10 @@ export async function registerSignalRoutes(app: FastifyInstance, db: PGlite) {
     }));
   });
 
-  app.get("/api/analytics/link-quality", async (req) => {
-    const { since = "7d", deviceId } = req.query as { since?: string; deviceId?: string };
+  app.get("/api/analytics/link-quality", async (req, reply) => {
+    const result = linkQualityQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, deviceId } = result.data;
     const query = buildLinkQualityQuery({ since, deviceId });
     const { rows } = await db.query<{
       from_node_id: string;

@@ -1,7 +1,18 @@
+import { z } from "zod";
+
+import { deviceIdSchema, limitSchema, nodeIdSchema, sendValidationError } from "../schemas.js";
+
 import { parseSince } from "./shared.js";
 
 import type { PGlite } from "@electric-sql/pglite";
 import type { FastifyInstance } from "fastify";
+
+const positionHistoryQuerySchema = z.object({
+  since: z.string().default("24h"),
+  nodeId: nodeIdSchema({ sign: "any" }).optional(),
+  deviceId: deviceIdSchema.optional(),
+  limit: limitSchema(10_000, 2_000),
+});
 
 export function buildPositionHistoryQuery(opts: {
   since?: string;
@@ -36,20 +47,10 @@ export function buildPositionHistoryQuery(opts: {
 
 export async function registerPositionsRoutes(app: FastifyInstance, db: PGlite) {
   app.get("/api/analytics/position-history", async (req, reply) => {
-    const {
-      since = "24h",
-      nodeId,
-      deviceId,
-      limit: limitStr,
-    } = req.query as { since?: string; nodeId?: string; deviceId?: string; limit?: string };
-    const limit = Math.min(10_000, Math.max(1, parseInt(limitStr ?? "2000", 10) || 2000));
-    let parsedNodeId: number | undefined;
-    if (nodeId) {
-      parsedNodeId = Number(nodeId);
-      if (!Number.isFinite(parsedNodeId))
-        return reply.status(400).send({ error: "Invalid nodeId" });
-    }
-    const q = buildPositionHistoryQuery({ since, deviceId, nodeId: parsedNodeId, limit });
+    const result = positionHistoryQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, nodeId, deviceId, limit } = result.data;
+    const q = buildPositionHistoryQuery({ since, deviceId, nodeId, limit });
     const { rows } = await db.query<{
       id: string;
       node_id: string;

@@ -34,12 +34,12 @@ Validating WebSocket commands (already covered by `ws-protocol.ts`'s existing sc
 
 ## Acceptance criteria
 
-- [ ] All REST route files use Zod schemas for query strings, parameters, and bodies instead of manual casting.
-- [ ] Shared parameter shapes (device ID, time-range, limit, etc.) are defined once and reused across routes that genuinely share them.
-- [ ] Invalid input produces a consistent, documented error response shape across all routes.
-- [ ] TASK-005's analytics test suite is updated (not weakened) to assert on the new validation behavior for at least the invalid-input cases it already covers.
-- [ ] The public API documentation (per TASK-015) reflects the new validation/error contract.
-- [ ] CONTRACT-007 (if approved) defines the validation-error response shape and default-value behavior before implementation, since this is now externally-visible API behavior.
+- [x] All REST route files use Zod schemas for query strings, parameters, and bodies instead of manual casting.
+- [x] Shared parameter shapes (device ID, time-range, limit, etc.) are defined once and reused across routes that genuinely share them.
+- [x] Invalid input produces a consistent, documented error response shape across all routes.
+- [x] TASK-005's analytics test suite is updated (not weakened) to assert on the new validation behavior for at least the invalid-input cases it already covers.
+- [x] The public API documentation (per TASK-015) reflects the new validation/error contract.
+- [x] CONTRACT-007 (if approved) defines the validation-error response shape and default-value behavior before implementation, since this is now externally-visible API behavior.
 
 ## Validation requirements
 
@@ -55,7 +55,24 @@ None.
 
 ## Implementation handoff
 
-Not started.
+Implemented shared request schemas and a single flattened-Zod error responder in
+`packages/daemon/src/routes/schemas.ts`, then applied fail-fast request validation to all scoped
+analytics, devices, coverage, and proposals handlers. Analytics `since`, traceroutes `since`, and
+terrain-cache raw SQL behavior remain unchanged per the human resolutions. Proposal POST/PATCH now
+reject non-object JSON before property access or DB work. Coverage DELETE now shares GET coordinate
+ranges and radius bounds. Added/updated analytics, devices, coverage, and proposals route tests and
+documented the uniform contract in canonical `API_PROMISES.md`.
+
+Validation: analytics 52/52 passed; focused devices/proposals/coverage 26/26 passed; daemon suite
+excluding `src/db/__tests__/open.test.ts` 172/172 passed; daemon typecheck, scoped lint, and scoped
+format check passed; web typecheck and 38/38 web tests passed. The unexcluded daemon suite cannot
+pass in this environment: Node v20.19.2 (repo requires >=22.13.0) cannot load
+`src/db/pglite.thread.ts`, causing 7 existing worker-proxy failures. `pnpm` is unavailable, so local
+package binaries were used; repo pins pnpm 11.21.0.
+
+Assumption: the previously unchecked `DELETE /api/node-overrides/:nodeId` uses the same `> 0`
+constraint as the sibling PUT route, as directed by the task owner. No response schemas were added.
+No files under `packages/daemon/src/device/` or `packages/daemon/src/mqtt/` were changed.
 
 ## Review
 

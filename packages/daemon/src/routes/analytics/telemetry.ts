@@ -1,7 +1,17 @@
+import { z } from "zod";
+
+import { deviceIdSchema, nodeIdSchema, sendValidationError } from "../schemas.js";
+
 import { parseSince } from "./shared.js";
 
 import type { PGlite } from "@electric-sql/pglite";
 import type { FastifyInstance } from "fastify";
+
+const telemetryHistoryQuerySchema = z.object({
+  since: z.string().default("24h"),
+  nodeId: nodeIdSchema({ sign: "any" }).optional(),
+  deviceId: deviceIdSchema.optional(),
+});
 
 export function buildTelemetryHistoryQuery(opts: {
   since?: string;
@@ -56,18 +66,10 @@ type TelemetryRow = {
 
 export async function registerTelemetryRoutes(app: FastifyInstance, db: PGlite) {
   app.get("/api/analytics/telemetry-history", async (req, reply) => {
-    const {
-      since = "24h",
-      nodeId,
-      deviceId,
-    } = req.query as { since?: string; nodeId?: string; deviceId?: string };
-    let parsedNodeId: number | undefined;
-    if (nodeId) {
-      parsedNodeId = Number(nodeId);
-      if (!Number.isFinite(parsedNodeId))
-        return reply.status(400).send({ error: "Invalid nodeId" });
-    }
-    const q = buildTelemetryHistoryQuery({ since, deviceId, nodeId: parsedNodeId });
+    const result = telemetryHistoryQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, nodeId, deviceId } = result.data;
+    const q = buildTelemetryHistoryQuery({ since, deviceId, nodeId });
     const { rows } = await db.query<TelemetryRow>(q.sql, q.params);
     const numFields = [
       "batteryLevel",

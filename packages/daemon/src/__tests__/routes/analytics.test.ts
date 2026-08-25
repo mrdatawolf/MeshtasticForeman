@@ -16,6 +16,15 @@ import {
 import type { PGlite } from "@electric-sql/pglite";
 import type { FastifyInstance } from "fastify";
 
+function expectValidationError(body: unknown, field: string) {
+  expect(body).toEqual({
+    error: {
+      fieldErrors: { [field]: expect.any(Array) },
+      formErrors: [],
+    },
+  });
+}
+
 describe("analytics REST endpoints", () => {
   let app: FastifyInstance;
   let db: PGlite;
@@ -207,7 +216,7 @@ describe("analytics REST endpoints", () => {
         url: "/api/analytics/snr-history?nodeId=nope",
       });
       expect(res.statusCode).toBe(400);
-      expect(res.json()).toEqual({ error: "Invalid nodeId" });
+      expectValidationError(res.json(), "nodeId");
     });
   });
 
@@ -237,7 +246,7 @@ describe("analytics REST endpoints", () => {
         url: "/api/analytics/message-volume?bucket=week",
       });
       expect(res.statusCode).toBe(400);
-      expect(res.json()).toEqual({ error: "bucket must be 'hour' or 'day'" });
+      expectValidationError(res.json(), "bucket");
     });
   });
 
@@ -294,12 +303,15 @@ describe("analytics REST endpoints", () => {
       expect(res.json()).toEqual([]);
     });
 
-    it("clamps the limit to at least one row", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: `/api/analytics/busiest-nodes?since=1h&deviceId=${DEVICE_A}&limit=-5`,
-      });
-      expect(res.json()).toEqual([{ nodeId: 202, received: 0, sent: 7, relayed: 0, total: 7 }]);
+    it("rejects non-numeric and out-of-range limits", async () => {
+      for (const limit of ["nope", "0", "101"]) {
+        const res = await app.inject({
+          method: "GET",
+          url: `/api/analytics/busiest-nodes?limit=${limit}`,
+        });
+        expect(res.statusCode).toBe(400);
+        expectValidationError(res.json(), "limit");
+      }
     });
   });
 
@@ -373,7 +385,7 @@ describe("analytics REST endpoints", () => {
         url: "/api/analytics/packet-timeline?bucket=day",
       });
       expect(res.statusCode).toBe(400);
-      expect(res.json()).toEqual({ error: "bucket must be 'minute' or 'hour'" });
+      expectValidationError(res.json(), "bucket");
     });
   });
 
@@ -550,7 +562,7 @@ describe("analytics REST endpoints", () => {
         url: "/api/analytics/telemetry-history?nodeId=NaN",
       });
       expect(res.statusCode).toBe(400);
-      expect(res.json()).toEqual({ error: "Invalid nodeId" });
+      expectValidationError(res.json(), "nodeId");
     });
   });
 
@@ -619,7 +631,7 @@ describe("analytics REST endpoints", () => {
         url: "/api/analytics/node-activity?bucket=minute",
       });
       expect(res.statusCode).toBe(400);
-      expect(res.json()).toEqual({ error: "bucket must be 'hour' or 'day'" });
+      expectValidationError(res.json(), "bucket");
     });
   });
 
@@ -682,21 +694,20 @@ describe("analytics REST endpoints", () => {
       expect(res.json()).toEqual([]);
     });
 
-    it("rejects invalid nodeId and clamps limit to at least one", async () => {
+    it("rejects invalid nodeId and out-of-range limit", async () => {
       const invalid = await app.inject({
         method: "GET",
         url: "/api/analytics/position-history?nodeId=bad",
       });
       expect(invalid.statusCode).toBe(400);
-      expect(invalid.json()).toEqual({ error: "Invalid nodeId" });
+      expectValidationError(invalid.json(), "nodeId");
 
       const limited = await app.inject({
         method: "GET",
         url: `/api/analytics/position-history?deviceId=${DEVICE_A}&since=all&limit=-9`,
       });
-      expect(limited.json()).toEqual([
-        expect.objectContaining({ id: "position-new", nodeId: 101, recordedAt: recent }),
-      ]);
+      expect(limited.statusCode).toBe(400);
+      expectValidationError(limited.json(), "limit");
     });
   });
 
@@ -732,12 +743,30 @@ describe("analytics REST endpoints", () => {
       expect(res.json()).toEqual([]);
     });
 
-    it("clamps limit and negative offset while preserving filters", async () => {
+    it("rejects non-numeric and out-of-range limit/offset values", async () => {
+      for (const [field, value] of [
+        ["limit", "nope"],
+        ["limit", "5001"],
+        ["offset", "nope"],
+        ["offset", "-1"],
+        ["offset", "5001"],
+      ]) {
+        const res = await app.inject({
+          method: "GET",
+          url: `/api/analytics/packet-log?${field}=${value}`,
+        });
+        expect(res.statusCode).toBe(400);
+        expectValidationError(res.json(), field);
+      }
+    });
+
+    it("rejects a non-UUID deviceId before querying", async () => {
       const res = await app.inject({
         method: "GET",
-        url: `/api/analytics/packet-log?deviceId=${DEVICE_A}&portnum=TEXT_MESSAGE_APP&since=1h&limit=-1&offset=-20`,
+        url: "/api/analytics/packet-log?deviceId=not-a-uuid",
       });
-      expect(res.json()).toEqual([expect.objectContaining({ id: "csv-packet", packetId: 4242 })]);
+      expect(res.statusCode).toBe(400);
+      expectValidationError(res.json(), "deviceId");
     });
   });
 

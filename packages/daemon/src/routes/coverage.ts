@@ -1,3 +1,7 @@
+import { z } from "zod";
+
+import { sendValidationError } from "./schemas.js";
+
 import type { DaemonConfig } from "../config.js";
 import type { PGlite } from "@electric-sql/pglite";
 import type { FastifyInstance } from "fastify";
@@ -21,6 +25,23 @@ const ELEVATION_CHUNK_DELAY_MS = 250;
 
 /** Max retries on HTTP 429 with exponential back-off. */
 const ELEVATION_MAX_RETRIES = 4;
+
+const coordinatesSchema = {
+  lat: z.coerce.number().finite().min(-90).max(90),
+  lon: z.coerce.number().finite().min(-180).max(180),
+};
+const radiusKmSchema = z.coerce.number().finite().min(0.5).max(50);
+const viewshedQuerySchema = z.object({
+  ...coordinatesSchema,
+  altitudeM: z.coerce.number().finite().min(0).default(2),
+  radiusKm: radiusKmSchema.default(10),
+  radials: z.coerce.number().int().min(8).max(72).default(36),
+});
+const elevationQuerySchema = z.object(coordinatesSchema);
+const deleteViewshedQuerySchema = z.object({
+  ...coordinatesSchema,
+  radiusKm: radiusKmSchema.default(20),
+});
 
 // ---------------------------------------------------------------------------
 // Elevation cache
@@ -217,18 +238,10 @@ export async function registerCoverageRoutes(
    *   radials    – number of angular rays to cast (default 36, max 72)
    */
   app.get("/api/coverage/viewshed", async (req, reply) => {
-    const q = req.query as Record<string, string | undefined>;
-
-    const lat = Number(q.lat);
-    const lon = Number(q.lon);
-    const antennaM = Math.max(0, Number(q.altitudeM ?? 2) || 2);
-    const radiusKm = Math.min(50, Math.max(0.5, Number(q.radiusKm ?? 10) || 10));
-    const numRadials = Math.min(72, Math.max(8, Number(q.radials ?? 36) || 36));
+    const result = viewshedQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { lat, lon, altitudeM: antennaM, radiusKm, radials: numRadials } = result.data;
     const numSteps = 15; // fixed: balances API call volume vs. resolution
-
-    if (!isFinite(lat) || !isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-      return reply.status(400).send({ error: "Invalid lat/lon" });
-    }
 
     // ── Viewshed cache lookup ──────────────────────────────────────────────
     // Key at ~1 km precision (2 decimal places).  A node that hasn't moved
@@ -368,27 +381,18 @@ export async function registerCoverageRoutes(
    * Response: { elevationM: number }
    */
   app.get("/api/elevation", async (req, reply) => {
-    const q = req.query as Record<string, string | undefined>;
-    const lat = Number(q.lat);
-    const lon = Number(q.lon);
-
-    if (!isFinite(lat) || lat < -90 || lat > 90 || !isFinite(lon) || lon < -180 || lon > 180) {
-      return reply.status(400).send({ error: "Invalid lat/lon" });
-    }
+    const result = elevationQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { lat, lon } = result.data;
 
     const [elevationM] = await fetchElevations(db, [{ lat, lon }], config.coverage.elevationApiUrl);
     return { elevationM };
   });
 
   app.delete("/api/coverage/viewshed", async (req, reply) => {
-    const q = req.query as Record<string, string | undefined>;
-    const lat = Number(q.lat);
-    const lon = Number(q.lon);
-    const radiusKm = Number(q.radiusKm ?? 20);
-
-    if (!isFinite(lat) || !isFinite(lon)) {
-      return reply.status(400).send({ error: "Invalid lat/lon" });
-    }
+    const result = deleteViewshedQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { lat, lon, radiusKm } = result.data;
 
     const latKey = lat.toFixed(2);
     const lonKey = lon.toFixed(2);

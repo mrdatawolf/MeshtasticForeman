@@ -1,7 +1,24 @@
+import { z } from "zod";
+
+import { deviceIdSchema, limitSchema, offsetSchema, sendValidationError } from "../schemas.js";
+
 import { buildFilters, parseSince } from "./shared.js";
 
 import type { PGlite } from "@electric-sql/pglite";
 import type { FastifyInstance } from "fastify";
+
+const packetQuerySchema = z.object({
+  since: z.string().default("24h"),
+  deviceId: deviceIdSchema.optional(),
+});
+const packetTimelineQuerySchema = packetQuerySchema.extend({
+  bucket: z.enum(["minute", "hour"]).default("hour"),
+});
+const packetLogFiltersSchema = packetQuerySchema.extend({ portnum: z.string().optional() });
+const packetLogQuerySchema = packetLogFiltersSchema.extend({
+  limit: limitSchema(5_000, 500),
+  offset: offsetSchema(5_000),
+});
 
 type PacketLogRow = {
   id: string;
@@ -74,20 +91,18 @@ export function buildPacketLogQuery(opts: {
 }
 
 export async function registerPacketsRoutes(app: FastifyInstance, db: PGlite) {
-  app.get("/api/analytics/portnum-breakdown", async (req) => {
-    const { since = "24h", deviceId } = req.query as { since?: string; deviceId?: string };
+  app.get("/api/analytics/portnum-breakdown", async (req, reply) => {
+    const result = packetQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, deviceId } = result.data;
     const q = buildPortnumBreakdownQuery({ since, deviceId });
     const { rows } = await db.query<{ portnum_name: string; count: string }>(q.sql, q.params);
     return rows.map((r) => ({ portnumName: r.portnum_name, count: Number(r.count) }));
   });
   app.get("/api/analytics/packet-timeline", async (req, reply) => {
-    const {
-      since = "24h",
-      bucket = "hour",
-      deviceId,
-    } = req.query as { since?: string; bucket?: string; deviceId?: string };
-    if (bucket !== "minute" && bucket !== "hour")
-      return reply.status(400).send({ error: "bucket must be 'minute' or 'hour'" });
+    const result = packetTimelineQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, bucket, deviceId } = result.data;
     const q = buildPacketTimelineQuery({ since, deviceId, bucket });
     const { rows } = await db.query<{ ts: string; portnum_name: string; count: string }>(
       q.sql,
@@ -104,22 +119,10 @@ export async function registerPacketsRoutes(app: FastifyInstance, db: PGlite) {
     }
     return [...byTs.values()].sort((a, b) => a.ts.localeCompare(b.ts));
   });
-  app.get("/api/analytics/packet-log", async (req) => {
-    const {
-      since = "24h",
-      deviceId,
-      portnum,
-      limit: lStr,
-      offset: oStr,
-    } = req.query as {
-      since?: string;
-      deviceId?: string;
-      portnum?: string;
-      limit?: string;
-      offset?: string;
-    };
-    const limit = Math.min(5_000, Math.max(1, parseInt(lStr ?? "500", 10) || 500));
-    const offset = Math.max(0, parseInt(oStr ?? "0", 10) || 0);
+  app.get("/api/analytics/packet-log", async (req, reply) => {
+    const result = packetLogQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, deviceId, portnum, limit, offset } = result.data;
     const q = buildPacketLogQuery({ since, deviceId, portnum, limit, offset });
     const { rows } = await db.query<PacketLogRow>(q.sql, q.params);
     return rows.map((r) => ({
@@ -138,11 +141,9 @@ export async function registerPacketsRoutes(app: FastifyInstance, db: PGlite) {
     }));
   });
   app.get("/api/analytics/packet-log.csv", async (req, reply) => {
-    const {
-      since = "24h",
-      deviceId,
-      portnum,
-    } = req.query as { since?: string; deviceId?: string; portnum?: string };
+    const result = packetLogFiltersSchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, deviceId, portnum } = result.data;
     const q = buildPacketLogQuery({ since, deviceId, portnum, limit: 50_000, offset: 0 });
     const { rows } = await db.query<PacketLogRow>(q.sql, q.params);
     const header =

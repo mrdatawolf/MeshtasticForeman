@@ -1,7 +1,14 @@
+import { z } from "zod";
+
+import { deviceIdSchema, sendValidationError } from "../schemas.js";
+
 import { parseSince } from "./shared.js";
 
 import type { PGlite } from "@electric-sql/pglite";
 import type { FastifyInstance } from "fastify";
+
+const deviceQuerySchema = z.object({ deviceId: deviceIdSchema.optional() });
+const neighborQuerySchema = deviceQuerySchema.extend({ since: z.string().default("24h") });
 
 export function buildHopDistributionQuery(deviceId?: string) {
   const conditions = ["hops_away IS NOT NULL"];
@@ -52,14 +59,18 @@ export function buildNeighborGraphQuery(opts: { since?: string; deviceId?: strin
 }
 
 export async function registerNetworkRoutes(app: FastifyInstance, db: PGlite) {
-  app.get("/api/analytics/hop-distribution", async (req) => {
-    const { deviceId } = req.query as { deviceId?: string };
+  app.get("/api/analytics/hop-distribution", async (req, reply) => {
+    const result = deviceQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { deviceId } = result.data;
     const q = buildHopDistributionQuery(deviceId);
     const { rows } = await db.query<{ hops_away: number; count: string }>(q.sql, q.params);
     return rows.map((r) => ({ hopsAway: r.hops_away, count: Number(r.count) }));
   });
-  app.get("/api/analytics/hardware-breakdown", async (req) => {
-    const { deviceId } = req.query as { deviceId?: string };
+  app.get("/api/analytics/hardware-breakdown", async (req, reply) => {
+    const result = deviceQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { deviceId } = result.data;
     const q = buildHardwareBreakdownQuery(deviceId);
     const { rows } = await db.query<{
       hw_model: number;
@@ -72,8 +83,10 @@ export async function registerNetworkRoutes(app: FastifyInstance, db: PGlite) {
       count: Number(r.count),
     }));
   });
-  app.get("/api/analytics/neighbor-graph", async (req) => {
-    const { since = "24h", deviceId } = req.query as { since?: string; deviceId?: string };
+  app.get("/api/analytics/neighbor-graph", async (req, reply) => {
+    const result = neighborQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, deviceId } = result.data;
     const q = buildNeighborGraphQuery({ since, deviceId });
     const { rows } = await db.query<{
       from_node_id: string;

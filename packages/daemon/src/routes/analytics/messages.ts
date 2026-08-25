@@ -1,3 +1,7 @@
+import { z } from "zod";
+
+import { deviceIdSchema, limitSchema, sendValidationError } from "../schemas.js";
+
 import { buildFilters, parseSince, percentile } from "./shared.js";
 
 import type { PGlite } from "@electric-sql/pglite";
@@ -10,6 +14,16 @@ const LATENCY_BUCKETS = [
   { label: "30s-1m", maxMs: 60_000 },
   { label: ">1m", maxMs: Infinity },
 ];
+
+const analyticsQuerySchema = z.object({
+  since: z.string().optional(),
+  deviceId: deviceIdSchema.optional(),
+});
+const sevenDayQuerySchema = analyticsQuerySchema.extend({ since: z.string().default("7d") });
+const bucketQuerySchema = sevenDayQuerySchema.extend({
+  bucket: z.enum(["hour", "day"]).default("hour"),
+});
+const busiestNodesQuerySchema = sevenDayQuerySchema.extend({ limit: limitSchema(100, 20) });
 
 export function buildMessageVolumeQuery(opts: {
   since?: string;
@@ -117,13 +131,9 @@ export function buildNodeActivityQuery(opts: {
 
 export async function registerMessagesRoutes(app: FastifyInstance, db: PGlite) {
   app.get("/api/analytics/message-volume", async (req, reply) => {
-    const {
-      since = "7d",
-      bucket = "hour",
-      deviceId,
-    } = req.query as { since?: string; bucket?: string; deviceId?: string };
-    if (bucket !== "hour" && bucket !== "day")
-      return reply.status(400).send({ error: "bucket must be 'hour' or 'day'" });
+    const result = bucketQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, bucket, deviceId } = result.data;
     const q = buildMessageVolumeQuery({ since, deviceId, bucket });
     const { rows } = await db.query<{
       ts: string;
@@ -140,8 +150,10 @@ export async function registerMessagesRoutes(app: FastifyInstance, db: PGlite) {
       total: Number(r.total),
     }));
   });
-  app.get("/api/analytics/message-delivery", async (req) => {
-    const { since, deviceId } = req.query as { since?: string; deviceId?: string };
+  app.get("/api/analytics/message-delivery", async (req, reply) => {
+    const result = analyticsQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, deviceId } = result.data;
     const q = buildMessageDeliveryQueries({ since, deviceId });
     const [statusRows, errorRows] = await Promise.all([
       db.query<{ ack_status: string | null; count: string }>(q.statusSql, q.params),
@@ -167,16 +179,14 @@ export async function registerMessagesRoutes(app: FastifyInstance, db: PGlite) {
       })),
     };
   });
-  app.get("/api/analytics/busiest-nodes", async (req) => {
-    const {
-      since = "7d",
-      limit = "20",
-      deviceId,
-    } = req.query as { since?: string; limit?: string; deviceId?: string };
+  app.get("/api/analytics/busiest-nodes", async (req, reply) => {
+    const result = busiestNodesQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, limit, deviceId } = result.data;
     const q = buildBusiestNodesQuery({
       since,
       deviceId,
-      limit: Math.min(Math.max(1, Number(limit) || 20), 100),
+      limit,
     });
     const { rows } = await db.query<{
       node_id: string;
@@ -193,8 +203,10 @@ export async function registerMessagesRoutes(app: FastifyInstance, db: PGlite) {
       total: Number(r.total),
     }));
   });
-  app.get("/api/analytics/channel-utilization", async (req) => {
-    const { since = "7d", deviceId } = req.query as { since?: string; deviceId?: string };
+  app.get("/api/analytics/channel-utilization", async (req, reply) => {
+    const result = sevenDayQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, deviceId } = result.data;
     const q = buildChannelUtilizationQuery({ since, deviceId });
     const { rows } = await db.query<{
       channel_index: number;
@@ -213,8 +225,10 @@ export async function registerMessagesRoutes(app: FastifyInstance, db: PGlite) {
       total: Number(r.total),
     }));
   });
-  app.get("/api/analytics/message-latency", async (req) => {
-    const { since = "7d", deviceId } = req.query as { since?: string; deviceId?: string };
+  app.get("/api/analytics/message-latency", async (req, reply) => {
+    const result = sevenDayQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, deviceId } = result.data;
     const q = buildMessageLatencyQuery({ since, deviceId });
     const { rows } = await db.query<{ latency_ms: number }>(q.sql, q.params);
     if (rows.length === 0)
@@ -238,13 +252,9 @@ export async function registerMessagesRoutes(app: FastifyInstance, db: PGlite) {
     };
   });
   app.get("/api/analytics/node-activity", async (req, reply) => {
-    const {
-      since = "7d",
-      bucket = "hour",
-      deviceId,
-    } = req.query as { since?: string; bucket?: string; deviceId?: string };
-    if (bucket !== "hour" && bucket !== "day")
-      return reply.status(400).send({ error: "bucket must be 'hour' or 'day'" });
+    const result = bucketQuerySchema.safeParse(req.query);
+    if (!result.success) return sendValidationError(reply, result.error);
+    const { since, bucket, deviceId } = result.data;
     const q = buildNodeActivityQuery({ since, deviceId, bucket });
     const { rows } = await db.query<{ ts: string; node_id: string; count: string }>(
       q.sql,

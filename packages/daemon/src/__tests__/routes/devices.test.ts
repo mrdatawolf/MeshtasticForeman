@@ -37,6 +37,12 @@ async function buildApp(mock: MockDeviceManager) {
   return app;
 }
 
+function expectValidationError(body: unknown, field: string) {
+  expect(body).toEqual({
+    error: { fieldErrors: { [field]: expect.any(Array) }, formErrors: [] },
+  });
+}
+
 // ---------------------------------------------------------------------------
 
 describe("GET /api/devices", () => {
@@ -164,5 +170,26 @@ describe("DELETE /api/devices/:id", () => {
       url: "/api/devices/00000000-0000-0000-0000-000000000000",
     });
     expect(res.statusCode).toBe(204);
+  });
+
+  it("rejects a non-UUID id before disconnecting", async () => {
+    const app = await buildApp(mock);
+    const res = await app.inject({ method: "DELETE", url: "/api/devices/not-a-uuid" });
+    expect(res.statusCode).toBe(400);
+    expectValidationError(res.json(), "id");
+    expect(mock.disconnect).not.toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /api/node-overrides/:nodeId", () => {
+  it("rejects a non-numeric nodeId without querying the DB", async () => {
+    const mock = makeMockDeviceManager();
+    const db = { query: vi.fn() };
+    const app = Fastify({ logger: false });
+    await registerDeviceRoutes(app, mock as never, null, db as never);
+    const res = await app.inject({ method: "DELETE", url: "/api/node-overrides/nope" });
+    expect(res.statusCode).toBe(400);
+    expectValidationError(res.json(), "nodeId");
+    expect(db.query).not.toHaveBeenCalled();
   });
 });
