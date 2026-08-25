@@ -23,26 +23,27 @@ before which task can move to `tasks/approved/`.
 
 | ID | Subject | Blocks |
 |---|---|---|
-| ADR-001 | WebSocket/App-state ownership (reducer vs. store) | TASK-017 (hard blocker) |
-| CONTRACT-001 (drafted, `docs/contracts/CONTRACT-001-consolidated-pglite-proxy-behavior.md`, status Proposed) | Consolidated PGlite proxy behavior | TASK-012 |
-| CONTRACT-002 (borderline — propose and let the human decide) | Frontend HTTP client conventions | TASK-013 |
-| CONTRACT-003 | Daemon configuration module | TASK-014 |
-| CONTRACT-004 | DeviceManager reduced public API/event surface | TASK-024 |
-| CONTRACT-005 | Meshtastic adapter layer (unknown -> typed) | TASK-023 |
-| CONTRACT-006 | MqttGateway split module boundaries | TASK-025 |
-| CONTRACT-007 | REST validation/error/default behavior | TASK-027 |
-| CONTRACT-008 | Graceful shutdown ordering | TASK-029 |
-| CONTRACT-009 | Data retention/pruning policy | TASK-032 |
-| CONTRACT-010 | Health/readiness endpoint semantics | TASK-033 |
-| CONTRACT-011 (optional, Jarvis's addition) | Map coverage-math correctness | TASK-011 |
-| CONTRACT-012 (optional, Jarvis's addition) | Device-config pure transform functions | TASK-021 |
+| ADR-001 (**Accepted** — reducer, `docs/decisions/ADR-001-websocket-app-state-ownership.md`) | WebSocket/App-state ownership | TASK-017 (unblocked) |
+| CONTRACT-001 (**Accepted**, `docs/contracts/CONTRACT-001-consolidated-pglite-proxy-behavior.md`) | Consolidated PGlite proxy behavior | TASK-012 (unblocked) |
+| CONTRACT-002 (**Accepted**) | Frontend HTTP client conventions | TASK-013 (unblocked) |
+| CONTRACT-003 (**Accepted**) | Daemon configuration module | TASK-014 (unblocked) |
+| CONTRACT-004 (drafted, Proposed) | DeviceManager reduced public API/event surface | TASK-024 |
+| CONTRACT-005 (drafted, Proposed) | Meshtastic adapter layer (unknown -> typed) | TASK-023 |
+| CONTRACT-006 (drafted, Proposed) | MqttGateway split module boundaries | TASK-025 |
+| CONTRACT-007 (drafted, Proposed) | REST validation/error/default behavior | TASK-027 |
+| CONTRACT-008 (drafted, Proposed) | Graceful shutdown ordering | TASK-029 |
+| CONTRACT-009 (drafted, Proposed) | Data retention/pruning policy | TASK-032 |
+| CONTRACT-010 (drafted, Proposed) | Health/readiness endpoint semantics | TASK-033 |
+| CONTRACT-011 (not yet drafted, optional) | Map coverage-math correctness | TASK-011 |
+| CONTRACT-012 (**Accepted**) | Device-config pure transform functions | TASK-021 (contract unblocked; task itself explicitly held for Patrick) |
 | ADR-002, ADR-003, ADR-004 (retrospective, produced by TASK-034) | PGlite worker pattern, MQTT bridging, multi-device stance | Block nothing |
 
-None of CONTRACT-001 through CONTRACT-012 have been written yet — only
-ADR-001 exists so far (`docs/decisions/ADR-001-websocket-app-state-ownership.md`,
-status Proposed). Route the recommended contracts to `contract-architect`
-once their owning task is approved and before implementation begins, per
-`docs/workflow/change-classification.md`.
+CONTRACT-004 through CONTRACT-010 were drafted 2026-08-24 in one batch, all
+`Status: Proposed` and awaiting Patrick's review/acceptance — see each file
+under `docs/contracts/` for the specific open questions each one flagged for
+human decision (several are genuinely undecided product/architecture
+questions, not just characterization, most notably CONTRACT-009's retention
+windows and CONTRACT-008's shutdown-order/rework-risk tradeoff).
 
 A few decisions Jarvis flagged for explicit human judgment rather than
 resolving unilaterally: TASK-004's version-of-truth choice, TASK-013 /
@@ -116,3 +117,49 @@ roadmap. It surfaced a real gap: the daemon's startup path never calls
 followed by a restart currently fails rather than self-healing. Per the
 human's direction this is *not* being folded into TASK-012 — **TASK-039**
 (new, proposed, depends on TASK-012) is the fast-follow fix.
+
+## Session update (2026-08-24, continued)
+
+**CONTRACT-012** was drafted for TASK-021 (device-config transform behavior)
+at Patrick's request and is now **Accepted**. Its four open questions are
+resolved: (1) payload-comparison granularity — deep equality, not strict
+serialization; (2) wizard's missing `SET_CONFIG_FAILED` handling — real gap,
+follow-up is **TASK-040** (new, proposed, depends on TASK-021); (3) unscoped
+completion-event correlation (multi-device false-positive) — also a real
+gap, follow-up is **TASK-041** (new, proposed, depends on TASK-021); (4)
+`ConfigCard` test-file gap — folded directly into TASK-021's own scope and
+acceptance criteria rather than tracked separately. **TASK-021 itself is
+explicitly held pending Patrick's go-ahead** despite its contract being
+accepted — do not dispatch to `openai-coder` until he says so.
+
+**CONTRACT-004 through CONTRACT-010** were all drafted in this session (see
+table above) for the Stage-5/6 daemon tasks still in `tasks/proposed/` that
+recommended a contract but didn't have one yet. All `Status: Proposed`,
+awaiting review. Notably: CONTRACT-009 (retention) found that TASK-032's
+"activity" and "telemetry" categories don't map to real tables the way the
+task assumed, and surfaced 3 more unbounded tables not named in the task's
+title — flagged for Patrick's scoping decision. CONTRACT-008 (shutdown)
+flags a real rework-risk tradeoff: drafted against the current pre-split
+`MqttGateway`, may need revision once TASK-025 lands.
+
+**TASK-035** (dependency/runtime review cadence) implemented by `librarian`
+— `docs/DEVELOPMENT.md` now documents a quarterly cadence. Not yet
+committed.
+
+**TASK-039** (clear stale PGlite lock) implemented — `client.ts` now calls
+`clearDbLock(DATA_DIR)` before `openDb(DATA_DIR)`, matching the terrain-cache
+scripts' precedent exactly; full daemon suite (156/156) passes. **Important
+finding from independent manual verification**: the specific failure this
+task set out to fix — a stale `postmaster.pid` blocking/hanging a restart
+after an unclean (`kill -9`) shutdown — did **not** reproduce against the
+currently pinned `@electric-sql/pglite@0.4.6` in two independent manual
+trials; `openDb()` succeeded immediately every time even without
+`clearDbLock()`, and a clean `close()` afterward removed the lock file on its
+own. The fix is still safe, cheap, and matches an established precedent
+(explicitly recommended to keep), but TASK-039's acceptance criterion of
+*reproducing* the original failure could not be honestly checked off in this
+environment/version — flagged for Patrick rather than silently marked done.
+Not yet committed.
+
+**TASK-026** (split `routes/analytics.ts` by domain) dispatched to
+`openai-coder`, in progress as of this writing.

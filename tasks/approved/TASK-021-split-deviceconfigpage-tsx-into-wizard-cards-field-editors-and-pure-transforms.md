@@ -4,11 +4,11 @@ Owner role: UX Specialist
 Assigned agent: interface-designer
 Proposed by: jarvis
 Proposed date: 2026-08-24
-Approved by:
-Approved date:
-Related contracts: **CONTRACT-012 recommended, optional/my addition** (pure configuration-transformation functions carry real consequence — a bad transform could misconfigure a physical radio — but this wasn't one of your named Stage 3–5 examples, so treat as a suggestion to accept or decline)
+Approved by: Patrick
+Approved date: 08/24/26
+Related contracts: **CONTRACT-012 (Accepted 08/24/26)** — pins down the current wizard/field-edit transform behavior this split must preserve exactly.
 Related ADRs: None
-Dependencies: TASK-011 (setup-wizard output logic already extracted and tested)
+Dependencies: TASK-011 (setup-wizard output logic already extracted and tested). CONTRACT-012 is accepted, but Patrick has asked that implementation of this task specifically wait for his go-ahead — do not dispatch to openai-coder until he says so.
 
 ## Desired outcome
 
@@ -24,6 +24,8 @@ This page pushes configuration to a physically connected radio via `setDeviceCon
 
 Extracting the setup wizard (building on TASK-011's already-extracted wizard-output logic), configuration cards, individual field editors, and any remaining pure configuration-transformation functions (defaults/merging beyond what TASK-011 already extracted) into separate modules/components.
 
+A test file for `ConfigCard`'s direct-edit transform (`draft` accumulation, partial-value payload construction), matching the existing `setupWizardOutput.test.ts`/`configMerge.test.ts` pattern — CONTRACT-012 flagged that no such test exists today; Patrick confirmed on 2026-08-24 this should be added as part of this task rather than tracked separately.
+
 ### Excluded
 
 Any change to what configuration options exist or how they're validated before sending to the device — behavior-preserving restructuring only.
@@ -35,8 +37,9 @@ Any change to what configuration options exist or how they're validated before s
 ## Acceptance criteria
 
 - [ ] Setup wizard, configuration cards, field editors, and pure transformation functions are each in separate, focused modules.
-- [ ] No change to what configuration values get sent to the device for a given set of user inputs (verified by comparing the constructed `setDeviceConfigSchema` payload before/after for representative inputs).
+- [ ] No change to what configuration values get sent to the device for a given set of user inputs (verified by comparing the constructed `setDeviceConfigSchema` payload before/after for representative inputs, using deep equality — not strict serialization — per CONTRACT-012's resolved Open question #1).
 - [ ] No visible change to the wizard or configuration UI (manual regression pass).
+- [ ] A new test file characterizes `ConfigCard`'s direct-edit transform (draft accumulation, partial-value payload construction), matching CONTRACT-012's documented behavior.
 
 ## Validation requirements
 
