@@ -246,12 +246,29 @@ async function handleClientCommand(
         );
         return;
       }
-      const packetId = await device.meshDevice.sendText(
-        text,
-        toNodeId,
-        wantAck,
-        channelIndex as Types.ChannelNumber,
-      );
+      let packetId: number;
+      try {
+        packetId = await device.meshDevice.sendText(
+          text,
+          toNodeId,
+          wantAck,
+          channelIndex as Types.ChannelNumber,
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log.warn({ deviceId, operation: "send-message", toNodeId, err }, "message send failed");
+        socket.send(
+          JSON.stringify({
+            type: "message:send-failed",
+            payload: {
+              clientMsgId: command.payload.clientMsgId ?? null,
+              deviceId,
+              message,
+            },
+          } satisfies ServerEvent),
+        );
+        return;
+      }
       const txTime = new Date().toISOString();
       const msgId = randomUUID();
       const myNodeId = deviceManager.getMyNodeId(deviceId) ?? 0;

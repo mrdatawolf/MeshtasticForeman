@@ -35,6 +35,10 @@ export type ServerEvent =
         ackError: string | null;
       };
     }
+  | {
+      type: "message:send-failed";
+      payload: { clientMsgId: string | null; deviceId: string; message: string };
+    }
   | { type: "packet:raw"; payload: Packet }
   | { type: "channel:list"; payload: Channel[] }
   | { type: "waypoint:update"; payload: Waypoint }
@@ -66,6 +70,7 @@ export const sendMessageSchema = z.object({
     toNodeId: z.number().int(),
     channelIndex: z.number().int().min(0).max(7),
     wantAck: z.boolean().default(true),
+    clientMsgId: z.string().min(1).optional(),
   }),
 });
 

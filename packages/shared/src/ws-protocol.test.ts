@@ -121,6 +121,21 @@ describe("client command schemas", () => {
     }
   });
 
+  it("accepts an optional clientMsgId on message:send", () => {
+    expect(
+      sendMessageSchema.safeParse({
+        type: "message:send",
+        payload: {
+          deviceId,
+          text: "hello",
+          toNodeId: 42,
+          channelIndex: 0,
+          clientMsgId: "local-123",
+        },
+      }).success,
+    ).toBe(true);
+  });
+
   it("rejects an unknown command type", () => {
     expect(clientCommandSchema.safeParse({ type: "message:unknown", payload: {} }).success).toBe(
       false,
@@ -275,6 +290,10 @@ const serverEventFixtures = {
       ackError: null,
     },
   },
+  "message:send-failed": {
+    type: "message:send-failed",
+    payload: { clientMsgId: "local-123", deviceId, message: "radio unavailable" },
+  },
   "packet:raw": { type: "packet:raw", payload: packet },
   "channel:list": { type: "channel:list", payload: [channel] },
   "waypoint:update": { type: "waypoint:update", payload: waypoint },
@@ -297,6 +316,6 @@ const serverEventFixtures = {
 
 describe("server event fixtures", () => {
   it("covers every current server event variant", () => {
-    expect(Object.keys(serverEventFixtures)).toHaveLength(23);
+    expect(Object.keys(serverEventFixtures)).toHaveLength(24);
   });
 });
