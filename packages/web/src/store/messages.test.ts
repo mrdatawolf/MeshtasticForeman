@@ -74,4 +74,27 @@ describe("message store WebSocket events", () => {
       },
     ]);
   });
+
+  it("buckets a live relayed message by sender and deduplicates a later history load", () => {
+    const relayed: Message = {
+      ...message,
+      id: "relayed-message-1",
+      packetId: 4400,
+      fromNodeId: 200,
+      toNodeId: 300,
+      channelIndex: 2,
+      text: null,
+      role: "relayed",
+    };
+    clearConversation(relayed.fromNodeId);
+
+    clientMock.emit({ type: "message:received", payload: relayed });
+
+    expect(getConversation(relayed.fromNodeId)).toEqual([relayed]);
+    expect(getConversation(relayed.toNodeId)).toEqual([]);
+
+    clientMock.emit({ type: "message:history", payload: [relayed] });
+
+    expect(getConversation(relayed.fromNodeId)).toEqual([relayed]);
+  });
 });
