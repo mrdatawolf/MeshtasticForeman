@@ -35,6 +35,15 @@
   font-size: 0.85rem;
 }
 
+.statusBannerError {
+  padding: 0.3rem 0.75rem;
+  margin-top: 1rem;
+  font-size: 0.72rem;
+  border-top: 1px solid #1e293b;
+  background: #2d0f0f;
+  color: #f87171;
+}
+
 .changesList {
   display: flex;
   flex-direction: column;

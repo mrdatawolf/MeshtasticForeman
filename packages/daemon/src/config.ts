@@ -30,6 +30,19 @@ export interface DaemonConfig {
   coverage: {
     elevationApiUrl: string; // ELEVATION_API_URL, default public Open-Elevation API
   };
+  retention: {
+    enabled: boolean; // RETENTION_ENABLED, default false
+    sweepIntervalHours: number; // RETENTION_SWEEP_INTERVAL_HOURS, default 24
+    packets: {
+      maxRowsPerDevice: number; // RETENTION_PACKETS_MAX_ROWS_PER_DEVICE, default 100000
+    };
+    telemetry: {
+      windowDays: number; // RETENTION_TELEMETRY_WINDOW_DAYS, default 365
+    };
+    cache: {
+      windowDays: number; // RETENTION_CACHE_WINDOW_DAYS, default 180
+    };
+  };
 }
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -65,6 +78,11 @@ export const daemonConfigSchema = z
     PGLITE_DIR: z.string().default(defaultPgliteDir),
     ELEVATION_API_URL: z.string().url().default("https://api.open-elevation.com/api/v1/lookup"),
     BOT_ENABLED: exactTrue,
+    RETENTION_ENABLED: exactTrue,
+    RETENTION_SWEEP_INTERVAL_HOURS: positiveInteger("24"),
+    RETENTION_PACKETS_MAX_ROWS_PER_DEVICE: positiveInteger("100000"),
+    RETENTION_TELEMETRY_WINDOW_DAYS: positiveInteger("365"),
+    RETENTION_CACHE_WINDOW_DAYS: positiveInteger("180"),
   })
   .transform((env): DaemonConfig => ({
     api: { port: env.API_PORT, host: env.API_HOST, webDist: env.WEB_DIST },
@@ -80,6 +98,13 @@ export const daemonConfigSchema = z
     meshtastic: { port: env.MESHTASTIC_PORT, name: env.MESHTASTIC_NAME },
     bot: { enabled: env.BOT_ENABLED },
     coverage: { elevationApiUrl: env.ELEVATION_API_URL },
+    retention: {
+      enabled: env.RETENTION_ENABLED,
+      sweepIntervalHours: env.RETENTION_SWEEP_INTERVAL_HOURS,
+      packets: { maxRowsPerDevice: env.RETENTION_PACKETS_MAX_ROWS_PER_DEVICE },
+      telemetry: { windowDays: env.RETENTION_TELEMETRY_WINDOW_DAYS },
+      cache: { windowDays: env.RETENTION_CACHE_WINDOW_DAYS },
+    },
   }));
 
 /** Throws a formatted, multi-issue error when environment validation fails. */

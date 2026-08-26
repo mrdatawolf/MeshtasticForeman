@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { runMigrations } from "../../db/migrations.js";
 
-const LATEST_MIGRATION_VERSION = 18;
+const LATEST_MIGRATION_VERSION = 19;
 
 type MigrationRow = { version: number };
 
@@ -36,6 +36,16 @@ async function columnExists(db: PGlite, tableName: string, columnName: string) {
   return rows[0].exists;
 }
 
+async function indexExists(db: PGlite, indexName: string) {
+  const { rows } = await db.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = $1
+     ) AS exists`,
+    [indexName],
+  );
+  return rows[0].exists;
+}
+
 async function expectLatestSchema(db: PGlite) {
   expect(await migrationVersions(db)).toEqual(
     Array.from({ length: LATEST_MIGRATION_VERSION }, (_, index) => index + 1),
@@ -49,6 +59,9 @@ async function expectLatestSchema(db: PGlite) {
   await expect(columnExists(db, "mqtt_nodes", "distance_m")).resolves.toBe(true);
   await expect(columnExists(db, "mqtt_nodes", "channel_name")).resolves.toBe(true);
   await expect(columnExists(db, "messages", "reply_to_packet_id")).resolves.toBe(true);
+  await expect(indexExists(db, "packets_portnum_name_time")).resolves.toBe(true);
+  await expect(indexExists(db, "elevation_cache_cached_at")).resolves.toBe(true);
+  await expect(indexExists(db, "viewshed_cache_cached_at")).resolves.toBe(true);
 }
 
 async function applyVersionOneFixture(db: PGlite) {
@@ -77,6 +90,18 @@ async function applyVersionOneFixture(db: PGlite) {
       hop_limit     INT,
       want_ack      BOOLEAN NOT NULL DEFAULT false,
       via_mqtt      BOOLEAN NOT NULL DEFAULT false
+    );
+
+    CREATE TABLE packets (
+      id            TEXT PRIMARY KEY,
+      packet_id     BIGINT NOT NULL,
+      device_id     TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+      from_node_id  BIGINT NOT NULL,
+      to_node_id    BIGINT NOT NULL,
+      channel       INT NOT NULL,
+      portnum       INT NOT NULL,
+      portnum_name  TEXT NOT NULL,
+      rx_time       TIMESTAMPTZ NOT NULL
     );
 
     CREATE TABLE schema_migrations (

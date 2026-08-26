@@ -8,6 +8,7 @@ import { loadConfig } from "./config.js";
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrations.js";
 import { clearDbLock } from "./db/open.js";
+import { startRetentionSweep, type RetentionSweepHandle } from "./db/repositories/retention.js";
 import { DeviceManager } from "./device/device-manager.js";
 import { syncHwModels } from "./hw-models.js";
 import { createLogger } from "./logger.js";
@@ -25,6 +26,7 @@ let app: FastifyInstance | undefined;
 let deviceManager: DeviceManager | undefined;
 let mqttGateway: MqttGateway | null | undefined;
 let wsHandle: WsRouteHandle | undefined;
+let retentionSweep: RetentionSweepHandle | null | undefined;
 const shutdownLog = createLogger("shutdown");
 const dbLog = createLogger("db");
 const mqttLog = createLogger("mqtt");
@@ -37,6 +39,7 @@ type ShutdownStep =
   | "HTTP server"
   | "MQTT gateway"
   | "serial devices"
+  | "retention sweep"
   | "PGlite worker"
   | "database lock";
 
@@ -44,6 +47,7 @@ interface ShutdownDependencies {
   getApp(): { close(): Promise<void> } | undefined;
   getDeviceManager(): Pick<DeviceManager, "shutdown"> | undefined;
   getMqttGateway(): Pick<MqttGateway, "shutdown"> | null | undefined;
+  getRetentionSweep(): RetentionSweepHandle | null | undefined;
   getWsHandle(): WsRouteHandle | undefined;
   db: { close(): Promise<void> };
   clearDbLock(): void;
@@ -83,6 +87,7 @@ export function createShutdownCoordinator(
     await runStep("HTTP server", async () => dependencies.getApp()?.close());
     await runStep("MQTT gateway", async () => dependencies.getMqttGateway()?.shutdown());
     await runStep("serial devices", async () => dependencies.getDeviceManager()?.shutdown());
+    await runStep("retention sweep", () => dependencies.getRetentionSweep()?.stop());
     await runStep("PGlite worker", () => dependencies.db.close());
     await runStep("database lock", () => dependencies.clearDbLock());
 
@@ -139,6 +144,7 @@ const shutdown = createShutdownCoordinator({
   getApp: () => app,
   getDeviceManager: () => deviceManager,
   getMqttGateway: () => mqttGateway,
+  getRetentionSweep: () => retentionSweep,
   getWsHandle: () => wsHandle,
   db,
   clearDbLock,
@@ -241,6 +247,8 @@ async function main() {
     { operation: "listen", host: config.api.host, port: config.api.port },
     "daemon listening",
   );
+
+  retentionSweep = startRetentionSweep(db, config.retention);
 
   // Background: sync hardware model names from the protobufs repo.
   // Runs after the server is up so it never delays startup.

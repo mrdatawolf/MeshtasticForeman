@@ -100,7 +100,66 @@ of `proposed/`.
 
 ## Implementation handoff
 
-Not started.
+Implemented by openai-coder on 2026-08-25.
+
+### Changes made
+
+- Added `applyError` state to
+  `packages/web/src/components/config/SetupWizard.tsx`. Each manual apply clears
+  the prior error. The new `SET_CONFIG_FAILED` branch clears the timeout,
+  unsubscribes and clears the listener, sets `applying = false`, forces
+  `applied = false`, and sets `applyError = true`.
+- Added an `applyError` prop to
+  `packages/web/src/components/config/ReviewStep.tsx`. When set, the Review step
+  renders an error banner above the changes list while leaving the Apply button
+  available for manual retry.
+- Added the error-banner styling to
+  `packages/web/src/components/config/ReviewStep.module.css`, using the same
+  error colors and status-message pattern as `ConfigCard`.
+- Added `packages/web/src/components/config/SetupWizard.test.tsx` with two
+  component tests using a mocked `foremanClient`: one covers a failure followed
+  by a possible success event, and one covers a success event followed by a
+  failure. Both assert that the failure banner and retry button are shown and
+  that the final UI does not show `Config applied`.
+
+### Validation performed
+
+All commands below were run from `packages/web` with the repository's pinned
+pnpm via Corepack under Node 22:
+
+- `pnpm test`: passed — 14 test files and 55 tests passed.
+- `pnpm build`: passed — TypeScript emitted no diagnostics; Vite transformed
+  1,892 modules and completed the production build in 10.24s. The existing
+  advisory about chunks larger than 500 kB was reported.
+- `pnpm lint`: passed with 0 errors and 5 warnings. The warnings are pre-existing,
+  unrelated `react-hooks/exhaustive-deps` warnings in `DeviceConfigPage.tsx`,
+  `MapPage.tsx`, and `NodeDetailPanel.tsx`; none of those files was touched by
+  this change.
+- `pnpm format:check`: passed — `All matched files use Prettier code style!`
+- Focused `pnpm exec vitest run src/components/config/SetupWizard.test.tsx`:
+  passed — 1 test file and 2 tests passed.
+- `git diff --check`: passed with no output.
+
+### Assumptions and deviations
+
+- Adapted `ConfigCard`'s error copy to the wizard context as
+  `Apply failed — check device connection and try again`.
+- Per Patrick's pre-made design decision, any `SET_CONFIG_FAILED` received during
+  a wizard apply is treated as failure of the whole operation; no partial-success
+  state is attempted.
+- Review identified an event-ordering race because the wizard issues several
+  writes in one batch. The failure branch therefore explicitly forces
+  `applied = false`, ensuring a failure always wins even if a `device:config`
+  event for another write arrived first. The existing success branch and timeout
+  behavior were otherwise left unchanged.
+
+### Unresolved risks
+
+- Correlation of a failure to the specific configuration write remains out of
+  scope and is deferred to TASK-041, consistent with this task's explicit
+  exclusion.
+- No live or manual hardware verification was performed. Validation used
+  automated component tests with a mocked `foremanClient`.
 
 ## Review
 

@@ -68,7 +68,12 @@ export function ConfigCard({
       setTimeout(() => setSaveStatus("idle"), 4000);
     }, 10_000);
     listenerRef.current = foremanClient.on((event) => {
-      if (event.type === "device:config") {
+      const configNamespace = namespace === "radio" ? "radioConfig" : "moduleConfig";
+      if (
+        event.type === "device:config" &&
+        event.payload.deviceId === deviceId &&
+        Object.hasOwn(event.payload[configNamespace], section)
+      ) {
         clearTimeout(timeout);
         listenerRef.current = null;
         setSaving(false);
