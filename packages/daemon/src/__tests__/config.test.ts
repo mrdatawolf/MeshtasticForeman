@@ -28,22 +28,39 @@ describe("daemon configuration", () => {
       coverage: {
         elevationApiUrl: "https://api.open-elevation.com/api/v1/lookup",
       },
+      retention: {
+        enabled: false,
+        sweepIntervalHours: 24,
+        packets: { maxRowsPerDevice: 100000 },
+        telemetry: { windowDays: 365 },
+        cache: { windowDays: 180 },
+      },
     });
   });
 
   it.each(["false", "1", "TRUE", ""])(
     "parses boolean value %j as false using exact string equality",
     (value) => {
-      const config = loadConfig({ ENABLE_MQTT: value, BOT_ENABLED: value });
+      const config = loadConfig({
+        ENABLE_MQTT: value,
+        BOT_ENABLED: value,
+        RETENTION_ENABLED: value,
+      });
       expect(config.mqtt.enabled).toBe(false);
       expect(config.bot.enabled).toBe(false);
+      expect(config.retention.enabled).toBe(false);
     },
   );
 
   it('parses only the exact boolean string "true" as true', () => {
-    const config = loadConfig({ ENABLE_MQTT: "true", BOT_ENABLED: "true" });
+    const config = loadConfig({
+      ENABLE_MQTT: "true",
+      BOT_ENABLED: "true",
+      RETENTION_ENABLED: "true",
+    });
     expect(config.mqtt.enabled).toBe(true);
     expect(config.bot.enabled).toBe(true);
+    expect(config.retention.enabled).toBe(true);
   });
 
   it("parses valid numeric port strings as positive integers", () => {
@@ -61,7 +78,12 @@ describe("daemon configuration", () => {
   it("throws one aggregated error listing every invalid variable", () => {
     let thrown: unknown;
     try {
-      loadConfig({ API_PORT: "notanumber", MQTT_PORT: "also-bad" });
+      loadConfig({
+        API_PORT: "notanumber",
+        MQTT_PORT: "also-bad",
+        RETENTION_SWEEP_INTERVAL_HOURS: "0",
+        RETENTION_PACKETS_MAX_ROWS_PER_DEVICE: "also-bad",
+      });
     } catch (error) {
       thrown = error;
     }
@@ -69,6 +91,12 @@ describe("daemon configuration", () => {
     expect(thrown).toBeInstanceOf(Error);
     expect((thrown as Error).message).toContain("  - API_PORT: expected a positive integer");
     expect((thrown as Error).message).toContain("  - MQTT_PORT: expected a positive integer");
+    expect((thrown as Error).message).toContain(
+      "  - RETENTION_SWEEP_INTERVAL_HOURS: expected a positive integer",
+    );
+    expect((thrown as Error).message).toContain(
+      "  - RETENTION_PACKETS_MAX_ROWS_PER_DEVICE: expected a positive integer",
+    );
   });
 
   it("resolves path defaults independently to the historical absolute locations", () => {

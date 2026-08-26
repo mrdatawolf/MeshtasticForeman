@@ -18,6 +18,7 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
   const app = { close: vi.fn(async () => void calls.push("http")) };
   const mqttGateway = { shutdown: vi.fn(async () => void calls.push("mqtt")) };
   const deviceManager = { shutdown: vi.fn(async () => void calls.push("serial")) };
+  const retentionSweep = { stop: vi.fn(() => calls.push("retention")) };
   const db = { close: vi.fn(async () => void calls.push("db")) };
   const clearDbLock = vi.fn(() => calls.push("lock"));
   const dependencies = {
@@ -25,11 +26,22 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
     getApp: () => app,
     getMqttGateway: () => mqttGateway,
     getDeviceManager: () => deviceManager,
+    getRetentionSweep: () => retentionSweep,
     db,
     clearDbLock,
     ...overrides,
   };
-  return { calls, dependencies, wsHandle, app, mqttGateway, deviceManager, db, clearDbLock };
+  return {
+    calls,
+    dependencies,
+    wsHandle,
+    app,
+    mqttGateway,
+    deviceManager,
+    retentionSweep,
+    db,
+    clearDbLock,
+  };
 }
 
 describe("coordinated shutdown", () => {
@@ -53,6 +65,7 @@ describe("coordinated shutdown", () => {
       "http",
       "mqtt",
       "serial",
+      "retention",
       "db",
       "lock",
     ]);
@@ -65,7 +78,14 @@ describe("coordinated shutdown", () => {
 
     await createShutdownCoordinator(harness.dependencies)("SIGINT");
 
-    expect(harness.calls).toEqual(["ws:1001:server shutting down", "mqtt", "serial", "db", "lock"]);
+    expect(harness.calls).toEqual([
+      "ws:1001:server shutting down",
+      "mqtt",
+      "serial",
+      "retention",
+      "db",
+      "lock",
+    ]);
     expect(harness.db.close).toHaveBeenCalledOnce();
     expect(harness.clearDbLock).toHaveBeenCalledOnce();
     expect(process.exit).toHaveBeenCalledWith(0);

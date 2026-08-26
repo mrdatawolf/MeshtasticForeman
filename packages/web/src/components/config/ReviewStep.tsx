@@ -10,6 +10,7 @@ export function ReviewStep({
   changes,
   applying,
   applied,
+  applyError,
   onBack,
   onApply,
   onClose,
@@ -17,6 +18,7 @@ export function ReviewStep({
   changes: ConfigChange[];
   applying: boolean;
   applied: boolean;
+  applyError: boolean;
   onBack: () => void;
   onApply: () => void;
   onClose: () => void;
@@ -66,6 +68,12 @@ export function ReviewStep({
       <div className={wizardStyles.stepSub}>
         These settings will be written to the device. Review before applying.
       </div>
+
+      {applyError && (
+        <div className={styles.statusBannerError}>
+          Apply failed — check device connection and try again
+        </div>
+      )}
 
       <div className={styles.changesList}>
         {Object.entries(grouped).map(([key, { namespace, entries }]) => (

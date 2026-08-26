@@ -325,6 +325,13 @@ const migrations: string[] = [
   ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_packet_id BIGINT NOT NULL DEFAULT 0;
   CREATE INDEX IF NOT EXISTS messages_reply ON messages(device_id, reply_to_packet_id) WHERE reply_to_packet_id != 0;
   `,
+
+  /* 019 – retention sweep indexes for telemetry and terrain cache pruning */
+  `
+  CREATE INDEX IF NOT EXISTS packets_portnum_name_time ON packets(portnum_name, rx_time);
+  CREATE INDEX IF NOT EXISTS elevation_cache_cached_at ON elevation_cache(cached_at);
+  CREATE INDEX IF NOT EXISTS viewshed_cache_cached_at ON viewshed_cache(cached_at);
+  `,
 ];
 
 export async function runMigrations(db: PGlite) {

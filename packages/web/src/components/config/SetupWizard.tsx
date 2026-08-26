@@ -27,6 +27,7 @@ export function SetupWizard({ deviceId, onClose }: { deviceId: string; onClose: 
   const [presets, setPresets] = useState<RegionPresets | null>(null);
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [applyError, setApplyError] = useState(false);
   const listenerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -87,6 +88,7 @@ export function SetupWizard({ deviceId, onClose }: { deviceId: string; onClose: 
   function applyAll() {
     if (!changes.length || applying) return;
     setApplying(true);
+    setApplyError(false);
     for (const ch of changes) {
       foremanClient.send({ type: "device:set-config", payload: { deviceId, ...ch } });
     }
@@ -96,11 +98,19 @@ export function SetupWizard({ deviceId, onClose }: { deviceId: string; onClose: 
       setApplied(true);
     }, 12_000);
     listenerRef.current = foremanClient.on((event) => {
-      if (event.type === "device:config") {
+      if (event.type === "device:config" && event.payload.deviceId === deviceId) {
         clearTimeout(timeout);
         listenerRef.current = null;
         setApplying(false);
         setApplied(true);
+      }
+      if (event.type === "error" && event.payload.code === "SET_CONFIG_FAILED") {
+        clearTimeout(timeout);
+        listenerRef.current?.();
+        listenerRef.current = null;
+        setApplying(false);
+        setApplied(false);
+        setApplyError(true);
       }
     });
   }
@@ -169,6 +179,7 @@ export function SetupWizard({ deviceId, onClose }: { deviceId: string; onClose: 
               changes={changes}
               applying={applying}
               applied={applied}
+              applyError={applyError}
               onBack={() => setStep(2)}
               onApply={applyAll}
               onClose={onClose}
