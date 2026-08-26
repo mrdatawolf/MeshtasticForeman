@@ -78,6 +78,7 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }
   function sendMessage() {
     if (!msgText.trim() || sending) return;
     setSending(true);
+    const clientMsgId = `local-${Date.now()}-${crypto.randomUUID()}`;
     foremanClient.send({
       type: "message:send",
       payload: {
@@ -86,10 +87,11 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }
         text: msgText.trim(),
         channelIndex: channel,
         wantAck: true,
+        clientMsgId,
       },
     });
     const optimistic: Message = {
-      id: `local-${Date.now()}`,
+      id: clientMsgId,
       packetId: 0,
       fromNodeId: 0,
       toNodeId: nodeId,

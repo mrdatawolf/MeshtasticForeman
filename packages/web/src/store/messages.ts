@@ -139,6 +139,21 @@ export function initMessageStore() {
         }
       }
     }
+
+    if (event.type === "message:send-failed") {
+      const { clientMsgId, message } = event.payload;
+      if (clientMsgId === null) return;
+      for (const [key, msgs] of conversations) {
+        const idx = msgs.findIndex((msg) => msg.id === clientMsgId);
+        if (idx >= 0) {
+          const next = [...msgs];
+          next[idx] = { ...next[idx], ackStatus: "error", ackError: message };
+          conversations.set(key, next);
+          notify();
+          break;
+        }
+      }
+    }
   });
 }
 

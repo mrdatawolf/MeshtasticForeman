@@ -217,23 +217,26 @@ export async function handleRawPacket(
   const toNodeId: number = p.to ?? 0;
   if (
     portnum === TEXT_MESSAGE_APP &&
-    isEncrypted &&
+    isDecoded &&
     fromNodeId !== 0 &&
     fromNodeId !== myNodeId &&
     toNodeId !== myNodeId &&
     toNodeId !== BROADCAST
   ) {
+    const messageId = randomUUID();
+    const text = Buffer.from(p.payloadVariant.value.payload).toString("utf8");
     await deps.db.query(
       `INSERT INTO messages(id, packet_id, device_id, from_node_id, to_node_id, channel_index,
          text, rx_time, rx_snr, rx_rssi, hop_limit, want_ack, via_mqtt, role, reply_to_packet_id)
-       VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9, $10, $11, $12, 'relayed', $13)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'relayed', $14)`,
       [
-        randomUUID(),
+        messageId,
         p.id ?? 0,
         deviceId,
         fromNodeId,
         toNodeId,
         p.channel ?? 0,
+        text,
         rxTime,
         p.rxSnr || null,
         p.rxRssi || null,
@@ -243,5 +246,27 @@ export async function handleRawPacket(
         p.replyId ?? 0,
       ],
     );
+    deps.emit({
+      type: "message:received",
+      payload: {
+        id: messageId,
+        packetId: p.id ?? 0,
+        fromNodeId,
+        toNodeId,
+        channelIndex: p.channel ?? 0,
+        text,
+        rxTime,
+        rxSnr: p.rxSnr || null,
+        rxRssi: p.rxRssi || null,
+        hopLimit: p.hopLimit || null,
+        wantAck: p.wantAck ?? false,
+        viaMqtt: p.viaMqtt ?? false,
+        role: "relayed",
+        ackStatus: null,
+        ackAt: null,
+        ackError: null,
+        replyToPacketId: p.replyId ?? 0,
+      },
+    });
   }
 }

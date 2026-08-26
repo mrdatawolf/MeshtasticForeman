@@ -23,7 +23,12 @@ vi.mock("../ws/client.js", () => ({ foremanClient: clientMock }));
 // Must be imported after vi.mock() above so the mocked ../ws/client.js is in
 // place before messages.js's own top-level import of it runs.
 // eslint-disable-next-line import/order
-import { clearConversation, getConversation, initMessageStore } from "./messages.js";
+import {
+  addOptimisticMessage,
+  clearConversation,
+  getConversation,
+  initMessageStore,
+} from "./messages.js";
 
 const message: Message = {
   id: "message-1",
@@ -73,5 +78,53 @@ describe("message store WebSocket events", () => {
         ackError: "delivery timed out",
       },
     ]);
+  });
+
+  it("marks the correlated optimistic message as failed", () => {
+    const optimistic: Message = {
+      ...message,
+      id: "local-123",
+      fromNodeId: 0,
+      toNodeId: message.fromNodeId,
+      role: "sent",
+      ackStatus: "pending",
+    };
+    addOptimisticMessage(optimistic);
+
+    clientMock.emit({
+      type: "message:send-failed",
+      payload: {
+        clientMsgId: optimistic.id,
+        deviceId: "123e4567-e89b-12d3-a456-426614174000",
+        message: "radio unavailable",
+      },
+    });
+
+    expect(getConversation(optimistic.toNodeId)).toEqual([
+      { ...optimistic, ackStatus: "error", ackError: "radio unavailable" },
+    ]);
+  });
+
+  it("buckets a live relayed message by sender and deduplicates a later history load", () => {
+    const relayed: Message = {
+      ...message,
+      id: "relayed-message-1",
+      packetId: 4400,
+      fromNodeId: 200,
+      toNodeId: 300,
+      channelIndex: 2,
+      text: null,
+      role: "relayed",
+    };
+    clearConversation(relayed.fromNodeId);
+
+    clientMock.emit({ type: "message:received", payload: relayed });
+
+    expect(getConversation(relayed.fromNodeId)).toEqual([relayed]);
+    expect(getConversation(relayed.toNodeId)).toEqual([]);
+
+    clientMock.emit({ type: "message:history", payload: [relayed] });
+
+    expect(getConversation(relayed.fromNodeId)).toEqual([relayed]);
   });
 });

@@ -90,6 +90,7 @@ export function appStateReducer(state: AppState, event: ServerEvent): AppState {
     case "message:sent":
     case "message:history":
     case "message:ack":
+    case "message:send-failed":
     case "packet:raw":
     case "channel:list":
     case "waypoint:update":
