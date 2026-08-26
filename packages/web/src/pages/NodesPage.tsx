@@ -207,13 +207,13 @@ function hwModel(model: number | null, protoMap: Map<number, string>): string {
 // Data merging
 // ---------------------------------------------------------------------------
 
-interface MergedNode {
+export interface MergedNode {
   nodeId: number;
   mesh: NodeInfo | null;
   mqtt: MqttNode | null;
 }
 
-function buildMergedNodes(nodes: NodeInfo[], mqttNodes: MqttNode[]): MergedNode[] {
+export function buildMergedNodes(nodes: NodeInfo[], mqttNodes: MqttNode[]): MergedNode[] {
   const map = new Map<number, MergedNode>();
   for (const n of nodes) map.set(n.nodeId, { nodeId: n.nodeId, mesh: n, mqtt: null });
   for (const n of mqttNodes) {
@@ -231,6 +231,20 @@ function lastHeardMs(m: MergedNode): number {
   const meshMs = m.mesh?.lastHeard ? new Date(m.mesh.lastHeard).getTime() : 0;
   const mqttMs = m.mqtt?.lastHeard ? new Date(m.mqtt.lastHeard).getTime() : 0;
   return Math.max(meshMs, mqttMs);
+}
+
+/**
+ * The single "true last heard" timestamp for a merged node: whichever of its
+ * mesh/MQTT sources is more recent, as an ISO string. Used for both the
+ * displayed "Last Heard" column and the `lastHeard` sort key so the two never
+ * disagree (see TASK-045). This is distinct from `mqtt.lastHeard`, which is
+ * still shown on its own, unchanged, in the MQTT sub-row.
+ */
+export function resolvedLastHeard(m: MergedNode): string | null {
+  const meshMs = m.mesh?.lastHeard ? new Date(m.mesh.lastHeard).getTime() : 0;
+  const mqttMs = m.mqtt?.lastHeard ? new Date(m.mqtt.lastHeard).getTime() : 0;
+  if (meshMs === 0 && mqttMs === 0) return null;
+  return mqttMs > meshMs ? m.mqtt!.lastHeard : m.mesh!.lastHeard;
 }
 
 // ---------------------------------------------------------------------------
@@ -262,10 +276,10 @@ function filterNodes(list: MergedNode[], query: string): MergedNode[] {
 // Sorting
 // ---------------------------------------------------------------------------
 
-type SortCol =
+export type SortCol =
   "name" | "id" | "connection" | "lastHeard" | "snr" | "model" | "location" | "distance";
 
-function sortMerged(
+export function sortMerged(
   list: MergedNode[],
   col: SortCol,
   dir: "asc" | "desc",
@@ -691,7 +705,7 @@ function NodeRows({ merged, selectedNodeId, protoMap, onRowClick }: NodeRowsProp
             </>
           )}
         </td>
-        <td style={styles.td}>{formatLastHeard(primary.lastHeard)}</td>
+        <td style={styles.td}>{formatLastHeard(resolvedLastHeard(merged))}</td>
         <td style={styles.td}>{primary.snr != null ? `${primary.snr.toFixed(1)} dB` : "—"}</td>
         <td style={styles.td}>{hwModel(primary.hwModel, protoMap)}</td>
         <td style={styles.td}>{formatDistance(mqtt?.distanceM ?? null)}</td>
