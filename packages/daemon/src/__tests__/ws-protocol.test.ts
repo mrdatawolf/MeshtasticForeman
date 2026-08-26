@@ -44,6 +44,20 @@ describe("clientCommandSchema", () => {
       }
     });
 
+    it("accepts an optional clientMsgId", () => {
+      const result = clientCommandSchema.safeParse({
+        type: "message:send",
+        payload: {
+          deviceId: DEVICE_ID,
+          text: "Hi",
+          toNodeId: 1,
+          channelIndex: 0,
+          clientMsgId: "local-123",
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
     it("rejects empty text", () => {
       const result = clientCommandSchema.safeParse({
         type: "message:send",

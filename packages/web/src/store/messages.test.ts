@@ -23,7 +23,12 @@ vi.mock("../ws/client.js", () => ({ foremanClient: clientMock }));
 // Must be imported after vi.mock() above so the mocked ../ws/client.js is in
 // place before messages.js's own top-level import of it runs.
 // eslint-disable-next-line import/order
-import { clearConversation, getConversation, initMessageStore } from "./messages.js";
+import {
+  addOptimisticMessage,
+  clearConversation,
+  getConversation,
+  initMessageStore,
+} from "./messages.js";
 
 const message: Message = {
   id: "message-1",
@@ -72,6 +77,31 @@ describe("message store WebSocket events", () => {
         ackAt: "2026-08-24T12:00:01.000Z",
         ackError: "delivery timed out",
       },
+    ]);
+  });
+
+  it("marks the correlated optimistic message as failed", () => {
+    const optimistic: Message = {
+      ...message,
+      id: "local-123",
+      fromNodeId: 0,
+      toNodeId: message.fromNodeId,
+      role: "sent",
+      ackStatus: "pending",
+    };
+    addOptimisticMessage(optimistic);
+
+    clientMock.emit({
+      type: "message:send-failed",
+      payload: {
+        clientMsgId: optimistic.id,
+        deviceId: "123e4567-e89b-12d3-a456-426614174000",
+        message: "radio unavailable",
+      },
+    });
+
+    expect(getConversation(optimistic.toNodeId)).toEqual([
+      { ...optimistic, ackStatus: "error", ackError: "radio unavailable" },
     ]);
   });
 });
