@@ -53,12 +53,12 @@
   color: var(--stack-color);
 }
 
-/* Search filter — top center */
+/* Search filter — top right, clear of .topControlsRow which is pinned
+   top-left and can grow wide as its panels expand. */
 .searchBar {
   position: absolute;
-  top: 0.75rem;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 1rem;
+  right: 1rem;
   display: flex;
   align-items: center;
   gap: 0.35rem;
