@@ -4,10 +4,6 @@ import { parentPort, workerData } from "node:worker_threads";
 
 import { PGlite } from "@electric-sql/pglite";
 
-import { createLogger } from "../logger.js";
-
-const log = createLogger("db");
-
 if (!parentPort) throw new Error("Must be run as a worker thread");
 
 const port = parentPort;
@@ -22,9 +18,8 @@ function prepareDir(dir: string): void {
 
 async function init(reset = false): Promise<void> {
   if (reset) {
-    log.warn(
-      { operation: "recover-wasm-abort" },
-      "WASM abort on previous attempt; resetting data directory",
+    console.warn(
+      '[db] WASM abort on previous attempt; resetting data directory {"operation":"recover-wasm-abort"}',
     );
     rmSync(dataDir, { recursive: true, force: true });
   }
