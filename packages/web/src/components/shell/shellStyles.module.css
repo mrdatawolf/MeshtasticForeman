@@ -19,6 +19,14 @@
   flex-shrink: 0;
 }
 
+/* Menu panels open leftward from their button, so a menu that wraps to the left
+   edge would open off screen. Phones use the fixed panel below instead. */
+@media (min-width: 641px) {
+  .header {
+    justify-content: flex-end;
+  }
+}
+
 .logo {
   height: 2rem;
   width: auto;
