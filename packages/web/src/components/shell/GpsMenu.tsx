@@ -12,9 +12,10 @@ interface Props {
   devices: DeviceInfo[];
   pending: Set<string>;
   setPending: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onOpenDebug: () => void;
 }
 
-export function GpsMenu({ devices, pending, setPending }: Props) {
+export function GpsMenu({ devices, pending, setPending, onOpenDebug }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useClickOutside(ref, () => setOpen(false), open);
@@ -117,10 +118,25 @@ export function GpsMenu({ devices, pending, setPending }: Props) {
                       {pending.has(device.id) ? "Refreshing…" : "Refresh GPS"}
                     </button>
                   )}
-                  {device.ownNodeId == null && (
+                  {device.notResponding ? (
                     <span className={gpsStyles.gpsNoNodeId}>
-                      Node ID not yet known — reconnect to enable position request
+                      Radio not responding, so position requests will not work.{" "}
+                      <button
+                        className={styles.debugLink}
+                        onClick={() => {
+                          onOpenDebug();
+                          setOpen(false);
+                        }}
+                      >
+                        Open Debug page
+                      </button>
                     </span>
+                  ) : (
+                    device.ownNodeId == null && (
+                      <span className={gpsStyles.gpsNoNodeId}>
+                        Node ID not yet known — reconnect to enable position request
+                      </span>
+                    )
                   )}
                 </div>
                 <div className={styles.menuDivider} />

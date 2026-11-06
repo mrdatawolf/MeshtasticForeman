@@ -10,6 +10,7 @@ function device(overrides: Partial<DeviceInfo> & { id: string }): DeviceInfo {
     name: "Radio",
     port: `/dev/${overrides.id}`,
     status: "connected",
+    notResponding: false,
     connectedAt: null,
     lastSeenAt: null,
     hardwareModel: null,

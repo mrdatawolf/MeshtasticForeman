@@ -21,8 +21,9 @@ import {
 import { adaptNodeInfo, adaptPosition, adaptTelemetry } from "./meshtastic-adapter.js";
 import { handleMessage } from "./message-handler.js";
 import { handleNodeInfo, handlePosition } from "./node-update-handler.js";
+import { radioState } from "./radio-state.js";
 import { handleRawPacket } from "./raw-packet-handler.js";
-import { runRawProbe } from "./raw-probe.js";
+import { RADIO_RESPONSE_WINDOW_MS, runRawProbe } from "./raw-probe.js";
 import { handleTelemetry } from "./telemetry-handler.js";
 import { handleTraceroutePacket } from "./traceroute-handler.js";
 
@@ -90,6 +91,15 @@ interface ReportedVersions {
 interface VersionColumns {
   hw_model: string | null;
   firmware: string | null;
+}
+
+type DeviceStatus = "disconnected" | "connecting" | "connected" | "error";
+
+/** The status event a device's clients last received, so a responding change can repeat it. */
+interface ReportedStatus {
+  status: DeviceStatus;
+  connectedAt: string | undefined;
+  notResponding: boolean;
 }
 
 interface ReconnectTarget {
@@ -212,6 +222,10 @@ export class DeviceManager extends EventEmitter {
    * on the same port shows the old radio's version only until it reports its own.
    */
   private reportedVersions = new Map<string, ReportedVersions>();
+  /** Latest status event per device. See _syncResponding. */
+  private reportedStatus = new Map<string, ReportedStatus>();
+  /** One per device with an unanswered request. Fires when its response window ends. */
+  private respondingTimers = new Map<string, NodeJS.Timeout>();
   /** Correlates packetId → replyId for in-flight text packets between onMeshPacket and onMessagePacket */
   private pendingReplyIds = new Map<number, number>();
 
@@ -474,7 +488,9 @@ export class DeviceManager extends EventEmitter {
       );
       // core also re-requests config by itself when the radio reports a reboot,
       // and this event is the only sign of that request.
-      if (status === Types.DeviceStatusEnum.DeviceConfiguring) this._markConfigRequested(stats);
+      if (status === Types.DeviceStatusEnum.DeviceConfiguring) {
+        this._markConfigRequested(id, stats);
+      }
       if (status === Types.DeviceStatusEnum.DeviceConfigured) stats.configured = true;
       void this._handleDeviceStatus(id, name, port, openedTransport, status).catch((err) =>
         log.warn(
@@ -487,9 +503,11 @@ export class DeviceManager extends EventEmitter {
     // Diagnostic: log every FromRadio frame so we know if the stream is alive
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onFromRadio.subscribe((msg: any) => {
+      const hadUnansweredRequest = stats.unansweredSinceMs !== null;
       stats.lastFrameMs = Date.now();
       stats.unansweredSinceMs = null;
       stats.frames += 1;
+      if (hadUnansweredRequest) this._syncResponding(id);
       const variant = msg?.payloadVariant?.case ?? "unknown";
       if (variant === "packet") return; // already handled by onMeshPacket
       if (variant === "fileInfo") {
@@ -606,6 +624,7 @@ export class DeviceManager extends EventEmitter {
           setBatteryLevel: (deviceId, level) => this.batteryLevels.set(deviceId, level),
           hasGpsPosition: (deviceId) => this.gpsAcquired.has(deviceId),
           getGpsDetail: (deviceId) => this.gpsDetails.get(deviceId),
+          isNotResponding: (deviceId) => this.isNotResponding(deviceId),
         },
         id,
         name,
@@ -692,6 +711,7 @@ export class DeviceManager extends EventEmitter {
     const watchdog = this.watchdogTimers.get(deviceId);
     if (watchdog) clearInterval(watchdog);
     this.watchdogTimers.delete(deviceId);
+    this._stopRespondingTimer(deviceId);
 
     if (device) {
       this.devices.delete(deviceId);
@@ -836,6 +856,11 @@ export class DeviceManager extends EventEmitter {
     };
   }
 
+  /** Whether the radio fails the Radio responding check right now (CONTRACT-013). */
+  isNotResponding(deviceId: string): boolean {
+    return radioState(this.getConnectionFacts(deviceId), Date.now()) === "silent";
+  }
+
   /**
    * Process-shutdown hook. Stops future reconnect scheduling, clears timer
    * state that may not belong to a currently-connected device, and disconnects
@@ -846,6 +871,8 @@ export class DeviceManager extends EventEmitter {
 
     for (const timer of this.watchdogTimers.values()) clearInterval(timer);
     this.watchdogTimers.clear();
+    for (const timer of this.respondingTimers.values()) clearTimeout(timer);
+    this.respondingTimers.clear();
     for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
     this.reconnectTimers.clear();
     this.reconnectingPorts.clear();
@@ -954,10 +981,52 @@ export class DeviceManager extends EventEmitter {
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  private _markConfigRequested(stats: ConnectionStats): void {
+  private _markConfigRequested(deviceId: string, stats: ConnectionStats): void {
     stats.lastConfigRequestMs = Date.now();
-    stats.unansweredSinceMs ??= stats.lastConfigRequestMs;
     stats.configured = false;
+    if (stats.unansweredSinceMs !== null) return;
+    stats.unansweredSinceMs = stats.lastConfigRequestMs;
+    this._syncResponding(deviceId);
+  }
+
+  private _stopRespondingTimer(deviceId: string): void {
+    clearTimeout(this.respondingTimers.get(deviceId));
+    this.respondingTimers.delete(deviceId);
+  }
+
+  /**
+   * Keeps clients in step with the Radio responding check. The check can start
+   * failing with no event at all, because time passing is what fails it, so a
+   * timer stands in for that moment. This runs when a request opens the window,
+   * when a frame closes it, and when the timer fires, never once per frame.
+   *
+   * It repeats the last status rather than assuming "connected", because a radio
+   * silent from the start gets here during connect(), while that is "connecting".
+   */
+  private _syncResponding(deviceId: string): void {
+    this._stopRespondingTimer(deviceId);
+
+    const facts = this.getConnectionFacts(deviceId);
+    const state = radioState(facts, Date.now());
+    if (state === "waiting" && facts.unansweredSinceAt !== null && !this.shuttingDown) {
+      const dueMs = Date.parse(facts.unansweredSinceAt) + RADIO_RESPONSE_WINDOW_MS;
+      // A timer can fire a moment early. This then finds "waiting" and waits again.
+      this.respondingTimers.set(
+        deviceId,
+        setTimeout(() => this._syncResponding(deviceId), Math.max(dueMs - Date.now(), 1)),
+      );
+    }
+
+    const notResponding = state === "silent";
+    const device = this.devices.get(deviceId);
+    const reported = this.reportedStatus.get(deviceId);
+    if (!device || !reported || reported.notResponding === notResponding) return;
+    if (notResponding) {
+      log.warn({ deviceId, operation: "radio-responding" }, "radio stopped responding");
+    } else {
+      log.info({ deviceId, operation: "radio-responding" }, "radio responding again");
+    }
+    this._emitStatus(deviceId, device.name, device.port, reported.status, reported.connectedAt);
   }
 
   /**
@@ -969,7 +1038,7 @@ export class DeviceManager extends EventEmitter {
    */
   private _requestConfig(deviceId: string, meshDevice: MeshDevice): Promise<number> {
     const stats = this.connectionStats.get(deviceId);
-    if (stats) this._markConfigRequested(stats);
+    if (stats) this._markConfigRequested(deviceId, stats);
     return meshDevice.configure();
   }
 
@@ -1022,10 +1091,12 @@ export class DeviceManager extends EventEmitter {
     id: string,
     name: string,
     port: string,
-    status: "disconnected" | "connecting" | "connected" | "error",
+    status: DeviceStatus,
     connectedAt?: string,
   ) {
     const versions = this.reportedVersions.get(id);
+    const notResponding = this.isNotResponding(id);
+    this.reportedStatus.set(id, { status, connectedAt, notResponding });
     const event: ServerEvent = {
       type: "device:status",
       payload: {
@@ -1033,6 +1104,7 @@ export class DeviceManager extends EventEmitter {
         name,
         port,
         status,
+        notResponding,
         connectedAt: connectedAt ?? null,
         lastSeenAt: null,
         hardwareModel: versions?.hardwareModel ?? null,
@@ -1085,6 +1157,7 @@ export class DeviceManager extends EventEmitter {
         clearInterval(wt);
         this.watchdogTimers.delete(deviceId);
       }
+      this._stopRespondingTimer(deviceId);
       this.devices.delete(deviceId);
       this.myNodeIds.delete(deviceId);
       this.batteryLevels.delete(deviceId);

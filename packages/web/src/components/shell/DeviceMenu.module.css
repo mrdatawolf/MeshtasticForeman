@@ -45,6 +45,12 @@
   text-transform: capitalize;
 }
 
+.deviceNotResponding {
+  color: var(--text-primary);
+  font-weight: bold;
+  text-transform: capitalize;
+}
+
 .deviceMeta {
   color: var(--text-muted);
 }

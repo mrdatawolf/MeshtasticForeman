@@ -16,10 +16,10 @@ import {
   collectDebugChecks,
   createPortInspector,
   mqttCheck,
-  radioState,
   readCoreVersion,
   savedDevicesCheck,
 } from "../debug/checks.js";
+import { radioState } from "../device/radio-state.js";
 import { RADIO_RESPONSE_WINDOW_MS } from "../device/raw-probe.js";
 
 import type { DeviceFacts, PortInspector } from "../debug/checks.js";

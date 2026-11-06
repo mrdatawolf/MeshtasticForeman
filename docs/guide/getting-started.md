@@ -84,6 +84,11 @@ lists what is wrong in plain language, with a likely cause, a next step, and a t
 tool can help. It works from another machine on your network and at phone width. **Copy results**
 gives you the report as text for sharing.
 
+The app also tells you when a radio stops answering. The device menu shows **Not Responding** next
+to the port, in place of **Connected**, and the GPS menu says so too. Both link to this page. The
+message clears by itself as soon as the radio sends anything. Reconnecting will not fix a hung
+radio, so start with the steps below.
+
 | Tool | What it does |
 |---|---|
 | Rerun checks | Runs the checks again. It changes nothing. |

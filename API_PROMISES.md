@@ -1248,7 +1248,7 @@ The server pushes these events both in response to commands and proactively as t
 | Event Type          | Trigger                                   | Payload Type                                                 |
 | ------------------- | ----------------------------------------- | ------------------------------------------------------------ |
 | `device:list`       | On connect; device added/removed          | `DeviceInfo[]`                                               |
-| `device:status`     | Device status change                      | `DeviceInfo`                                                 |
+| `device:status`     | Device status or `notResponding` change   | `DeviceInfo`                                                 |
 | `device:config`     | On connect; config requested or changed   | `DeviceConfig`                                               |
 | `node:list`         | On connect; `nodes:request-list` received | `NodeInfo[]`                                                 |
 | `node:update`       | Node heard / position received            | `NodeInfo`                                                   |
@@ -1287,8 +1287,16 @@ All types are defined in [shared/src/types.ts](packages/shared/src/types.ts) and
   name: string;
   port: string;
   status: "connected" | "disconnected" | "error";
+  notResponding: boolean; // WebSocket events only
 }
 ```
+
+`notResponding` is `true` while the radio fails the Radio responding check in CONTRACT-013: it sent
+nothing for 25 seconds or more after a config request. It is separate from `status` and does not
+change it, so a radio can be `connected` and `notResponding` at once. `device:list` and every
+`device:status` event carry it, and a `device:status` event is sent when it changes in either
+direction, as soon as the 25 seconds pass or a frame arrives. A quiet radio with no unanswered
+request is never `notResponding`. The REST device routes do not return this field.
 
 **`NodeInfo`**
 

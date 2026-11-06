@@ -20,6 +20,7 @@ export interface TelemetryHandlerDeps {
   setBatteryLevel: (deviceId: string, level: number) => void;
   hasGpsPosition: (deviceId: string) => boolean;
   getGpsDetail: (deviceId: string) => GpsDetail | undefined;
+  isNotResponding: (deviceId: string) => boolean;
 }
 
 export async function handleTelemetry(
@@ -53,6 +54,7 @@ export async function handleTelemetry(
       name: device.name,
       port: device.port,
       status: "connected",
+      notResponding: deps.isNotResponding(deviceId),
       connectedAt: device.connectedAt,
       lastSeenAt: null,
       hardwareModel: row?.hw_model ?? null,
