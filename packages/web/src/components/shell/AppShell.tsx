@@ -31,6 +31,7 @@ import { GpsMenu } from "./GpsMenu.js";
 import { LastSeenFilter } from "./LastSeenFilter.js";
 import { MainNavigation } from "./MainNavigation.js";
 import { MqttMenu } from "./MqttMenu.js";
+import { NotRespondingIndicator } from "./NotRespondingIndicator.js";
 import { SettingsMenu } from "./SettingsMenu.js";
 import { styles } from "./shellStyles.js";
 
@@ -192,6 +193,7 @@ export function AppShell({
           totalCount={totalNodeCount}
           onChange={handleLastSeenChange}
         />
+        <NotRespondingIndicator devices={devices} onOpenDebug={() => navigate("debug")} />
         <GpsMenu
           devices={devices}
           pending={gpsPending}
