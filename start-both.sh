@@ -46,6 +46,9 @@ else
     echo "  Waiting 3s for daemon to initialise..."
     sleep 3
     echo "  Starting frontend..."
-    trap 'kill "$API_PID" 2>/dev/null; exit' INT TERM
+    # Ctrl+C already reached the daemon, and a second signal would abandon its shutdown.
+    # SIGTERM reaches only this script, so pass it to the daemon, a child of start-api.sh.
+    trap 'exit' INT
+    trap 'pkill -TERM -P "$API_PID" 2>/dev/null; exit' TERM
     bash "$ROOT/start-frontend.sh"
 fi

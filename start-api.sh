@@ -19,10 +19,24 @@ if [ -f "$ROOT/.env" ]; then
     fi
 fi
 
-cd "$ROOT"
+# Run node directly, as packages/daemon's "dev" script does. pnpm exits as soon as it
+# gets SIGTERM, which ends this script while the daemon is still shutting down. systemd
+# then sends a second signal, and that abandons the shutdown. Do not start node in the
+# background and forward signals either: a control-group stop would signal it twice.
+# Bash runs this trap only after node exits, so the script outlives the daemon.
+stopping=0
+trap 'stopping=1' INT TERM
+
+cd "$ROOT/packages/daemon"
 
 while true; do
-    pnpm --filter @foreman/daemon dev || true
+    rc=0
+    node --env-file=../../.env --import tsx/esm src/index.ts || rc=$?
+    # Exit 0 is a finished graceful shutdown. Anything else without a stop request
+    # is a crash, so restart.
+    if [ "$stopping" -eq 1 ] || [ "$rc" -eq 0 ]; then
+        exit 0
+    fi
     echo ""
     echo "  Daemon exited — restarting..."
     echo ""

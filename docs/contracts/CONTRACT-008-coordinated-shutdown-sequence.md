@@ -536,11 +536,11 @@ numbers are kept because the sections above refer to them.
    are confirmed as implemented.
 3. **Is MQTT-before-serial the right order? Yes.** Confirmed as implemented.
 4. **Does the `start-api.sh` restart loop defeat an intentional stop?
-   Unresolved by this contract, follow-up in TASK-052.** The loop restarts
-   the daemon after any exit, so a clean exit could be followed by a restart.
-   TASK-052 will establish what actually happens, then either fix it or
-   record a decision that it is not worth fixing. `start-api.sh` remains out
-   of this contract's scope.
+   Resolved by TASK-052.** Under `systemctl stop` and Ctrl-C the loop did not
+   restart the daemon, but the wrapper did cut shutdown short: bash and `pnpm`
+   died at once, so systemd signalled the daemon a second time. `start-api.sh`
+   now runs node directly and outlives the daemon. It stays stopped after exit
+   0 or a requested stop, and restarts after any other exit.
 5. **Should a second `SIGTERM`/`SIGINT` force-exit immediately? Yes.** Two
    signals suggest a bigger problem, so the process calls `process.exit(1)`
    at once. Confirmed as implemented.

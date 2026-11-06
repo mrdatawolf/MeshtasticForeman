@@ -69,10 +69,10 @@ Nobody has observed the problem yet. These are hypotheses to test:
 
 - [x] Each case in Scope has a recorded result: signal path, exit code, and whether the
       daemon restarted.
-- [ ] Patrick's fix or no-fix decision is recorded in this task.
-- [ ] If fixed, an intentional stop leaves the daemon stopped and a crash still restarts it.
-- [ ] If not fixed, the reason is recorded.
-- [ ] CONTRACT-008's open question 4 states the outcome.
+- [x] Patrick's fix or no-fix decision is recorded in this task.
+- [x] If fixed, an intentional stop leaves the daemon stopped and a crash still restarts it.
+- [x] If not fixed, the reason is recorded. Not applicable, because this was fixed.
+- [x] CONTRACT-008's open question 4 states the outcome.
 
 ## Validation requirements
 
@@ -318,13 +318,69 @@ for `shutdown complete` and no `postmaster.pid`.
 
 ## Blocker
 
-**Waiting on Patrick's fix or no-fix decision.** See "Decision needed from Patrick" in
-Findings. Only Patrick can resolve this. Until then, Plan step 3 does not start, no
-behavior changes, and CONTRACT-008's open question 4 stays as it is.
+None. Patrick chose to fix this on 2026-11-06.
 
 ## Implementation handoff
 
-Not started.
+Task: TASK-052
+Implementer: Claude (main session, after the general-purpose subagent's investigation)
+Date: 2026-11-06
+
+### Decision
+
+Patrick approved the recommended fix: run node directly, and stay stopped on exit 0 or a
+requested stop. Any other exit restarts, including 124 with no stop requested.
+
+### Changes made
+
+- `start-api.sh` runs node directly and sets a trap, so it outlives the daemon.
+- `start-both.sh`'s no-terminal fallback sends `SIGTERM` to the daemon rather than the
+  wrapper, and does nothing extra on Ctrl-C, which already reached the daemon.
+- CONTRACT-008's open question 4 records the outcome.
+
+### Validation performed
+
+All on the real scripts with a temporary database. Stop times are for the user manager.
+
+| Case | Stop time | `shutdown complete` | Restarted | Stale lock left |
+|---|---|---|---|---|
+| `systemctl --user stop`, no radio | 86 ms | Yes | No | No |
+| `systemctl --user stop`, real radio | 72 ms | Yes | No | No |
+| `SIGTERM` to the daemon only | n/a | Yes | No | Not checked |
+| `SIGKILL` to the daemon | n/a | n/a | Yes | Not checked |
+| Stop after that crash restart | 60 ms | Yes | No | Not checked |
+| Ctrl-C on a real pty | About 0.1 s | Yes | No | Not checked |
+| `start-both.sh` fallback, `SIGTERM` | n/a | Yes | No | Not checked |
+| `start-both.sh` fallback, Ctrl-C | n/a | Yes | No | No |
+
+The 90 second stall did not occur in these runs, because the wrapper now outlives the
+daemon. `start-api.sh` and `start-both.sh` pass `bash -n`. No TypeScript changed, and
+`pnpm test` passed on `main` immediately before this work (539 tests).
+
+### Assumptions and deviations
+
+- The `start-both.sh` runs used a copy with no terminal emulator and a `sleep` in place
+  of the frontend. The Ctrl-C run had a parent shell, as a real terminal would.
+- `start-both.sh` runs its `SIGTERM` trap only after its foreground command exits. With
+  the real frontend, the daemon is therefore not told to stop until the frontend exits.
+  This timing is unchanged and was left alone.
+- `.vscode/settings.json` now excludes `.claude/worktrees` from file watching. A VS Code
+  process held 64,841 inotify watches and the limit was reported as 65,536, and removing
+  worktrees lowered it to 37,204. Raising the limit was not needed.
+
+### Unresolved risks
+
+- **Not yet proven on the real service.** `~/Scripts/MeshtasticForeman` runs older code
+  and must be updated. After the next `systemctl stop`, its journal should show
+  `shutdown complete` and the following start should not log a stale lock.
+- The `dev` command now exists in both `package.json` and `start-api.sh`, and the two
+  could drift.
+- A crash during a requested stop does not restart, which is the intent.
+- `start-api.ps1` was not changed or tested.
+
+### Documentation updated
+
+CONTRACT-008 open question 4.
 
 ## Review
 
