@@ -60,16 +60,16 @@ app.
 
 ## Acceptance criteria
 
-- [ ] Device Config shows the firmware version without opening any menu.
-- [ ] The version is shown even before config has been received for the device.
-- [ ] With several devices, it matches the selected device.
-- [ ] The version stays visible after `connect()` finishes and after a GPS update.
-- [ ] A test confirms every `device:status` event for a device with a known version
+- [x] Device Config shows the firmware version without opening any menu.
+- [x] The version is shown even before config has been received for the device.
+- [x] With several devices, it matches the selected device.
+- [x] The version stays visible after `connect()` finishes and after a GPS update.
+- [x] A test confirms every `device:status` event for a device with a known version
       carries that version, for both `firmwareVersion` and `hardwareModel`.
-- [ ] A metadata packet with no version leaves the saved version unchanged.
-- [ ] A disconnected device's version is labelled as last reported.
-- [ ] An unknown version reads "Not reported yet", not a blank or `null`.
-- [ ] The display is readable at phone width and meets the text contrast target.
+- [x] A metadata packet with no version leaves the saved version unchanged.
+- [x] A disconnected device's version is labelled as last reported.
+- [x] An unknown version reads "Not reported yet", not a blank or `null`.
+- [x] The display is readable at phone width and meets the text contrast target.
 
 ## Validation requirements
 
@@ -90,7 +90,55 @@ None.
 
 ## Implementation handoff
 
-Not started.
+Task: TASK-051
+Implementer: Claude (interface-designer agent, finished by the main session after a
+machine lockup)
+Date: 2026-11-06
+
+### Changes made
+
+- `device-manager.ts`: status events carry the saved firmware version and hardware
+  model. Versions are loaded from the device row on connect, kept per device across
+  disconnects, and replaced when a metadata packet reports new values. A metadata
+  packet with an empty field no longer erases the saved value.
+- `firmwareDisplay.ts` and `DeviceConfigPage.tsx`: a firmware panel at the top of
+  Device Config, with last-reported and "Not reported yet" states.
+- `docs/guide/getting-started.md`: new section on checking the firmware version.
+
+### Validation performed
+
+- `pnpm test`: 505 pass (shared 31, web 133, daemon 341), peak 6.7 GB.
+- `pnpm lint`: 0 errors, 5 warnings, all in code this task did not change.
+- `shared`, `daemon` and `web` build. `pnpm build` still fails on the existing
+  `CONTRACT-008` docs error, unrelated to this task.
+- Contrast on the panel background: label 10.01:1, version 14.97:1, unknown text 8.1:1.
+- The panel's CSS was rendered at 375px, including a long unbroken version string,
+  with no overflow. That render used the panel alone with approximate colours, not
+  the running app.
+
+### Acceptance criteria evidence
+
+Component tests cover the display states and device selection. Daemon tests cover
+status events on every path, metadata packets, disconnects and radio swaps.
+
+### Assumptions and deviations
+
+- `device-manager.test.ts` gained an `afterEach` that shuts the manager down and
+  closes the database. This is outside the task's scope and Patrick approved it. Each
+  test leaked a PGlite instance, the suite passed 6 GB, and it contributed to the
+  lockup on 2026-11-06. The suite now peaks at 1.9 GB. It is a separate commit.
+
+### Unresolved risks
+
+- The manual check is not done: compare the page against
+  `meshtastic --port <port> --info` on a real radio, then after a disconnect.
+- TASK-047's Versions check and TASK-049 touch the same status event. TASK-047 is on
+  this branch and all tests pass, but neither has been run against a real radio with
+  this change.
+
+### Documentation updated
+
+`docs/guide/getting-started.md`.
 
 ## Review
 
