@@ -3,7 +3,7 @@
 Status: Accepted
 Approved by: Patrick
 Approved date: 08/24/26
-Related tasks: TASK-029
+Related tasks: TASK-029, TASK-052
 
 ## Rework-risk note — read before approving
 
@@ -120,7 +120,7 @@ inventing ordering ad hoc.
   is added alongside it; `stop()` is not renamed, removed, or altered.
 - Changing `start-api.sh`'s unconditional restart loop (`while true; do pnpm
   ... dev || true; ...; done`) or the systemd units in `Samples/`. See Open
-  questions #4 for why this interaction still needs the human's attention
+  questions #4 for how this interaction is being handled
   even though it's out of this contract's editable scope.
 - Any change to how `.env`/config is loaded, or to `clearDbLock()`'s
   existing startup-time call in `db/client.ts:9` (CONTRACT-001/CONTRACT-003
@@ -164,8 +164,8 @@ inventing ordering ad hoc.
   a shutdown summary, and `process.exit(0)` is called.
 - **Output (timeout path)**: a logged warning identifying which stage the
   sequence was in when the timeout fired, followed by `process.exit(124)`
-  (see Required behavior/timeout for why this specific code is proposed,
-  and Open questions #2 for confirming it).
+  (see Required behavior/timeout for why this specific code was chosen, and
+  Open questions #2 for its confirmation).
 - **Side effects observed externally**: connected WS clients receive a
   close frame with code `1001` and reason `"server shutting down"` (see
   Required behavior); the MQTT broker sees the client disconnect; any
@@ -247,8 +247,8 @@ is the real backstop, not per-step error handling.
   gateway first means every `detachDevice()` call during step 4 targets an
   already-idle gateway (client `null`, no self-announce timers running)
   instead of one that might still be mid-`stop()` teardown itself. This is
-  a judgment call, not a hard requirement of the code as written — flagged
-  in Open questions #3.
+  a judgment call, not a hard requirement of the code as written, and the
+  human confirmed it in Open questions #3.
 - **Serial before PGlite**: every remaining subsystem that can still issue
   a DB query (`DeviceManager`'s persistence calls, any WS command handler
   still in flight) must be stopped before the worker terminates, so a
@@ -339,9 +339,9 @@ it unsafely inside the timeout handler.
 A second `SIGTERM`/`SIGINT` received while a shutdown is already in
 progress immediately calls `process.exit(1)` (bypassing the remaining
 sequence and the timeout) — the conventional "I mean it, stop now"
-double-signal behavior. Flagged as a recommendation, not a hard
-requirement derived from existing code (there is no precedent for this in
-the codebase); see Open questions #5.
+double-signal behavior. A second signal is treated as a sign of a bigger
+problem, so the remaining sequence is abandoned. There is no precedent for
+this in the codebase; the human confirmed it in Open questions #5.
 
 ### Shutdown timeout
 
@@ -354,16 +354,15 @@ resolving, a serial `transport.disconnect()` still awaiting the OS, a
 PGlite query mid-flight) is abandoned — Node's forced process exit does
 not run further JS, so nothing "half-finishes" cleanly; whatever OS-level
 resources (open sockets, open serial handles) hadn't yet been released
-are released by the OS on process death instead. **Proposed timeout
-duration: 10 seconds.** This is a recommendation requiring explicit
-human confirmation, not derived from existing code (there is no prior
-shutdown-timeout precedent anywhere in this codebase to match against).
+are released by the OS on process death instead. **Timeout
+duration: 10 seconds.** The human confirmed this value. It is not derived
+from existing code (there is no prior shutdown-timeout precedent anywhere
+in this codebase to match against).
 It is checked for safety against one existing constraint: the systemd
 unit at `Samples/foreman-api.service` sets no `TimeoutStopSec`, so
 systemd's default (90 s) applies — a 10 s internal timeout leaves ample
 margin before systemd would `SIGKILL` the process itself. See Open
-questions #2 for the timeout duration and exit code, both open for
-confirmation.
+questions #2 for the confirmed timeout duration and exit code.
 
 ## Postconditions and invariants
 
@@ -398,11 +397,10 @@ confirmation.
 - **An `uncaughtException`/`unhandledRejection` fires during shutdown**:
   the two existing handlers (`index.ts:54-73`) still catch it and route it
   to `fatalError()`, which — on a TTY — waits for a keypress, or otherwise
-  waits 5 seconds, before its own `process.exit(1)`. This is **not**
-  reconciled by this contract with the shutdown-timeout path; both could
-  in principle fire, and whichever calls `process.exit()` first wins. This
-  interaction is a genuine open question, not silently resolved — see Open
-  questions #6.
+  waits 5 seconds, before its own `process.exit(1)`. The wait is
+  deliberately kept. Whichever `process.exit()` call comes first wins, and
+  a second signal during the wait still exits immediately. See Open
+  questions #6 for the decision and its accepted edge case.
 
 ## Interfaces
 
@@ -496,7 +494,7 @@ No change is required to `PGliteProxy.close()` or `clearDbLock()`
 - Operator (terminal/`journalctl`): sees a logged shutdown-start line
   (signal name), one line per subsystem as it completes (or fails, still
   logged), and either a shutdown-complete line before exit 0, or a
-  "shutdown timed out during <step>, forcing exit" line before exit 124.
+  "shutdown timed out during `<step>`, forcing exit" line before exit 124.
 
 ## Validation requirements
 
@@ -522,59 +520,40 @@ No change is required to `PGliteProxy.close()` or `clearDbLock()`
 
 ## Open questions
 
-1. **Does `app.close()` on the installed `@fastify/websocket@^11.0.2` /
-   `fastify@^5.3.2` already force-close any WS client left open, and with
-   what code?** This contract does not assume any particular behavior here
-   and instead requires the coordinator to close every WS client
-   explicitly, with a defined code/reason, *before* calling `app.close()`
-   (Required behavior), so the answer doesn't matter for correctness. It
-   may still matter for `app.close()`'s own resolve timing (whether it
-   waits on the WebSocketServer at all) — worth a quick implementation-time
-   check, not a blocking question for approval.
-2. **Is the proposed 10-second shutdown timeout, and the proposed exit
-   code 124 for the force-exit path, acceptable?** Neither is derived from
-   existing code or precedent in this repository — both are this
-   contract's own recommendation (10 s: generous relative to the
-   lightweight teardown work involved and well within systemd's 90 s
-   default `TimeoutStopSec`; 124: the conventional "timed out" exit code
-   used by GNU `timeout`, chosen to be distinguishable from `fatalError()`'s
-   existing exit code 1 in logs/monitoring). The human should confirm or
-   choose different values.
-3. **Is MQTT-before-serial the right relative order, or should it be
-   serial-before-MQTT?** As explained in Required behavior, there is no
-   strict data-dependency forcing this order — the rationale given (avoid
-   `detachDevice()` calls racing a still-shutting-down gateway) is a
-   judgment call, not a hard requirement. The human should confirm or
-   propose different reasoning/order.
-4. **The `start-api.sh` restart-loop interaction.** `start-api.sh`
-   (referenced by `Samples/foreman-api.service`'s `ExecStart`) wraps the
-   daemon in an unconditional `while true; do pnpm ... dev || true; ...;
-   done` loop with a 1 s sleep — it restarts the daemon on *any* exit,
-   clean or not. This contract's clean shutdown path calls
-   `process.exit(0)`. If an operator sends `SIGTERM` intending to *stop*
-   the service (e.g., `systemctl stop foreman-api.service`, which sends
-   `SIGTERM` to the whole control group under systemd's default
-   `KillMode=control-group`, hitting both the bash wrapper and the node
-   process), the daemon may restart itself via the shell loop within ~1 s
-   of this contract's own graceful exit completing, defeating the intent
-   to stop. This contract does not change `start-api.sh` (Scope/Excluded)
-   — it is flagged here because it's an externally-visible compatibility
-   concern this contract's own behavior interacts with, not because this
-   contract can resolve it. The human should decide whether this is
-   acceptable as-is, or whether `start-api.sh`/the systemd units need a
-   follow-up change (e.g., distinguishing an intentional-stop exit code
-   from a crash) — out of this contract's scope either way.
-5. **Should a second `SIGTERM`/`SIGINT` mid-shutdown force-exit
-   immediately (proposed), or be ignored/queued instead?** No precedent in
-   this codebase; flagged as a recommendation requiring confirmation.
-6. **Should the shutdown coordinator suppress/short-circuit
-   `fatalError()`'s existing "wait for keypress or 5 s" behavior
-   (`index.ts:24-49`) while a `SIGTERM`/`SIGINT`-triggered shutdown is
-   already in progress?** `fatalError()`'s wait is designed for *crash*
-   visibility (so an operator watching a terminal can read the error
-   before the loop restarts) — that rationale doesn't obviously apply to
-   an unrelated `uncaughtException` firing mid-*intentional* shutdown,
-   where it would visibly stall a `systemctl stop`/`Ctrl-C` for up to 5+
-   seconds. This contract does not resolve this interaction and flags it
-   for explicit human decision rather than silently picking a precedence
-   between the two exit paths.
+All six questions are resolved. Patrick decided them on 2026-11-06, and the
+numbers are kept because the sections above refer to them.
+
+1. **Does `app.close()` force-close a WS client left open, and with what
+   code? Resolved by check.** Tested on 2026-11-06 with `fastify` 5.12.1,
+   `@fastify/websocket` 11.3.0 and `ws` 8.21.3. A client left open is closed
+   by the plugin's default `preClose` hook, but it receives code `1005`
+   (no status) and no reason. When the client is closed first with code
+   `1001`, as this contract requires, it receives that code and reason.
+   `app.close()` resolved within 5 ms in both cases. The explicit close is
+   therefore required, because `app.close()` alone would not send the
+   contract's code and reason.
+2. **Are the 10-second timeout and exit code 124 acceptable? Yes.** Both
+   are confirmed as implemented.
+3. **Is MQTT-before-serial the right order? Yes.** Confirmed as implemented.
+4. **Does the `start-api.sh` restart loop defeat an intentional stop?
+   Unresolved by this contract, follow-up in TASK-052.** The loop restarts
+   the daemon after any exit, so a clean exit could be followed by a restart.
+   TASK-052 will establish what actually happens, then either fix it or
+   record a decision that it is not worth fixing. `start-api.sh` remains out
+   of this contract's scope.
+5. **Should a second `SIGTERM`/`SIGINT` force-exit immediately? Yes.** Two
+   signals suggest a bigger problem, so the process calls `process.exit(1)`
+   at once. Confirmed as implemented.
+6. **Should a shutdown in progress suppress `fatalError()`'s wait? No, the
+   wait stays.** It does not conflict with answer 5:
+
+   - Without a TTY, a second signal still reaches the signal handler during
+     the 5-second wait and exits immediately.
+   - On a TTY, `fatalError()` puts stdin in raw mode, so Ctrl-C arrives as a
+     keypress rather than `SIGINT`. It ends the wait and exits with code 1,
+     which is equally immediate. `SIGTERM` from another process behaves as
+     in the case above.
+
+   One edge case is accepted. Without a TTY, an exception during shutdown
+   ends the process after 5 seconds, even if the sequence is still running.
+   Remaining steps, including clearing the database lock, can be skipped.
