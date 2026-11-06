@@ -49,6 +49,23 @@ In production, the daemon serves the built frontend — run `pnpm build` first, 
 | `PGLITE_DIR` | auto | Override path for the PGlite data directory |
 | `VITE_MAP_STYLE` | OpenFreeMap liberty | MapLibre GL style JSON URL |
 
+## Hiding old nodes
+
+The **Last seen** control in the header limits the app to nodes heard recently. Choose **Week**,
+**Month**, **Quarter**, **Year**, or **All**. It starts on **Week**, and each browser remembers its
+own choice. The count beside it, such as `6 / 12 nodes`, shows how many nodes are shown out of all
+known nodes, after any MQTT region scope. Hidden nodes are not deleted.
+
+- A node's age comes from whichever is more recent, its mesh or its MQTT last-heard time.
+- Nodes with no last-heard time appear only under **All**.
+- The connected radio's own node always appears.
+- A hidden node comes back as soon as it is heard again, with no reload.
+
+The filter applies to Nodes, Map, the **+ New** picker on Messages, and the per-node charts and lists
+on Analytics. Existing conversations stay in Messages with their names, whatever their age. Activity,
+Logs, Overrides, and Device Config are not filtered. The traceroute **Age** control on Map and the
+range buttons on Analytics work separately.
+
 ## Troubleshooting a radio
 
 Open **Settings > Debug** when the app says a radio is connected but nothing is happening. The page
