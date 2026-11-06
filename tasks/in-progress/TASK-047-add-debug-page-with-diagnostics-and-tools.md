@@ -1,7 +1,7 @@
 # TASK-047: Add Debug page with diagnostics and tools
 
 Owner role: interface-designer (frontend), implementer (daemon)
-Assigned agent: Codex
+Assigned agent: Claude (implementer and interface designer)
 Proposed by: Claude, at Patrick Moon's request
 Proposed date: 2026-11-04
 Approved by:  Patrick
