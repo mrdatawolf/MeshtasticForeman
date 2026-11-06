@@ -36,6 +36,7 @@ before which task can move to `tasks/approved/`.
 | CONTRACT-010 (drafted, Proposed) | Health/readiness endpoint semantics | TASK-033 |
 | CONTRACT-011 (not yet drafted, optional) | Map coverage-math correctness | TASK-011 |
 | CONTRACT-012 (**Accepted**) | Device-config pure transform functions | TASK-021 (contract unblocked; task itself explicitly held for Patrick) |
+| CONTRACT-013 (drafted, Proposed) | Debug diagnostics and tools | TASK-047, TASK-048 |
 | ADR-002, ADR-003, ADR-004 (retrospective, produced by TASK-034) | PGlite worker pattern, MQTT bridging, multi-device stance | Block nothing |
 
 CONTRACT-004 through CONTRACT-010 were drafted 2026-08-24 in one batch, all
