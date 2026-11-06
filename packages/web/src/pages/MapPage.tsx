@@ -211,7 +211,7 @@ export function MapPage({
       if (p != null) seen.add(p);
     }
     return [...seen].sort((a, b) => a - b);
-  }, [lookupMqttNodes, deviceId, deviceConfigs]);  
+  }, [lookupMqttNodes, deviceId, deviceConfigs]);
 
   // Tracks nodes whose terrain is currently being force-refreshed via the popup button.
   const [refreshingTerrainNodes, setRefreshingTerrainNodes] = useState<Set<number>>(new Set());
