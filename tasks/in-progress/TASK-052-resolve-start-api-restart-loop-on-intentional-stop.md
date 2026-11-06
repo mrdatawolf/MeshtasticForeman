@@ -120,7 +120,8 @@ and the loop never saw an exit. Runs marked "held" kept one `POST` in flight, so
 
 | Case | Signal path | Loop saw | Daemon exit | Restarted | Evidence |
 |---|---|---|---|---|---|
-| `systemctl stop`, fast shutdown (about 15 ms) | systemd `SIGTERM` to control group; bash dies by signal 15, `pnpm` by 15, `sh` gone | None | Clean, `shutdown complete` | No. `Result=success`, `code=killed status=TERM` | Real, also no-hook |
+| `systemctl stop`, fast shutdown, plain unit (same settings as the deployed unit) | systemd `SIGTERM` to control group; bash and `pnpm` die by signal 15, then `final-sigterm` | None | **Aborted.** Last line `retention sweep`, no `PGlite worker`, no `shutdown complete` | No. Stop took 90 s, `Result=timeout` | Real, 2 of 2, no hook. See "Stop comparison" |
+| `systemctl stop`, fast shutdown, my `ExecStopPost` added | Same | None | Clean, `shutdown complete`. **This is a measurement artefact**: the extra step appears to give the daemon time to finish first | No. `Result=success`, `code=killed status=TERM` | Real, 2 of 2, but not the deployed setup |
 | `systemctl stop`, held | As above, then `final-sigterm` | None | **Aborted about 35-80 ms after the signal.** No `shutdown complete`, no timeout line | No | Real, also no-hook and without `ExecStopPost` |
 | `systemctl stop` equivalent, no systemd: one `SIGTERM` each to bash, `pnpm`, `sh`, node | Direct to those exact PIDs | None | Clean (fast). Held: survives the full 10 s, then exit 124 | No | Real; this is the control for the row above |
 | Ctrl-C, foreground group | Pty `^C`; `SIGINT` to bash, `pnpm`, `sh`, node. Node exits, `pnpm` dies by signal 2, bash dies by signal 2 | None | Clean. Held: exit 124 after 10 s while bash and `pnpm` wait | No | Real pty, also no-hook |
@@ -172,13 +173,46 @@ and database. The deployed unit has `KillMode=control-group` and `Restart=on-fai
 inferred. No `strace` was available and the daemon's exit status was not captured in
 these runs.
 
-### Unexplained
+### Stop comparison
 
-The user manager sometimes stayed in `final-sigterm` or `stop-sigterm` with an empty
-cgroup until `TimeoutStopSec` (90 s) and then reported `Result=timeout`. It happened on
-every held `systemctl stop` run, after `SIGKILL` to bash, and once in 10 restart-then-stop
-runs. Removing `ExecStopPost` did not change it. It may be specific to the user manager:
-the real system-level stop reached inactive in the same second. The cause was not found.
+Added after the first report, at the coordinator's request. It followed a real-radio run
+in a user unit, where the `pnpm` chain stalled for 90 s after `retention sweep` and direct
+node stopped in 62 ms. These runs used no radio, no hook and no `ExecStopPost`. Each row
+ran twice with matching results.
+
+| Chain | Shutdown | Stop took | Last daemon log line | Node after stop | Result |
+|---|---|---|---|---|---|
+| `start-api.sh` (`pnpm --filter`) | Fast | **90 s** | `retention sweep` | Gone by 0.27 s, cgroup empty | `timeout` |
+| `start-api.sh` (`pnpm --filter`) | Held | **90 s** | `websocket clients` | Gone by 0.27 s, cgroup empty | `timeout` |
+| Direct node | Fast | 0.05 s | `shutdown complete` (11-12 ms) | Gone | `success` |
+| Direct node | Held | 10 s | `shutdown timed out` | Gone after exit 124 | `exit-code` |
+
+- **Same stall, without the radio.** The last line and the 90 s match the radio run, so
+  the radio is not needed for it. The radio run has a real serial step and mine does not.
+- **The daemon does not linger.** Node is gone by the first sample after stop begins, and
+  `cgroup.events` shows `populated 0`. Systemd then sits in `final-sigterm` for the full
+  timeout with nothing left to wait for.
+- **The broken log pipe guess is refuted here.** Node's stdout and stderr are the same
+  journald socket as the main process. Output does not pass through `pnpm`.
+- **The stall has a likely cause outside this repo.** The user manager logged `Failed to
+  add control inotify watch descriptor ... No space left on device` 164 times today, with
+  `max_user_watches` at 65536. Without that watch it would never hear that the cgroup
+  emptied. This is a strong inference, not proven, because changing the limit needs
+  `sudo`.
+- **`pnpm` is what exposes it.** With direct node, the main process is the daemon, so
+  systemd learns of its exit from the process itself and does not need the cgroup event.
+- **The real system-level stop did not stall.** It reached inactive in the same second at
+  14:42:20 with `Result=success`. The system manager has a separate inotify allowance as
+  root. So the 90 s stall should not be expected from the deployed service, but the
+  aborted shutdown is present in both.
+
+Earlier 90 s stalls in these runs have the same shape: every held `systemctl stop`, after
+`SIGKILL` to bash, and 1 of 10 restart-then-stop runs that had `ExecStopPost`.
+
+**Correction to the first report.** It said a fast `systemctl stop` was clean and treated
+the abort as depending on a long shutdown. All those fast runs, including the no-hook
+control, had `ExecStopPost` in the unit. The plain unit aborts even a 12 ms shutdown, which
+agrees with the live journal.
 
 ### Method
 
@@ -197,6 +231,9 @@ the real system-level stop reached inactive in the same second. The cause was no
 - **Exit codes:** a `DEBUG` trap sourced through `BASH_ENV` logged `$?` without editing
   the script. No-hook control runs matched for Ctrl-C, daemon `SIGTERM`, crash and
   `systemctl stop`. `pnpm` and bash exit order came from a 5 ms `/proc` poller.
+- **`ExecStopPost`:** units used it to record the exit result, except the `nopost` runs
+  and the "Stop comparison" runs. It changes the outcome of a fast `systemctl stop`, so
+  only the runs without it represent the deployed unit.
 - **Held shutdown:** a half-sent `POST /api/proposals` stands in for a slow shutdown. It
   is an approximation, used only for timing. The double Ctrl-C at 6 ms is also tighter
   than a person can type; the 300 ms held run is the realistic one.
@@ -241,6 +278,9 @@ done
 - **Removing `pnpm` is required:** a trap alone should not be enough, because `pnpm` dies
   within about 20 ms of `SIGTERM`, which would return control to bash while the daemon
   is still shutting down.
+- **Direct node has been measured, but not this script:** with no `pnpm` or bash, a
+  fast stop was clean in 0.05 s and a held stop ran the full 10 s. The real-radio run
+  agrees. The loop and trap remain untested.
 
 Risks:
 
@@ -273,7 +313,8 @@ for `shutdown complete` and no `postmaster.pid`.
 1. Fix or no fix.
 2. If fix: is running node directly, without `pnpm`, acceptable?
 3. If fix: should exit 0 always mean stay stopped, and should exit 124 restart?
-4. Should the 90 s user-manager stall be followed up, or left as unexplained?
+4. Should `fs.inotify.max_user_watches` be raised, or the watchers using it be found? It
+   needs `sudo` and is outside this repo. It would also test the cause of the 90 s stall.
 
 ## Blocker
 
