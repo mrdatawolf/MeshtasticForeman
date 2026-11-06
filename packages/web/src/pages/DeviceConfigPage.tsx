@@ -5,6 +5,7 @@ import { ConfigCard } from "../components/config/ConfigCard.js";
 import { visibleEntries } from "../components/config/configConstants.js";
 import { deviceBtnClass, styles, wizardLaunchBtnClass } from "../components/config/configStyles.js";
 import { SetupWizard } from "../components/config/SetupWizard.js";
+import { firmwareDisplay } from "../lib/firmwareDisplay.js";
 import { foremanClient } from "../ws/client.js";
 
 import pageStyles from "./DeviceConfigPage.module.css";
@@ -29,6 +30,7 @@ export function DeviceConfigPage({ devices, configs, autoOpenWizard, onWizardOpe
   const config = selectedId ? configs.get(selectedId) : null;
   const device = devices.find((d) => d.id === selectedId);
   const deviceConnected = device?.status === "connected";
+  const firmware = device ? firmwareDisplay(device) : null;
 
   useEffect(() => {
     if (!selectedId) return;
@@ -81,6 +83,15 @@ export function DeviceConfigPage({ devices, configs, autoOpenWizard, onWizardOpe
             </button>
           ))}
         </div>
+      )}
+
+      {firmware && (
+        <dl className={pageStyles.firmware}>
+          <dt className={pageStyles.firmwareLabel}>{firmware.label}</dt>
+          <dd className={firmware.known ? pageStyles.firmwareValue : pageStyles.firmwareUnknown}>
+            {firmware.value}
+          </dd>
+        </dl>
       )}
 
       {!config ? (

@@ -78,6 +78,17 @@ interface ConnectAttempt {
   opening: Promise<unknown> | null;
 }
 
+/** What a radio last said about itself, as saved on its devices row. */
+interface ReportedVersions {
+  hardwareModel: string | null;
+  firmwareVersion: string | null;
+}
+
+interface VersionColumns {
+  hw_model: string | null;
+  firmware: string | null;
+}
+
 interface ReconnectTarget {
   port: string;
   name: string;
@@ -190,6 +201,14 @@ export class DeviceManager extends EventEmitter {
   private gpsAcquired = new Set<string>();
   /** Latest GPS detail per device */
   private gpsDetails = new Map<string, GpsDetail>();
+  /**
+   * Copy of each device's saved versions, so the synchronous _emitStatus can send
+   * them. Unlike the session state above it survives a disconnect, because a
+   * disconnected device still shows its last reported version. Each connect
+   * reloads it from the row, and a metadata packet replaces it, so a swapped radio
+   * on the same port shows the old radio's version only until it reports its own.
+   */
+  private reportedVersions = new Map<string, ReportedVersions>();
   /** Correlates packetId → replyId for in-flight text packets between onMeshPacket and onMessagePacket */
   private pendingReplyIds = new Map<number, number>();
 
@@ -287,12 +306,14 @@ export class DeviceManager extends EventEmitter {
     await this.db.query("DELETE FROM devices WHERE port = $1 AND id != $2", [port, id]);
 
     // Upsert canonical row
-    await this.db.query(
+    const { rows: savedRows } = await this.db.query<VersionColumns>(
       `INSERT INTO devices(id, name, port)
        VALUES ($1, $2, $3)
-       ON CONFLICT(id) DO UPDATE SET name = EXCLUDED.name, port = EXCLUDED.port`,
+       ON CONFLICT(id) DO UPDATE SET name = EXCLUDED.name, port = EXCLUDED.port
+       RETURNING hw_model, firmware`,
       [id, name, port],
     );
+    this._storeReportedVersions(id, savedRows[0]);
 
     stopIfCancelled();
 
@@ -696,6 +717,8 @@ export class DeviceManager extends EventEmitter {
 
     const known = device ?? backoff ?? attempts[0];
     if (!known) return;
+    // A connect cancelled early may not have reached the point that loads these.
+    await this._ensureReportedVersions(deviceId);
     this._emitStatus(deviceId, known.name, known.port, "disconnected");
     log.info({ deviceId, operation: "disconnect" }, "device disconnected");
   }
@@ -995,6 +1018,7 @@ export class DeviceManager extends EventEmitter {
     status: "disconnected" | "connecting" | "connected" | "error",
     connectedAt?: string,
   ) {
+    const versions = this.reportedVersions.get(id);
     const event: ServerEvent = {
       type: "device:status",
       payload: {
@@ -1004,8 +1028,8 @@ export class DeviceManager extends EventEmitter {
         status,
         connectedAt: connectedAt ?? null,
         lastSeenAt: null,
-        hardwareModel: null,
-        firmwareVersion: null,
+        hardwareModel: versions?.hardwareModel ?? null,
+        firmwareVersion: versions?.firmwareVersion ?? null,
         batteryLevel: this.batteryLevels.get(id) ?? null,
         hasGpsPosition: this.gpsAcquired.has(id),
         gpsDetail: this.gpsDetails.get(id) ?? null,
@@ -1013,6 +1037,27 @@ export class DeviceManager extends EventEmitter {
       },
     };
     this.emit("event", event);
+  }
+
+  private _storeReportedVersions(deviceId: string, row: VersionColumns | undefined): void {
+    if (!row) return;
+    this.reportedVersions.set(deviceId, {
+      hardwareModel: row.hw_model,
+      firmwareVersion: row.firmware,
+    });
+  }
+
+  private async _ensureReportedVersions(deviceId: string): Promise<void> {
+    if (this.reportedVersions.has(deviceId)) return;
+    try {
+      const { rows } = await this.db.query<VersionColumns>(
+        "SELECT hw_model, firmware FROM devices WHERE id = $1",
+        [deviceId],
+      );
+      if (!this.reportedVersions.has(deviceId)) this._storeReportedVersions(deviceId, rows[0]);
+    } catch (err) {
+      log.warn({ deviceId, operation: "load-versions", err }, "could not load saved versions");
+    }
   }
 
   private async _handleDeviceStatus(
@@ -1120,36 +1165,25 @@ export class DeviceManager extends EventEmitter {
   private async _handleMetadata(deviceId: string, meta: any) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const m = meta as any;
-    const hwModel: string | null = m.hwModel != null ? String(m.hwModel) : null;
-    const firmware: string | null = m.firmwareVersion ?? null;
+    // Decoded protobufs fill unset fields with "" and 0 (HardwareModel.UNSET), so
+    // those mean "not in this packet", the same as a missing field.
+    const hwModel: string | null = m.hwModel ? String(m.hwModel) : null;
+    const firmware: string | null =
+      typeof m.firmwareVersion === "string" ? m.firmwareVersion.trim() || null : null;
 
-    await this.db.query("UPDATE devices SET hw_model = $1, firmware = $2 WHERE id = $3", [
-      hwModel,
-      firmware,
-      deviceId,
-    ]);
+    const { rows } = await this.db.query<VersionColumns>(
+      `UPDATE devices
+       SET hw_model = COALESCE($1, hw_model), firmware = COALESCE($2, firmware)
+       WHERE id = $3
+       RETURNING hw_model, firmware`,
+      [hwModel, firmware, deviceId],
+    );
+    this._storeReportedVersions(deviceId, rows[0]);
 
     // Re-emit device status with updated hw/firmware info
     const device = this.devices.get(deviceId);
     if (device) {
-      const event: ServerEvent = {
-        type: "device:status",
-        payload: {
-          id: deviceId,
-          name: device.name,
-          port: device.port,
-          status: "connected",
-          connectedAt: device.connectedAt,
-          lastSeenAt: null,
-          hardwareModel: hwModel,
-          firmwareVersion: firmware,
-          batteryLevel: this.batteryLevels.get(deviceId) ?? null,
-          hasGpsPosition: this.gpsAcquired.has(deviceId),
-          gpsDetail: this.gpsDetails.get(deviceId) ?? null,
-          ownNodeId: this.myNodeIds.get(deviceId) ?? null,
-        },
-      };
-      this.emit("event", event);
+      this._emitStatus(deviceId, device.name, device.port, "connected", device.connectedAt);
     }
   }
 }

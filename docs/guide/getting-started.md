@@ -66,6 +66,17 @@ on Analytics. Existing conversations stay in Messages with their names, whatever
 Logs, Overrides, and Device Config are not filtered. The traceroute **Age** control on Map and the
 range buttons on Analytics work separately.
 
+## Checking a radio's firmware version
+
+**Settings > Device Config** shows the selected radio's firmware version at the top of the page,
+even before its config has arrived. If you have several radios, choose one in the bar above it.
+
+- A connected radio shows **Firmware version** and the version it reported.
+- A radio that is not connected shows **Firmware version (last reported)**, the version saved from
+  its last connection. It may be out of date if the radio was updated or swapped since then.
+- **Not reported yet** means the app has no version for that radio. It appears once the radio
+  connects and finishes sending its config.
+
 ## Troubleshooting a radio
 
 Open **Settings > Debug** when the app says a radio is connected but nothing is happening. The page

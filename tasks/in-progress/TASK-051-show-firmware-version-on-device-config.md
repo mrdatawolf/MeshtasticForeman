@@ -1,7 +1,7 @@
 # TASK-051: Show firmware version on Device Config
 
 Owner role: interface-designer (frontend), implementer (daemon)
-Assigned agent:
+Assigned agent: interface-designer
 Proposed by: Claude, at Patrick Moon's request
 Proposed date: 2026-11-06
 Approved by: Patrick
