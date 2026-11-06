@@ -45,16 +45,18 @@ export type RadioState = "not-held" | "no-request" | "answered" | "waiting" | "s
 /**
  * The CONTRACT-013 "radio responding" rule. Silence alone never counts against
  * the radio, because a healthy radio can be silent. Only a request with no reply does.
+ * The window counts from the first unanswered request, so the watchdog's repeat
+ * requests cannot turn a hung radio's `fail` back into `warn`.
  */
 export function radioState(
-  facts: Pick<ConnectionFacts, "portHeld" | "lastFrameAt" | "lastConfigRequestAt">,
+  facts: Pick<ConnectionFacts, "portHeld" | "lastConfigRequestAt" | "unansweredSinceAt">,
   nowMs: number,
 ): RadioState {
   if (!facts.portHeld) return "not-held";
   if (facts.lastConfigRequestAt === null) return "no-request";
-  const requestMs = Date.parse(facts.lastConfigRequestAt);
-  if (facts.lastFrameAt !== null && Date.parse(facts.lastFrameAt) > requestMs) return "answered";
-  return nowMs - requestMs < RADIO_RESPONSE_WINDOW_MS ? "waiting" : "silent";
+  if (facts.unansweredSinceAt === null) return "answered";
+  const waitedMs = nowMs - Date.parse(facts.unansweredSinceAt);
+  return waitedMs < RADIO_RESPONSE_WINDOW_MS ? "waiting" : "silent";
 }
 
 function check(

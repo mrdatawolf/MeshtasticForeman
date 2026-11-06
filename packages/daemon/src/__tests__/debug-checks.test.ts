@@ -45,6 +45,7 @@ function facts(overrides: Partial<DeviceFacts> = {}): DeviceFacts {
     lastFrameAt: iso(1_000),
     framesThisConnection: 40,
     lastConfigRequestAt: iso(2_000),
+    unansweredSinceAt: null,
     configured: true,
     portPresent: true,
     portAccessible: true,
@@ -82,6 +83,7 @@ describe("Radio responding", () => {
     const check = result("radio-responding", {
       lastFrameAt: null,
       lastConfigRequestAt: iso(RADIO_RESPONSE_WINDOW_MS - 1),
+      unansweredSinceAt: iso(RADIO_RESPONSE_WINDOW_MS - 1),
     });
     expect(check.status).toBe("warn");
   });
@@ -90,6 +92,7 @@ describe("Radio responding", () => {
     const check = result("radio-responding", {
       lastFrameAt: iso(60_000),
       lastConfigRequestAt: iso(RADIO_RESPONSE_WINDOW_MS),
+      unansweredSinceAt: iso(RADIO_RESPONSE_WINDOW_MS),
     });
     expect(check.status).toBe("fail");
     expect(check.cause).toContain("firmware");
@@ -111,13 +114,22 @@ describe("Radio responding", () => {
     ).toBe("warn");
   });
 
-  it("does not count a frame from before the request", () => {
+  it("stays failed through a repeat request, however recent", () => {
     expect(
       radioState(
-        { portHeld: true, lastFrameAt: iso(30_000), lastConfigRequestAt: iso(30_000) },
+        { portHeld: true, lastConfigRequestAt: iso(1_000), unansweredSinceAt: iso(95_000) },
         NOW,
       ),
     ).toBe("silent");
+  });
+
+  it("waits again for a new request after the radio answers", () => {
+    expect(
+      radioState(
+        { portHeld: true, lastConfigRequestAt: iso(1_000), unansweredSinceAt: iso(1_000) },
+        NOW,
+      ),
+    ).toBe("waiting");
   });
 });
 
@@ -128,6 +140,7 @@ describe("device checks", () => {
       portAccessible: false,
       lastFrameAt: null,
       lastConfigRequestAt: iso(30_000),
+      unansweredSinceAt: iso(30_000),
       configured: false,
       ownNodeId: null,
     });
@@ -190,6 +203,7 @@ describe("device checks", () => {
         ownNodeId: null,
         lastFrameAt: null,
         lastConfigRequestAt: iso(30_000),
+        unansweredSinceAt: iso(30_000),
       }).status,
     ).toBe("fail");
     expect(result("node-id-known", { ownNodeId: null, portHeld: false }).status).toBe("skipped");
@@ -318,6 +332,7 @@ describe("collectDebugChecks", () => {
     lastFrameAt: null,
     framesThisConnection: 0,
     lastConfigRequestAt: null,
+    unansweredSinceAt: null,
     configured: false,
   };
   const deviceManager = {

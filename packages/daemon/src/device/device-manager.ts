@@ -54,6 +54,8 @@ export interface ConnectionFacts {
   lastFrameAt: string | null;
   framesThisConnection: number;
   lastConfigRequestAt: string | null;
+  /** The first config request with no frame since. Repeat requests do not move it. */
+  unansweredSinceAt: string | null;
   configured: boolean;
 }
 
@@ -62,6 +64,7 @@ interface ConnectionStats {
   lastFrameMs: number | null;
   frames: number;
   lastConfigRequestMs: number | null;
+  unansweredSinceMs: number | null;
   configured: boolean;
 }
 
@@ -371,6 +374,7 @@ export class DeviceManager extends EventEmitter {
       lastFrameMs: null,
       frames: 0,
       lastConfigRequestMs: null,
+      unansweredSinceMs: null,
       configured: false,
     };
     this.connectionStats.set(id, stats);
@@ -484,6 +488,7 @@ export class DeviceManager extends EventEmitter {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onFromRadio.subscribe((msg: any) => {
       stats.lastFrameMs = Date.now();
+      stats.unansweredSinceMs = null;
       stats.frames += 1;
       const variant = msg?.payloadVariant?.case ?? "unknown";
       if (variant === "packet") return; // already handled by onMeshPacket
@@ -826,6 +831,7 @@ export class DeviceManager extends EventEmitter {
       lastFrameAt: toIso(stats?.lastFrameMs),
       framesThisConnection: stats?.frames ?? 0,
       lastConfigRequestAt: toIso(stats?.lastConfigRequestMs),
+      unansweredSinceAt: toIso(stats?.unansweredSinceMs),
       configured: stats?.configured ?? false,
     };
   }
@@ -950,6 +956,7 @@ export class DeviceManager extends EventEmitter {
 
   private _markConfigRequested(stats: ConnectionStats): void {
     stats.lastConfigRequestMs = Date.now();
+    stats.unansweredSinceMs ??= stats.lastConfigRequestMs;
     stats.configured = false;
   }
 

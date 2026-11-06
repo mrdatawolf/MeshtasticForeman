@@ -4,8 +4,8 @@ Owner role: Implementer
 Assigned agent:
 Proposed by: Claude, at Patrick Moon's request
 Proposed date: 2026-11-06
-Approved by:
-Approved date:
+Approved by: Patrick
+Approved date: 2026-11-06
 Related contracts: CONTRACT-008 (open question 4)
 Related ADRs: None
 Dependencies: None

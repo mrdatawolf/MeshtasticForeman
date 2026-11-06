@@ -3,6 +3,7 @@
 Status: Accepted
 Approved by: Patrick
 Approved date: 2026-11-06
+Amended: 2026-11-06, by Patrick. Radio responding now counts from the first unanswered request.
 Related tasks: TASK-047, TASK-049
 Related ADRs: ADR-004
 Depends on: CONTRACT-007 for validation and error responses
@@ -59,6 +60,8 @@ For each connection the daemon records:
 - `framesThisConnection`.
 - `lastConfigRequestAt`: updated by every config request, whether it comes from
   `connect()`, the watchdog, or a tool.
+- `unansweredSinceAt`: the time of the first config request with no frame since.
+  Any frame clears it, and repeat requests do not move it.
 - `configured`: whether `DeviceConfigured` was reached for the latest request.
   `configure()` resolving proves nothing, because it resolves after its 60 second
   timeout on healthy and silent radios alike.
@@ -70,9 +73,12 @@ The response window is 25 seconds, held as a code constant.
 | State | Status |
 |---|---|
 | The daemon does not hold the port | `skipped` |
-| A frame arrived after `lastConfigRequestAt` | `pass` |
-| No frame since the request, and under 25 seconds have passed | `warn` (waiting) |
-| No frame since the request, and 25 seconds or more have passed | `fail` |
+| A config request was made, and `unansweredSinceAt` is empty | `pass` |
+| Under 25 seconds since `unansweredSinceAt` | `warn` (waiting) |
+| 25 seconds or more since `unansweredSinceAt` | `fail` |
+
+The watchdog re-requests config about every 90 seconds. Those repeat requests do
+not restart the window, so a hung radio stays `fail` until a frame arrives.
 
 Silence with no unanswered request is never a failure. A healthy radio can be
 silent, and the watchdog's next request will test it.

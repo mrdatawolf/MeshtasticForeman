@@ -274,6 +274,33 @@ describe("DeviceManager debug behavior", () => {
       expect(manager.getConnectionFacts(DEVICE_ID).lastConfigRequestAt).not.toBe(before);
     });
 
+    it("repeat requests keep the time of the first unanswered request", async () => {
+      await connect();
+      const first = manager.getConnectionFacts(DEVICE_ID).unansweredSinceAt;
+      expect(first).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(135_000);
+
+      const facts = manager.getConnectionFacts(DEVICE_ID);
+      expect(lastDevice().configure).toHaveBeenCalledTimes(2);
+      expect(facts.lastConfigRequestAt).not.toBe(first);
+      expect(facts.unansweredSinceAt).toBe(first);
+    });
+
+    it("any frame clears the unanswered request, and the next request starts again", async () => {
+      await connect();
+
+      lastDevice().events.onFromRadio.dispatch({ payloadVariant: { case: "packet" } });
+      expect(manager.getConnectionFacts(DEVICE_ID).unansweredSinceAt).toBeNull();
+
+      vi.setSystemTime(Date.now() + 1_000);
+      expect(manager.requestConfig(DEVICE_ID)).toBe(true);
+
+      expect(manager.getConnectionFacts(DEVICE_ID).unansweredSinceAt).toBe(
+        new Date().toISOString(),
+      );
+    });
+
     it("records a request core makes by itself after the radio reboots", async () => {
       await connect();
       vi.setSystemTime(Date.now() + 1_000);

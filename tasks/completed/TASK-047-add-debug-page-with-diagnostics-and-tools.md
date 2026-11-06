@@ -315,11 +315,10 @@ Run these on the normal daemon, not from a worktree.
 
 ### Unresolved risks
 
-- **A hung radio's Radio responding status will alternate.** The watchdog sends a new
-  request about every 90 seconds, which resets the 25 second window. The check shows
-  `fail` for about 65 seconds, then `warn` for about 25, and repeats. This follows
-  the contract as written. TASK-049 should weigh it before using this rule for an
-  app-wide status.
+- **Hung radio status, resolved 2026-11-06.** As first written, the watchdog's repeat
+  requests reset the 25 second window, so the check alternated between `fail` and
+  `warn`. Patrick approved amending CONTRACT-013: the window now counts from the first
+  unanswered request, so the check stays `fail` until a frame arrives.
 - **Packaged installer not verified.** `serialport` is now copied to
   `dist-daemon/node_modules`, but the bundler copies single packages and not their
   dependencies. `@meshtastic/transport-node-serial` already relies on the same

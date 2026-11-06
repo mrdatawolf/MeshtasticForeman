@@ -93,7 +93,7 @@ gives you the report as text for sharing.
 | Raw serial probe | After you confirm, drops the connection for up to about 30 seconds and tests the radio directly, then reconnects. |
 
 **Radio responding** is the check to read first. It fails when the radio sends nothing for 25
-seconds after a config request. A radio that is quiet with nothing to answer is fine.
+seconds after a config request, and stays failed until the radio sends something. A radio that is quiet with nothing to answer is fine.
 
 If it fails, run the raw serial probe:
 
