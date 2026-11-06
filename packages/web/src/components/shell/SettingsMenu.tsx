@@ -40,6 +40,9 @@ export function SettingsMenu({ tab, overrideCount, onNavigate }: Props) {
             <button className={menuNavClass(tab === "config")} onClick={() => navigate("config")}>
               Device Config
             </button>
+            <button className={menuNavClass(tab === "debug")} onClick={() => navigate("debug")}>
+              Debug
+            </button>
           </div>
         </div>
       )}

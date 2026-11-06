@@ -11,7 +11,7 @@ import { EventEmitter } from "node:events";
 import { PGlite } from "@electric-sql/pglite";
 import { Types } from "@meshtastic/core";
 import { TransportNodeSerial } from "@meshtastic/transport-node-serial";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { runMigrations } from "../db/migrations.js";
 import {
@@ -167,6 +167,17 @@ describe("DeviceManager debug behavior", () => {
   const dropConnection = (device = lastDevice()) =>
     device.events.onDeviceStatus.dispatch(Types.DeviceStatusEnum.DeviceDisconnected);
 
+  // One database for the file: migrating a new one per test is slow enough to
+  // starve the worker-based tests that run alongside this file.
+  beforeAll(async () => {
+    db = new PGlite();
+    await runMigrations(db);
+  });
+
+  afterAll(async () => {
+    await db.close();
+  });
+
   beforeEach(async () => {
     vi.useFakeTimers({
       toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
@@ -183,8 +194,7 @@ describe("DeviceManager debug behavior", () => {
     probeRunner.mockReset();
     probeRunner.mockResolvedValue(noResponse);
 
-    db = new PGlite();
-    await runMigrations(db);
+    await db.query("DELETE FROM devices");
     await db.query("INSERT INTO devices(id, name, port) VALUES ($1, $2, $3)", [
       DEVICE_ID,
       NAME,
@@ -198,7 +208,6 @@ describe("DeviceManager debug behavior", () => {
   afterEach(async () => {
     await manager.shutdown();
     vi.useRealTimers();
-    await db.close();
   });
 
   describe("frame tracking", () => {

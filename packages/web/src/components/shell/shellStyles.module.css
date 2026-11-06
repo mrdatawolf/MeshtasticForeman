@@ -11,6 +11,7 @@
 
 .header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   padding: 0.65rem 1.25rem;
@@ -33,6 +34,7 @@
 
 .nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
 }
 
@@ -100,6 +102,18 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   z-index: 100;
   overflow: hidden;
+}
+
+/* On a phone the header wraps, so a panel aligned to its button can leave the screen. */
+@media (max-width: 640px) {
+  .menuPanel {
+    position: fixed;
+    top: auto;
+    left: 0.5rem;
+    right: 0.5rem;
+    min-width: 0;
+    margin-top: 0.4rem;
+  }
 }
 
 .menuSection {

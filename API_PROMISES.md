@@ -24,6 +24,11 @@
 - [GET /api/devices/:id/config](#get-apidevicesidconfig)
 - [DELETE /api/devices/:id](#delete-apidevicesid)
 
+### REST — Debug
+
+- [GET /api/debug/checks](#get-apidebugchecks)
+- [POST /api/debug/tools/:toolId](#post-apidebugtoolstoolid)
+
 ### REST — Node Overrides
 
 - [GET /api/node-overrides](#get-apinode-overrides)
@@ -261,7 +266,11 @@ DeviceConfig;
 
 ### DELETE /api/devices/:id
 
-Disconnect and remove a device.
+Disconnect a device. The saved row stays.
+
+When this returns, whatever state the device was in, the port is released, the reconnect timer and
+packet watchdog are stopped, and any `connect()` in flight or raw probe in progress has been
+stopped. The daemon does not reconnect by itself until it restarts.
 
 **Path Parameters:**
 
@@ -278,6 +287,143 @@ Disconnect and remove a device.
 | `404`  | No device with that ID |
 
 **Source:** [routes/devices.ts](packages/daemon/src/routes/devices.ts)
+
+---
+
+## REST — Debug
+
+Defined by `docs/contracts/CONTRACT-013-debug-diagnostics-and-tools.md`. There is no
+authentication, so anyone on the LAN can use these endpoints. Tools only run from the allowlist,
+only use the saved port, and never change radio configuration.
+
+### GET /api/debug/checks
+
+Runs the read-only checks. This never opens a serial port, sends anything to a radio, or changes
+state, and results never contain keys, PSKs, or MQTT credentials.
+
+**Query Parameters:**
+
+| Param      | Type | Required | Description                                                   |
+| ---------- | ---- | -------- | ------------------------------------------------------------- |
+| `deviceId` | UUID | No       | One saved device. Without it, the response covers all of them |
+
+**Returns:** `200 OK`
+
+```ts
+type CheckStatus = "pass" | "warn" | "fail" | "skipped";
+
+interface DebugChecksResponse {
+  generatedAt: string;
+  devices: {
+    deviceId: string;
+    port: string;
+    portHeld: boolean;
+    lastFrameAt: string | null;
+    framesThisConnection: number;
+    lastConfigRequestAt: string | null;
+    configured: boolean; // DeviceConfigured reached for the latest request
+    checks: DebugCheck[];
+  }[];
+  system: DebugCheck[]; // Checks not about one device, such as MQTT broker
+}
+
+interface DebugCheck {
+  id: string;
+  title: string;
+  status: CheckStatus;
+  summary: string;
+  cause: string | null;
+  fix: string | null;
+  toolIds: string[];
+}
+```
+
+Device check IDs: `serial-port-present`, `serial-port-permission`, `connection-held`,
+`radio-responding`, `configuration-finished`, `node-id-known`, `config-freshness`, `gps`, and
+`versions`. System check IDs: `mqtt-broker` and `saved-devices`.
+
+`radio-responding` follows one rule, with a 25 second response window. A radio that is silent with
+no unanswered request is never a failure.
+
+| State                                              | Status    |
+| -------------------------------------------------- | --------- |
+| The daemon does not hold the port                  | `skipped` |
+| A frame arrived after `lastConfigRequestAt`        | `pass`    |
+| No frame since the request, under 25 seconds ago   | `warn`    |
+| No frame since the request, 25 seconds or more ago | `fail`    |
+
+Before the first request of a new connection, this check is `warn`.
+
+**Errors:**
+
+| Status | Condition                    |
+| ------ | ---------------------------- |
+| `400`  | `deviceId` is not a UUID     |
+| `404`  | No saved device with that ID |
+
+**Source:** [routes/debug.ts](packages/daemon/src/routes/debug.ts)
+
+### POST /api/debug/tools/:toolId
+
+Runs one allowlisted tool on one saved device. Only one tool runs per device at a time.
+
+**Path Parameters:**
+
+| Param    | Type   | Description                                              |
+| -------- | ------ | -------------------------------------------------------- |
+| `toolId` | string | `reconfigure`, `disconnect`, `reconnect`, or `raw-probe` |
+
+**Body:**
+
+```ts
+{
+  deviceId: string; // UUID. Any other key is rejected, including a port.
+}
+```
+
+| Tool          | Requires      | Effect                            | Returns                         |
+| ------------- | ------------- | --------------------------------- | ------------------------------- |
+| `reconfigure` | Port held     | Sends a config request            | `202` at once                   |
+| `disconnect`  | None          | Same as `DELETE /api/devices/:id` | `200` once the port is released |
+| `reconnect`   | Port not held | Starts the connect path           | `202` at once                   |
+| `raw-probe`   | None          | Runs the probe below              | `200` with `RawProbeResult`     |
+
+`reconfigure`, `disconnect`, and `reconnect` return `{ toolId, status }`, where `status` is
+`"accepted"` or `"released"`. Progress after a `202` shows in `device:status` events and in checks.
+A `reconnect` that cannot open the port falls back to normal reconnect backoff.
+
+`raw-probe` releases the port, then opens the saved port at 115200 baud without `@meshtastic/core`.
+It sends the wake bytes and a `wantConfigId` with a fresh nonce straight away, and reads until
+config completes or 25 seconds pass. It closes the port, then starts a reconnect if the device was
+held or reconnecting beforehand, without waiting for it. It sends nothing else.
+
+```ts
+interface RawProbeResult {
+  outcome: "healthy" | "partial" | "no-response" | "open-failed";
+  bytesReceived: number;
+  framesReceived: number;
+  ownNodeId: number | null;
+  durationMs: number;
+  reconnecting: boolean;
+}
+```
+
+| Outcome       | Meaning                                                          |
+| ------------- | ---------------------------------------------------------------- |
+| `healthy`     | Config completed and the nonce matched                           |
+| `partial`     | Bytes arrived, but config did not complete with a matching nonce |
+| `no-response` | 0 bytes after the request                                        |
+| `open-failed` | The port could not be opened                                     |
+
+**Errors:**
+
+| Status | Condition                                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------- |
+| `400`  | Tool ID outside the allowlist, or an invalid body                                                             |
+| `404`  | No saved device with that ID                                                                                  |
+| `409`  | A tool is running on this device, a requirement is not met, or a disconnect or shutdown interrupted the probe |
+
+**Source:** [routes/debug.ts](packages/daemon/src/routes/debug.ts)
 
 ---
 
@@ -1292,10 +1438,12 @@ plain-string validation response.
 
 ### HTTP Status Codes
 
-| Code  | Meaning                                                  |
-| ----- | -------------------------------------------------------- |
-| `200` | Success with body                                        |
-| `204` | Success, no body (DELETE)                                |
-| `400` | Bad request — invalid parameters or body                 |
-| `404` | Resource not found                                       |
-| `503` | Service unavailable — device unreachable or DB not ready |
+| Code  | Meaning                                                                                        |
+| ----- | ---------------------------------------------------------------------------------------------- |
+| `200` | Success with body                                                                              |
+| `202` | Accepted — a debug tool started; watch `device:status`                                         |
+| `204` | Success, no body (DELETE)                                                                      |
+| `400` | Bad request — invalid parameters or body                                                       |
+| `404` | Resource not found                                                                             |
+| `409` | Conflict — a debug tool's requirement is not met or one is running, or a connect was cancelled |
+| `503` | Service unavailable — device unreachable or DB not ready                                       |

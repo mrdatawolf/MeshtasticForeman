@@ -21,8 +21,8 @@ import {
 import { adaptNodeInfo, adaptPosition, adaptTelemetry } from "./meshtastic-adapter.js";
 import { handleMessage } from "./message-handler.js";
 import { handleNodeInfo, handlePosition } from "./node-update-handler.js";
-import { runRawProbe } from "./raw-probe.js";
 import { handleRawPacket } from "./raw-packet-handler.js";
+import { runRawProbe } from "./raw-probe.js";
 import { handleTelemetry } from "./telemetry-handler.js";
 import { handleTraceroutePacket } from "./traceroute-handler.js";
 

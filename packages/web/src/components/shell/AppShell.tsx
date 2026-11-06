@@ -7,6 +7,7 @@ import logo from "../../assets/logo.png";
 import { applyNodeOverrides } from "../../lib/nodeOverrides.js";
 import { ActivityPage } from "../../pages/ActivityPage.js";
 import { AnalyticsPage } from "../../pages/AnalyticsPage.js";
+import { DebugPage } from "../../pages/DebugPage.js";
 import { DeviceConfigPage } from "../../pages/DeviceConfigPage.js";
 import { IntroModal } from "../../pages/IntroModal.js";
 import { LogsPage } from "../../pages/LogsPage.js";
@@ -261,6 +262,11 @@ export function AppShell({
             autoOpenWizard={pendingWizard}
             onWizardOpened={() => setPendingWizard(false)}
           />
+        </div>
+      )}
+      {tab === "debug" && (
+        <div className={appShellStyles.tabPanelScroll}>
+          <DebugPage devices={devices} />
         </div>
       )}
       {tab === "analytics" && (

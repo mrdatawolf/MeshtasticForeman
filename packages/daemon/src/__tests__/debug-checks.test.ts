@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { runMigrations } from "../db/migrations.js";
 import {
@@ -337,9 +337,17 @@ describe("collectDebugChecks", () => {
     coreVersion: "2.6.7",
   });
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     db = new PGlite();
     await runMigrations(db);
+  });
+
+  afterAll(async () => {
+    await db.close();
+  });
+
+  beforeEach(async () => {
+    await db.query("DELETE FROM devices");
     await db.query(
       `INSERT INTO devices(id, name, port, firmware, radio_config, module_config)
        VALUES ($1, 'Radio A', '/dev/ttyUSB0', '2.6.11', $2, $3)`,
@@ -357,10 +365,6 @@ describe("collectDebugChecks", () => {
       DEVICE_A,
       SECRET_KEY,
     ]);
-  });
-
-  afterEach(async () => {
-    await db.close();
   });
 
   it("covers every saved device, and is useful when nothing is connected", async () => {

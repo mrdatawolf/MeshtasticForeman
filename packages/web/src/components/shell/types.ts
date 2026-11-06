@@ -1,5 +1,13 @@
 export type Tab =
-  "nodes" | "map" | "messages" | "activity" | "logs" | "overrides" | "config" | "analytics";
+  | "nodes"
+  | "map"
+  | "messages"
+  | "activity"
+  | "logs"
+  | "overrides"
+  | "config"
+  | "analytics"
+  | "debug";
 export type MqttScope = "city" | "county" | "state" | "country" | "all";
 export type ActivityWindow = "5m" | "15m" | "1h" | "all";
 export type ActivitySource = "all" | "mesh" | "mqtt";
