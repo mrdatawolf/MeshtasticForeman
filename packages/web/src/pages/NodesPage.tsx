@@ -744,10 +744,18 @@ function NodeRows({ merged, selectedNodeId, protoMap, onRowClick }: NodeRowsProp
             {formatLastHeard(mqtt.lastHeard)}
             {mqtt.snr != null && mqtt.snr !== 0 && ` · SNR ${mqtt.snr.toFixed(1)} dB`}
             {mqtt.regionPath && (
-              <span style={{ marginLeft: "0.5rem", color: "var(--text-muted)" }}>{mqtt.regionPath}</span>
+              <span style={{ marginLeft: "0.5rem", color: "var(--text-muted)" }}>
+                {mqtt.regionPath}
+              </span>
             )}
             {mqtt.latitude != null && mqtt.longitude != null && mesh.latitude == null && (
-              <span style={{ marginLeft: "0.5rem", fontFamily: "monospace", color: "var(--text-secondary)" }}>
+              <span
+                style={{
+                  marginLeft: "0.5rem",
+                  fontFamily: "monospace",
+                  color: "var(--text-secondary)",
+                }}
+              >
                 · GPS {mqtt.latitude.toFixed(5)}, {mqtt.longitude.toFixed(5)}
               </span>
             )}

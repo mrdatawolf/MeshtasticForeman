@@ -283,7 +283,12 @@ export function NodeOverridesPage({ overrides, noLocationNodes, onChanged }: Pro
 
 const s: Record<string, React.CSSProperties> = {
   page: { padding: "1.5rem 2rem", overflowY: "auto", maxWidth: "90%" },
-  intro: { fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1.5rem", lineHeight: 1.6 },
+  intro: {
+    fontSize: "0.85rem",
+    color: "var(--text-secondary)",
+    marginBottom: "1.5rem",
+    lineHeight: 1.6,
+  },
   card: {
     background: "#1e293b",
     borderRadius: "0.5rem",

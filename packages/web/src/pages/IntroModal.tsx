@@ -136,7 +136,12 @@ const stepStyles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     marginTop: "0.1rem",
   },
-  title: { color: "var(--text-primary)", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "0.15rem" },
+  title: {
+    color: "var(--text-primary)",
+    fontSize: "0.85rem",
+    fontWeight: "bold",
+    marginBottom: "0.15rem",
+  },
   body: { color: "var(--text-secondary)", fontSize: "0.8rem", lineHeight: 1.6 },
 };
 

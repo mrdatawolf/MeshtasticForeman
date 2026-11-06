@@ -91,13 +91,17 @@ export function LogsPage({ entries, levelFilter, tagFilter, paused }: Props) {
           <div key={e.id} style={styles.row}>
             <span style={styles.time}>{formatTime(e.ts)}</span>
             {e.tag && <span style={{ ...styles.tag, color: tagColor(e.tag) }}>[{e.tag}]</span>}
-            <span style={{ ...styles.text, color: LEVEL_COLORS[e.level] ?? "var(--text-secondary)" }}>
+            <span
+              style={{ ...styles.text, color: LEVEL_COLORS[e.level] ?? "var(--text-secondary)" }}
+            >
               {e.tag ? e.text.replace(`[${e.tag}]`, "").trimStart() : e.text}
             </span>
           </div>
         ))}
         {displayEntries.length === 0 && (
-          <div style={{ color: "var(--text-muted)", padding: "1rem", textAlign: "center" }}>No log lines</div>
+          <div style={{ color: "var(--text-muted)", padding: "1rem", textAlign: "center" }}>
+            No log lines
+          </div>
         )}
       </div>
     </div>
