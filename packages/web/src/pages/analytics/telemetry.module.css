@@ -1,5 +1,5 @@
 .noDataNote {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.75rem;
   font-family: monospace;
   margin-top: 0.5rem;

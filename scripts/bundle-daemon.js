@@ -27,6 +27,7 @@ const OUT_DIR = path.join(ROOT_DIR, 'dist-daemon');
 const EXTERNAL_PACKAGES = [
   '@electric-sql/pglite',
   '@meshtastic/transport-node-serial',
+  'serialport',
 ];
 
 // Windows reserved filenames that cause NSIS packaging failures

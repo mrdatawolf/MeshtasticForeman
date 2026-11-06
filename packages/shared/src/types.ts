@@ -2,6 +2,58 @@
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
+// Debug diagnostics and tools (CONTRACT-013)
+
+export type CheckStatus = "pass" | "warn" | "fail" | "skipped";
+
+export const DEBUG_TOOL_IDS = ["reconfigure", "disconnect", "reconnect", "raw-probe"] as const;
+export type DebugToolId = (typeof DEBUG_TOOL_IDS)[number];
+
+export interface DebugCheck {
+  id: string;
+  title: string;
+  status: CheckStatus;
+  summary: string;
+  cause: string | null;
+  fix: string | null;
+  toolIds: string[];
+}
+
+export interface DebugDeviceReport {
+  deviceId: string;
+  port: string;
+  portHeld: boolean;
+  lastFrameAt: string | null;
+  framesThisConnection: number;
+  lastConfigRequestAt: string | null;
+  configured: boolean;
+  checks: DebugCheck[];
+}
+
+export interface DebugChecksResponse {
+  generatedAt: string;
+  devices: DebugDeviceReport[];
+  // Checks that are not about one device, such as MQTT broker.
+  system: DebugCheck[];
+}
+
+export type RawProbeOutcome = "healthy" | "partial" | "no-response" | "open-failed";
+
+export interface RawProbeResult {
+  outcome: RawProbeOutcome;
+  bytesReceived: number;
+  framesReceived: number;
+  ownNodeId: number | null;
+  durationMs: number;
+  reconnecting: boolean;
+}
+
+/** Response body for the debug tools that do not return a probe result. */
+export interface DebugToolStatus {
+  toolId: DebugToolId;
+  status: "accepted" | "released";
+}
+
 export interface GpsDetail {
   latitude: number;
   longitude: number;

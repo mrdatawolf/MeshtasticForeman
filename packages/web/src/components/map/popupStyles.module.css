@@ -7,7 +7,7 @@
 .popup {
   min-width: 200px;
   font-size: 0.8rem;
-  color: #1e293b;
+  color: var(--text-on-light);
 }
 
 .name {
@@ -17,7 +17,7 @@
 }
 
 .muted {
-  color: #64748b;
+  color: var(--text-on-light-muted);
   margin-bottom: 0.25rem;
 }
 
@@ -55,7 +55,7 @@
 }
 
 .label {
-  color: #64748b;
+  color: var(--text-on-light-muted);
   font-size: 0.75rem;
 }
 
@@ -71,7 +71,7 @@
   text-align: left;
   background: #f1f5f9;
   border: 1px solid #cbd5e1;
-  color: #334155;
+  color: var(--text-on-light-secondary);
   border-radius: 0.25rem;
   padding: 0.3rem 0.5rem;
   cursor: pointer;

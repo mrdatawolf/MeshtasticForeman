@@ -2,11 +2,16 @@ import { formatNodeId, resolveNodeName } from "@foreman/shared";
 import { useState, useEffect, Fragment } from "react";
 
 import logo from "../assets/logo.png";
+import { buildMergedNodes, lastHeardMs, resolvedLastHeard } from "../lib/mergedNodes.js";
 import { formatRelativeTime } from "../lib/relativeTime.js";
 
 import { NodeDetailPanel } from "./NodeDetailPanel.js";
 
+import type { MergedNode } from "../lib/mergedNodes.js";
 import type { DeviceInfo, NodeInfo, MqttNode } from "@foreman/shared";
+
+export { buildMergedNodes, resolvedLastHeard };
+export type { MergedNode };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -204,50 +209,6 @@ function hwModel(model: number | null, protoMap: Map<number, string>): string {
 }
 
 // ---------------------------------------------------------------------------
-// Data merging
-// ---------------------------------------------------------------------------
-
-export interface MergedNode {
-  nodeId: number;
-  mesh: NodeInfo | null;
-  mqtt: MqttNode | null;
-}
-
-export function buildMergedNodes(nodes: NodeInfo[], mqttNodes: MqttNode[]): MergedNode[] {
-  const map = new Map<number, MergedNode>();
-  for (const n of nodes) map.set(n.nodeId, { nodeId: n.nodeId, mesh: n, mqtt: null });
-  for (const n of mqttNodes) {
-    const existing = map.get(n.nodeId);
-    if (existing) {
-      existing.mqtt = n;
-    } else {
-      map.set(n.nodeId, { nodeId: n.nodeId, mesh: null, mqtt: n });
-    }
-  }
-  return [...map.values()];
-}
-
-function lastHeardMs(m: MergedNode): number {
-  const meshMs = m.mesh?.lastHeard ? new Date(m.mesh.lastHeard).getTime() : 0;
-  const mqttMs = m.mqtt?.lastHeard ? new Date(m.mqtt.lastHeard).getTime() : 0;
-  return Math.max(meshMs, mqttMs);
-}
-
-/**
- * The single "true last heard" timestamp for a merged node: whichever of its
- * mesh/MQTT sources is more recent, as an ISO string. Used for both the
- * displayed "Last Heard" column and the `lastHeard` sort key so the two never
- * disagree (see TASK-045). This is distinct from `mqtt.lastHeard`, which is
- * still shown on its own, unchanged, in the MQTT sub-row.
- */
-export function resolvedLastHeard(m: MergedNode): string | null {
-  const meshMs = m.mesh?.lastHeard ? new Date(m.mesh.lastHeard).getTime() : 0;
-  const mqttMs = m.mqtt?.lastHeard ? new Date(m.mqtt.lastHeard).getTime() : 0;
-  if (meshMs === 0 && mqttMs === 0) return null;
-  return mqttMs > meshMs ? m.mqtt!.lastHeard : m.mesh!.lastHeard;
-}
-
-// ---------------------------------------------------------------------------
 // Filter
 // ---------------------------------------------------------------------------
 
@@ -346,6 +307,8 @@ interface Props {
   devices: DeviceInfo[];
   nodes: NodeInfo[];
   mqttNodes: MqttNode[];
+  /** Nodes the header's last-seen filter removed from `nodes` and `mqttNodes`. */
+  hiddenNodeCount?: number;
   onMessage?: (nodeId: number) => void;
   onCoverageMap?: (nodeId: number) => void;
 }
@@ -354,7 +317,14 @@ interface Props {
 // Component
 // ---------------------------------------------------------------------------
 
-export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap }: Props) {
+export function NodesPage({
+  devices,
+  nodes,
+  mqttNodes,
+  hiddenNodeCount = 0,
+  onMessage,
+  onCoverageMap,
+}: Props) {
   const [filter, setFilter] = useState("");
   const [sortCol, setSortCol] = useState<SortCol>("distance");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -482,7 +452,11 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
         {isEmpty ? (
           <div style={styles.emptyState}>
             <img src={logo} alt="" style={styles.emptyLogo} />
-            <p style={styles.muted}>No nodes seen yet.</p>
+            <p style={styles.muted}>
+              {hiddenNodeCount > 0
+                ? `No nodes in this time range. ${hiddenNodeCount} hidden by the Last seen filter.`
+                : "No nodes seen yet."}
+            </p>
           </div>
         ) : noResults ? (
           <div style={styles.emptyState}>
@@ -524,7 +498,7 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
                       label="Mesh only"
                       count={meshOnly.length}
                       colCount={8}
-                      color="#94a3b8"
+                      color="var(--text-secondary)"
                       collapsed={!!collapsed["mesh"]}
                       onToggle={() => toggleSection("mesh")}
                     />
@@ -552,7 +526,7 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
                       label="Unknown"
                       count={unknownNodes.length}
                       colCount={8}
-                      color="#6b7280"
+                      color="var(--text-muted)"
                       collapsed={!!collapsed["unknown"]}
                       onToggle={() => toggleSection("unknown")}
                     />
@@ -595,12 +569,12 @@ function SortableHeader({
         ...styles.th,
         cursor: "pointer",
         userSelect: "none",
-        color: active ? "#e2e8f0" : "#94a3b8",
+        color: active ? "var(--text-primary)" : "var(--text-secondary)",
       }}
       onClick={() => onSort(col)}
     >
       {label}
-      <span style={{ marginLeft: "0.3rem", fontSize: "0.65rem", opacity: active ? 1 : 0.35 }}>
+      <span style={{ marginLeft: "0.3rem", fontSize: "0.65rem", opacity: active ? 1 : 0.7 }}>
         {active ? (sortDir === "asc" ? "▲" : "▼") : "▲▼"}
       </span>
     </th>
@@ -652,7 +626,7 @@ function SectionHeader({
             borderRadius: "9999px",
             padding: "0.1rem 0.4rem",
             fontSize: "0.65rem",
-            color: "#64748b",
+            color: "var(--text-muted)",
             fontWeight: "normal",
             letterSpacing: 0,
             textTransform: "none",
@@ -726,7 +700,7 @@ function NodeRows({ merged, selectedNodeId, protoMap, onRowClick }: NodeRowsProp
               paddingTop: "0.25rem",
               paddingBottom: "0.3rem",
               fontSize: "0.75rem",
-              color: "#64748b",
+              color: "var(--text-muted)",
             }}
           >
             <span style={{ color: "#34d399", fontWeight: "bold", marginRight: "0.5rem" }}>
@@ -735,7 +709,7 @@ function NodeRows({ merged, selectedNodeId, protoMap, onRowClick }: NodeRowsProp
             {mqtt.lastGateway && (
               <>
                 via{" "}
-                <span style={{ fontFamily: "monospace", color: "#94a3b8" }}>
+                <span style={{ fontFamily: "monospace", color: "var(--text-secondary)" }}>
                   {mqtt.lastGateway}
                 </span>
                 {" · "}
@@ -744,10 +718,18 @@ function NodeRows({ merged, selectedNodeId, protoMap, onRowClick }: NodeRowsProp
             {formatLastHeard(mqtt.lastHeard)}
             {mqtt.snr != null && mqtt.snr !== 0 && ` · SNR ${mqtt.snr.toFixed(1)} dB`}
             {mqtt.regionPath && (
-              <span style={{ marginLeft: "0.5rem", color: "#475569" }}>{mqtt.regionPath}</span>
+              <span style={{ marginLeft: "0.5rem", color: "var(--text-muted)" }}>
+                {mqtt.regionPath}
+              </span>
             )}
             {mqtt.latitude != null && mqtt.longitude != null && mesh.latitude == null && (
-              <span style={{ marginLeft: "0.5rem", fontFamily: "monospace", color: "#94a3b8" }}>
+              <span
+                style={{
+                  marginLeft: "0.5rem",
+                  fontFamily: "monospace",
+                  color: "var(--text-secondary)",
+                }}
+              >
                 · GPS {mqtt.latitude.toFixed(5)}, {mqtt.longitude.toFixed(5)}
               </span>
             )}
@@ -774,7 +756,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sectionTitle: {
     fontSize: "1rem",
-    color: "#94a3b8",
+    color: "var(--text-secondary)",
     textTransform: "uppercase",
     letterSpacing: "0.1em",
     margin: 0,
@@ -800,7 +782,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#1e293b",
     border: "1px solid #334155",
     borderRadius: "0.375rem",
-    color: "#e2e8f0",
+    color: "var(--text-primary)",
     padding: "0.3rem 2rem 0.3rem 0.6rem",
     fontFamily: "monospace",
     fontSize: "0.8rem",
@@ -814,20 +796,20 @@ const styles: Record<string, React.CSSProperties> = {
     transform: "translateY(-50%)",
     background: "none",
     border: "none",
-    color: "#64748b",
+    color: "var(--text-muted)",
     cursor: "pointer",
     fontSize: "0.75rem",
     padding: "0 0.2rem",
     lineHeight: 1,
   },
-  muted: { color: "#64748b", fontSize: "0.85rem" },
+  muted: { color: "var(--text-muted)", fontSize: "0.85rem" },
   tableWrap: { overflowX: "auto" },
   table: { width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" },
   th: {
     textAlign: "left",
     padding: "0.5rem 0.75rem",
     background: "#1e293b",
-    color: "#94a3b8",
+    color: "var(--text-secondary)",
     fontWeight: "normal",
     borderBottom: "1px solid #334155",
     whiteSpace: "nowrap",
@@ -846,7 +828,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "1.5rem",
   },
   emptyLogo: { width: "12rem", opacity: 0.15 },
-  mono: { fontFamily: "monospace", fontSize: "0.8rem", color: "#94a3b8" },
+  mono: { fontFamily: "monospace", fontSize: "0.8rem", color: "var(--text-secondary)" },
   mqttChip: {
     display: "inline-block",
     background: "#052e16",

@@ -22,13 +22,21 @@ import { adaptNodeInfo, adaptPosition, adaptTelemetry } from "./meshtastic-adapt
 import { handleMessage } from "./message-handler.js";
 import { handleNodeInfo, handlePosition } from "./node-update-handler.js";
 import { handleRawPacket } from "./raw-packet-handler.js";
+import { runRawProbe } from "./raw-probe.js";
 import { handleTelemetry } from "./telemetry-handler.js";
 import { handleTraceroutePacket } from "./traceroute-handler.js";
 
 import type { DaemonConfig } from "../config.js";
 import type { MqttGateway } from "../mqtt/gateway.js";
 import type { PGlite } from "@electric-sql/pglite";
-import type { ServerEvent, Message, NodeInfo, DeviceConfig, GpsDetail } from "@foreman/shared";
+import type {
+  ServerEvent,
+  Message,
+  NodeInfo,
+  DeviceConfig,
+  GpsDetail,
+  RawProbeResult,
+} from "@foreman/shared";
 
 export interface ConnectedDevice {
   id: string;
@@ -39,8 +47,108 @@ export interface ConnectedDevice {
   transport: TransportNodeSerial;
 }
 
+/** What the daemon knows about a device's latest connection (CONTRACT-013). */
+export interface ConnectionFacts {
+  portHeld: boolean;
+  phase: "held" | "connecting" | "backoff" | "released";
+  lastFrameAt: string | null;
+  framesThisConnection: number;
+  lastConfigRequestAt: string | null;
+  configured: boolean;
+}
+
+/** Per-connection counters. A new connection gets a new object, so late frames cannot touch it. */
+interface ConnectionStats {
+  lastFrameMs: number | null;
+  frames: number;
+  lastConfigRequestMs: number | null;
+  configured: boolean;
+}
+
+/** One running connect(). Cancelling it stops it acting on the device or keeping the port. */
+interface ConnectAttempt {
+  /** Undefined until connect() has resolved the saved row for this port. */
+  id: string | undefined;
+  port: string;
+  name: string;
+  cancelled: boolean;
+  cancel: () => void;
+  whenCancelled: Promise<void>;
+  /** Settles once the port is open, or closed again because the attempt was cancelled. */
+  opening: Promise<unknown> | null;
+}
+
+/** What a radio last said about itself, as saved on its devices row. */
+interface ReportedVersions {
+  hardwareModel: string | null;
+  firmwareVersion: string | null;
+}
+
+interface VersionColumns {
+  hw_model: string | null;
+  firmware: string | null;
+}
+
+interface ReconnectTarget {
+  port: string;
+  name: string;
+  /** Set while a dropped connection's serial handle is still closing. */
+  releasing?: Promise<void>;
+}
+
+interface ActiveProbe {
+  abort: AbortController;
+  restore: boolean;
+  done: Promise<void>;
+}
+
+/** Thrown by connect() when a disconnect, or the connection dropping, overtook it. */
+export class ConnectCancelledError extends Error {
+  constructor() {
+    super("Connection was cancelled before it finished");
+    this.name = "ConnectCancelledError";
+  }
+}
+
+/** Thrown by rawProbe() when a disconnect or daemon shutdown ended it early. */
+export class ProbeInterruptedError extends Error {
+  constructor() {
+    super("Probe was interrupted before it finished");
+    this.name = "ProbeInterruptedError";
+  }
+}
+
 const SERIAL_DISCONNECT_CODES = new Set(["ABORT_ERR", "ERR_STREAM_PREMATURE_CLOSE"]);
+const PORT_RELEASE_TIMEOUT_MS = 3_000;
 const log = createLogger("devices");
+
+/**
+ * Closes a transport and waits for the OS to release the port. The transport's
+ * disconnect() starts the close without waiting for it, so reopening straight
+ * afterwards can fail on the port lock. The handle is private to the transport,
+ * but it is the only way to observe the close.
+ */
+async function releaseTransport(transport: TransportNodeSerial): Promise<void> {
+  const serial = (
+    transport as unknown as {
+      port?: { isOpen: boolean; closing: boolean; once(event: "close", fn: () => void): void };
+    }
+  ).port;
+  let timeout: NodeJS.Timeout | undefined;
+  const closed =
+    serial && (serial.isOpen || serial.closing)
+      ? new Promise<void>((resolve) => {
+          serial.once("close", resolve);
+          timeout = setTimeout(() => {
+            log.warn({ operation: "release-port" }, "serial port did not confirm close");
+            resolve();
+          }, PORT_RELEASE_TIMEOUT_MS);
+        })
+      : Promise.resolve();
+  await transport.disconnect().catch(() => {});
+  await closed;
+  if (timeout) clearTimeout(timeout);
+}
 
 function isRecoverableSerialDisconnect(reason: unknown): boolean {
   if (!(reason instanceof Error)) return false;
@@ -71,6 +179,14 @@ export class DeviceManager extends EventEmitter {
   private reconnectTimers = new Map<string, NodeJS.Timeout>();
   /** Reconnect attempt count per port — used for exponential backoff */
   private reconnectAttempts = new Map<string, number>();
+  /** Devices in reconnect backoff, so a disconnect can find them without a live connection. */
+  private reconnectTargets = new Map<string, ReconnectTarget>();
+  /** Every connect() still running. */
+  private connectAttempts = new Set<ConnectAttempt>();
+  /** Stats for each device's latest connection. Kept after it ends, for diagnostics. */
+  private connectionStats = new Map<string, ConnectionStats>();
+  /** Raw probes in progress, by device. */
+  private activeProbes = new Map<string, ActiveProbe>();
   private mqttGateway: MqttGateway | null = null;
   /** Last time each device received any mesh packet (for watchdog) */
   private lastPacketMs = new Map<string, number>();
@@ -85,6 +201,14 @@ export class DeviceManager extends EventEmitter {
   private gpsAcquired = new Set<string>();
   /** Latest GPS detail per device */
   private gpsDetails = new Map<string, GpsDetail>();
+  /**
+   * Copy of each device's saved versions, so the synchronous _emitStatus can send
+   * them. Unlike the session state above it survives a disconnect, because a
+   * disconnected device still shows its last reported version. Each connect
+   * reloads it from the row, and a metadata packet replaces it, so a swapped radio
+   * on the same port shows the old radio's version only until it reports its own.
+   */
+  private reportedVersions = new Map<string, ReportedVersions>();
   /** Correlates packetId → replyId for in-flight text packets between onMeshPacket and onMessagePacket */
   private pendingReplyIds = new Map<number, number>();
 
@@ -136,60 +260,122 @@ export class DeviceManager extends EventEmitter {
       if (dev.port === port) return dev;
     }
 
+    let markCancelled = () => {};
+    const whenCancelled = new Promise<void>((resolve) => {
+      markCancelled = resolve;
+    });
+    const attempt: ConnectAttempt = {
+      id: existingId,
+      port,
+      name,
+      cancelled: false,
+      cancel() {
+        this.cancelled = true;
+        markCancelled();
+      },
+      whenCancelled,
+      opening: null,
+    };
+    this.connectAttempts.add(attempt);
+    try {
+      return await this._runConnect(attempt);
+    } finally {
+      this.connectAttempts.delete(attempt);
+    }
+  }
+
+  private async _runConnect(attempt: ConnectAttempt): Promise<ConnectedDevice> {
+    const { port, name } = attempt;
+    const stopIfCancelled = () => {
+      if (attempt.cancelled) throw new ConnectCancelledError();
+    };
+
     // Reuse existing DB row for this port if one exists, to avoid accumulating duplicates
-    let id = existingId;
+    let id = attempt.id;
     if (!id) {
       const { rows } = await this.db.query<{ id: string }>(
         "SELECT id FROM devices WHERE port = $1 ORDER BY created_at LIMIT 1",
         [port],
       );
       id = rows[0]?.id ?? randomUUID();
+      attempt.id = id;
     }
+    stopIfCancelled();
 
     // Delete any duplicate rows for this port that aren't the canonical id
     await this.db.query("DELETE FROM devices WHERE port = $1 AND id != $2", [port, id]);
 
     // Upsert canonical row
-    await this.db.query(
+    const { rows: savedRows } = await this.db.query<VersionColumns>(
       `INSERT INTO devices(id, name, port)
        VALUES ($1, $2, $3)
-       ON CONFLICT(id) DO UPDATE SET name = EXCLUDED.name, port = EXCLUDED.port`,
+       ON CONFLICT(id) DO UPDATE SET name = EXCLUDED.name, port = EXCLUDED.port
+       RETURNING hw_model, firmware`,
       [id, name, port],
     );
+    this._storeReportedVersions(id, savedRows[0]);
+
+    stopIfCancelled();
 
     this._emitStatus(id, name, port, "connecting");
 
-    // Open serial port and create transport
-    let transport: TransportNodeSerial;
+    // Open serial port and create transport. A disconnect waits on `opening`, so
+    // the close of a cancelled open has to happen inside that promise.
+    const opening = TransportNodeSerial.create(port, 115200).then(async (opened) => {
+      if (!attempt.cancelled) return opened;
+      await releaseTransport(opened);
+      return null;
+    });
+    attempt.opening = opening;
+
+    let transport: TransportNodeSerial | null;
     try {
-      transport = await TransportNodeSerial.create(port, 115200);
+      transport = await opening;
     } catch (err) {
+      stopIfCancelled();
       // A failed open must replace the earlier "connecting" event; otherwise
       // the UI remains stuck even though no connection attempt is active.
       this._emitStatus(id, name, port, "error");
       throw err;
     }
+    if (!transport) throw new ConnectCancelledError();
+    const openedTransport = transport;
 
     // @meshtastic/core starts this pipe without awaiting its promise. Intercept
     // that specific stream instance so disconnect failures are handled at the
     // serial boundary rather than becoming process-level unhandled rejections.
-    const originalPipeTo = transport.fromDevice.pipeTo.bind(transport.fromDevice);
-    transport.fromDevice.pipeTo = ((destination, options) =>
+    const originalPipeTo = openedTransport.fromDevice.pipeTo.bind(openedTransport.fromDevice);
+    openedTransport.fromDevice.pipeTo = ((destination, options) =>
       originalPipeTo(destination, options).catch((err: unknown) => {
         if (isRecoverableSerialDisconnect(err)) {
           log.warn({ deviceId: id, operation: "serial-read", err }, "serial read stopped");
           return;
         }
         this.emit("transport:error", err);
-      })) as typeof transport.fromDevice.pipeTo;
+      })) as typeof openedTransport.fromDevice.pipeTo;
 
     // MeshDevice constructor starts piping the fromDevice stream immediately
-    const meshDevice = new MeshDevice(transport);
+    const meshDevice = new MeshDevice(openedTransport);
 
     const connectedAt = new Date().toISOString();
-    const device: ConnectedDevice = { id, port, name, connectedAt, meshDevice, transport };
+    const device: ConnectedDevice = {
+      id,
+      port,
+      name,
+      connectedAt,
+      meshDevice,
+      transport: openedTransport,
+    };
     this.devices.set(id, device);
+    const stats: ConnectionStats = {
+      lastFrameMs: null,
+      frames: 0,
+      lastConfigRequestMs: null,
+      configured: false,
+    };
+    this.connectionStats.set(id, stats);
     await this.db.query("UPDATE devices SET last_seen = $1 WHERE id = $2", [connectedAt, id]);
+    stopIfCancelled();
 
     // Subscribe to all relevant events
     meshDevice.events.onMessagePacket.subscribe((pkt: Types.PacketMetadata<string>) => {
@@ -282,7 +468,11 @@ export class DeviceManager extends EventEmitter {
         },
         "device status changed",
       );
-      void this._handleDeviceStatus(id, name, port, transport, status).catch((err) =>
+      // core also re-requests config by itself when the radio reports a reboot,
+      // and this event is the only sign of that request.
+      if (status === Types.DeviceStatusEnum.DeviceConfiguring) this._markConfigRequested(stats);
+      if (status === Types.DeviceStatusEnum.DeviceConfigured) stats.configured = true;
+      void this._handleDeviceStatus(id, name, port, openedTransport, status).catch((err) =>
         log.warn(
           { deviceId: id, operation: "disconnect-cleanup", err },
           "disconnect cleanup failed",
@@ -293,6 +483,8 @@ export class DeviceManager extends EventEmitter {
     // Diagnostic: log every FromRadio frame so we know if the stream is alive
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meshDevice.events.onFromRadio.subscribe((msg: any) => {
+      stats.lastFrameMs = Date.now();
+      stats.frames += 1;
       const variant = msg?.payloadVariant?.case ?? "unknown";
       if (variant === "packet") return; // already handled by onMeshPacket
       if (variant === "fileInfo") {
@@ -426,7 +618,15 @@ export class DeviceManager extends EventEmitter {
 
     // Send configure request — device will begin streaming its config back
     log.info({ deviceId: id, operation: "configure" }, "device configuration started");
-    await meshDevice.configure();
+    // core may never settle this promise once the port closes, so the race lets
+    // a cancelled attempt finish straight away.
+    await Promise.race([this._requestConfig(id, meshDevice), attempt.whenCancelled]).catch(
+      (err: unknown) => {
+        stopIfCancelled();
+        throw err;
+      },
+    );
+    stopIfCancelled();
     log.info({ deviceId: id, operation: "configure" }, "device configuration completed");
 
     // Request the device's own position immediately after configure.
@@ -450,6 +650,7 @@ export class DeviceManager extends EventEmitter {
     // Emit config snapshot now that all onConfigPacket/onModuleConfigPacket/onChannelPacket
     // handlers have fired and their DB writes are queued ahead of this read.
     await emitDeviceConfig(this._configurationDeps(), id);
+    stopIfCancelled();
 
     // Watchdog: if we receive zero mesh packets for 90 s after configure, re-run
     // configure().  This recovers from the rare case where the device's serial
@@ -459,25 +660,174 @@ export class DeviceManager extends EventEmitter {
     return device;
   }
 
+  /**
+   * Releases the port and stops all reconnecting, whatever state the device is
+   * in. It stays down until a reconnect or connect is asked for, or the daemon
+   * restarts. See CONTRACT-013.
+   */
   async disconnect(deviceId: string) {
+    const probe = this.activeProbes.get(deviceId);
+    if (probe) {
+      probe.restore = false;
+      probe.abort.abort();
+      await probe.done;
+    }
+    await this._releaseDevice(deviceId);
+  }
+
+  private async _releaseDevice(deviceId: string): Promise<void> {
     const device = this.devices.get(deviceId);
-    if (!device) return;
+    const backoff = this.reconnectTargets.get(deviceId);
+    const attempts = this._activeAttempts(deviceId);
+    for (const attempt of attempts) attempt.cancel();
 
-    const reconnectTimer = this.reconnectTimers.get(device.port);
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    this.reconnectTimers.delete(device.port);
-    this.reconnectingPorts.delete(device.port);
-    this.devices.delete(deviceId);
-    this.myNodeIds.delete(deviceId);
-    this.batteryLevels.delete(deviceId);
-    this.gpsAcquired.delete(deviceId);
-    this.gpsDetails.delete(deviceId);
-    this.reconnectAttempts.delete(device.port);
-    this.mqttGateway?.detachDevice(deviceId);
-    await device.transport.disconnect().catch(() => {});
+    const port = device?.port ?? backoff?.port ?? attempts[0]?.port;
+    if (port) this._clearReconnect(deviceId, port);
 
-    this._emitStatus(deviceId, device.name, device.port, "disconnected");
+    const watchdog = this.watchdogTimers.get(deviceId);
+    if (watchdog) clearInterval(watchdog);
+    this.watchdogTimers.delete(deviceId);
+
+    if (device) {
+      this.devices.delete(deviceId);
+      this.myNodeIds.delete(deviceId);
+      this.batteryLevels.delete(deviceId);
+      this.gpsAcquired.delete(deviceId);
+      this.gpsDetails.delete(deviceId);
+      this.mqttGateway?.detachDevice(deviceId);
+      await releaseTransport(device.transport);
+    }
+
+    // A connect that has not resolved its row yet can only be matched by port.
+    const unresolved = [...this.connectAttempts].filter((a) => a.id === undefined && !a.cancelled);
+    if (unresolved.length > 0) {
+      const { rows } = await this.db.query<{ port: string }>(
+        "SELECT port FROM devices WHERE id = $1",
+        [deviceId],
+      );
+      for (const attempt of unresolved) {
+        if (attempt.port !== rows[0]?.port) continue;
+        attempt.cancel();
+        attempts.push(attempt);
+      }
+    }
+
+    await backoff?.releasing;
+    await Promise.all(attempts.map((attempt) => attempt.opening?.catch(() => {})));
+
+    const known = device ?? backoff ?? attempts[0];
+    if (!known) return;
+    // A connect cancelled early may not have reached the point that loads these.
+    await this._ensureReportedVersions(deviceId);
+    this._emitStatus(deviceId, known.name, known.port, "disconnected");
     log.info({ deviceId, operation: "disconnect" }, "device disconnected");
+  }
+
+  private _activeAttempts(deviceId: string): ConnectAttempt[] {
+    return [...this.connectAttempts].filter((a) => a.id === deviceId && !a.cancelled);
+  }
+
+  private _clearReconnect(deviceId: string, port: string): void {
+    const timer = this.reconnectTimers.get(port);
+    if (timer) clearTimeout(timer);
+    this.reconnectTimers.delete(port);
+    this.reconnectingPorts.delete(port);
+    this.reconnectAttempts.delete(port);
+    this.reconnectTargets.delete(deviceId);
+  }
+
+  /**
+   * Starts the connect path for a device with no live connection and returns at
+   * once. A failure falls back to normal reconnect backoff.
+   */
+  reconnect(deviceId: string, port: string, name: string): void {
+    this._clearReconnect(deviceId, port);
+    if (this._activeAttempts(deviceId).length > 0) return;
+    void this._attemptReconnect(deviceId, port, name, 1);
+  }
+
+  private async _attemptReconnect(
+    deviceId: string,
+    port: string,
+    name: string,
+    attempt: number,
+  ): Promise<void> {
+    log.info({ deviceId, operation: "reconnect", attempt, port }, "attempting reconnect");
+    try {
+      await this.connect(port, name, deviceId);
+      this.reconnectAttempts.delete(port); // success — reset backoff
+    } catch (err: unknown) {
+      if (err instanceof ConnectCancelledError) {
+        log.info({ deviceId, operation: "reconnect", attempt, port }, "reconnect cancelled");
+        return;
+      }
+      log.warn({ deviceId, operation: "reconnect", attempt, port, err }, "reconnect failed");
+      this._emitStatus(deviceId, name, port, "disconnected");
+      // Schedule another attempt — keeps retrying until the device comes back
+      this._scheduleReconnect(deviceId, port, name);
+    }
+  }
+
+  /** Sends a config request and returns at once. False when the port is not held. */
+  requestConfig(deviceId: string): boolean {
+    const device = this.devices.get(deviceId);
+    if (!device) return false;
+    this._requestConfig(deviceId, device.meshDevice).catch((err: unknown) =>
+      log.warn({ deviceId, operation: "request-config", err }, "config request failed"),
+    );
+    return true;
+  }
+
+  /**
+   * Runs the raw serial probe from CONTRACT-013 on the given saved port: releases
+   * the port, probes it, then starts a reconnect if the device was held or trying
+   * to reconnect beforehand.
+   */
+  async rawProbe(deviceId: string, port: string, name: string): Promise<RawProbeResult> {
+    let finished = () => {};
+    const probe: ActiveProbe = {
+      abort: new AbortController(),
+      restore:
+        this.devices.has(deviceId) ||
+        this.reconnectTargets.has(deviceId) ||
+        this._activeAttempts(deviceId).length > 0,
+      done: new Promise((resolve) => {
+        finished = resolve;
+      }),
+    };
+    this.activeProbes.set(deviceId, probe);
+
+    try {
+      await this._releaseDevice(deviceId);
+      if (probe.abort.signal.aborted) throw new ProbeInterruptedError();
+      const reading = await runRawProbe(port, probe.abort.signal);
+      if (probe.abort.signal.aborted) throw new ProbeInterruptedError();
+      if (probe.restore) this.reconnect(deviceId, port, name);
+      return { ...reading, reconnecting: probe.restore };
+    } finally {
+      this.activeProbes.delete(deviceId);
+      finished();
+    }
+  }
+
+  getConnectionFacts(deviceId: string): ConnectionFacts {
+    const stats = this.connectionStats.get(deviceId);
+    const portHeld = this.devices.has(deviceId);
+    let phase: ConnectionFacts["phase"] = "released";
+    if (portHeld) phase = "held";
+    else if (this._activeAttempts(deviceId).length > 0) phase = "connecting";
+    else if (this.reconnectTargets.has(deviceId)) phase = "backoff";
+
+    const toIso = (ms: number | null | undefined) =>
+      ms == null ? null : new Date(ms).toISOString();
+    return {
+      portHeld,
+      phase,
+      lastFrameAt: toIso(stats?.lastFrameMs),
+      framesThisConnection: stats?.frames ?? 0,
+      lastConfigRequestAt: toIso(stats?.lastConfigRequestMs),
+      configured: stats?.configured ?? false,
+    };
   }
 
   /**
@@ -493,10 +843,16 @@ export class DeviceManager extends EventEmitter {
     for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
     this.reconnectTimers.clear();
     this.reconnectingPorts.clear();
+    this.reconnectTargets.clear();
 
-    const results = await Promise.allSettled(
-      Array.from(this.devices.keys(), (deviceId) => this.disconnect(deviceId)),
-    );
+    for (const attempt of this.connectAttempts) attempt.cancel();
+    const openings = [...this.connectAttempts].map((attempt) => attempt.opening?.catch(() => {}));
+
+    const results = await Promise.allSettled([
+      ...openings,
+      ...Array.from(this.activeProbes.keys(), (deviceId) => this.disconnect(deviceId)),
+      ...Array.from(this.devices.keys(), (deviceId) => this.disconnect(deviceId)),
+    ]);
     for (const result of results) {
       if (result.status === "rejected") {
         log.error(
@@ -592,6 +948,24 @@ export class DeviceManager extends EventEmitter {
   // Private helpers
   // ---------------------------------------------------------------------------
 
+  private _markConfigRequested(stats: ConnectionStats): void {
+    stats.lastConfigRequestMs = Date.now();
+    stats.configured = false;
+  }
+
+  /**
+   * Every config request the daemon makes goes through here. core only reports
+   * "configuring" on a status change, so repeat requests would otherwise go
+   * unrecorded. The returned promise proves nothing about the radio: it settles
+   * after a 60 second timeout whether or not the radio answered. Use
+   * `DeviceConfigured` for that.
+   */
+  private _requestConfig(deviceId: string, meshDevice: MeshDevice): Promise<number> {
+    const stats = this.connectionStats.get(deviceId);
+    if (stats) this._markConfigRequested(stats);
+    return meshDevice.configure();
+  }
+
   /**
    * Starts a watchdog that re-runs configure() if no mesh packet is received
    * within 90 s of the last packet (or since configure completed).
@@ -621,7 +995,7 @@ export class DeviceManager extends EventEmitter {
         );
         this.lastPacketMs.set(deviceId, Date.now()); // prevent hammering
         try {
-          await meshDevice.configure();
+          await this._requestConfig(deviceId, meshDevice);
           log.info(
             { deviceId, operation: "watchdog-configure" },
             "watchdog configuration completed",
@@ -644,6 +1018,7 @@ export class DeviceManager extends EventEmitter {
     status: "disconnected" | "connecting" | "connected" | "error",
     connectedAt?: string,
   ) {
+    const versions = this.reportedVersions.get(id);
     const event: ServerEvent = {
       type: "device:status",
       payload: {
@@ -653,8 +1028,8 @@ export class DeviceManager extends EventEmitter {
         status,
         connectedAt: connectedAt ?? null,
         lastSeenAt: null,
-        hardwareModel: null,
-        firmwareVersion: null,
+        hardwareModel: versions?.hardwareModel ?? null,
+        firmwareVersion: versions?.firmwareVersion ?? null,
         batteryLevel: this.batteryLevels.get(id) ?? null,
         hasGpsPosition: this.gpsAcquired.has(id),
         gpsDetail: this.gpsDetails.get(id) ?? null,
@@ -662,6 +1037,27 @@ export class DeviceManager extends EventEmitter {
       },
     };
     this.emit("event", event);
+  }
+
+  private _storeReportedVersions(deviceId: string, row: VersionColumns | undefined): void {
+    if (!row) return;
+    this.reportedVersions.set(deviceId, {
+      hardwareModel: row.hw_model,
+      firmwareVersion: row.firmware,
+    });
+  }
+
+  private async _ensureReportedVersions(deviceId: string): Promise<void> {
+    if (this.reportedVersions.has(deviceId)) return;
+    try {
+      const { rows } = await this.db.query<VersionColumns>(
+        "SELECT hw_model, firmware FROM devices WHERE id = $1",
+        [deviceId],
+      );
+      if (!this.reportedVersions.has(deviceId)) this._storeReportedVersions(deviceId, rows[0]);
+    } catch (err) {
+      log.warn({ deviceId, operation: "load-versions", err }, "could not load saved versions");
+    }
   }
 
   private async _handleDeviceStatus(
@@ -688,11 +1084,18 @@ export class DeviceManager extends EventEmitter {
       this.gpsAcquired.delete(deviceId);
       this.gpsDetails.delete(deviceId);
       this.mqttGateway?.detachDevice(deviceId);
+      // A connect still waiting on this transport must not report it as connected.
+      for (const attempt of this._activeAttempts(deviceId)) attempt.cancel();
 
       // Releasing the old SerialPort handle is essential on Windows. Without
       // this, an automatic reopen can race the stale handle and COMx remains
       // unavailable even though the manager considers it disconnected.
-      if (device) await device.transport.disconnect().catch(() => {});
+      const releasing = releaseTransport(device.transport);
+      // Recorded now so a disconnect arriving during the close can stop the
+      // reconnect scheduled below, and wait for the port too.
+      this.reconnectTargets.set(deviceId, { port, name, releasing });
+      await releasing;
+      if (this.reconnectTargets.get(deviceId)?.releasing !== releasing) return;
       this._emitStatus(deviceId, name, port, "disconnected");
       log.info(
         { deviceId, operation: "schedule-reconnect", delayMs: 5000 },
@@ -706,6 +1109,7 @@ export class DeviceManager extends EventEmitter {
     if (this.shuttingDown) return;
     if (this.reconnectingPorts.has(port)) return;
     this.reconnectingPorts.add(port);
+    this.reconnectTargets.set(deviceId, { port, name });
 
     const attempt = (this.reconnectAttempts.get(port) ?? 0) + 1;
     this.reconnectAttempts.set(port, attempt);
@@ -720,20 +1124,12 @@ export class DeviceManager extends EventEmitter {
     const timer = setTimeout(async () => {
       this.reconnectTimers.delete(port);
       this.reconnectingPorts.delete(port);
+      this.reconnectTargets.delete(deviceId);
       if (this.devices.has(deviceId)) {
         this.reconnectAttempts.delete(port);
         return; // already reconnected by another path
       }
-      log.info({ deviceId, operation: "reconnect", attempt, port }, "attempting reconnect");
-      try {
-        await this.connect(port, name, deviceId);
-        this.reconnectAttempts.delete(port); // success — reset backoff
-      } catch (err: unknown) {
-        log.warn({ deviceId, operation: "reconnect", attempt, port, err }, "reconnect failed");
-        this._emitStatus(deviceId, name, port, "disconnected");
-        // Schedule another attempt — keeps retrying until the device comes back
-        this._scheduleReconnect(deviceId, port, name);
-      }
+      await this._attemptReconnect(deviceId, port, name, attempt);
     }, delayMs);
     this.reconnectTimers.set(port, timer);
   }
@@ -769,36 +1165,25 @@ export class DeviceManager extends EventEmitter {
   private async _handleMetadata(deviceId: string, meta: any) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const m = meta as any;
-    const hwModel: string | null = m.hwModel != null ? String(m.hwModel) : null;
-    const firmware: string | null = m.firmwareVersion ?? null;
+    // Decoded protobufs fill unset fields with "" and 0 (HardwareModel.UNSET), so
+    // those mean "not in this packet", the same as a missing field.
+    const hwModel: string | null = m.hwModel ? String(m.hwModel) : null;
+    const firmware: string | null =
+      typeof m.firmwareVersion === "string" ? m.firmwareVersion.trim() || null : null;
 
-    await this.db.query("UPDATE devices SET hw_model = $1, firmware = $2 WHERE id = $3", [
-      hwModel,
-      firmware,
-      deviceId,
-    ]);
+    const { rows } = await this.db.query<VersionColumns>(
+      `UPDATE devices
+       SET hw_model = COALESCE($1, hw_model), firmware = COALESCE($2, firmware)
+       WHERE id = $3
+       RETURNING hw_model, firmware`,
+      [hwModel, firmware, deviceId],
+    );
+    this._storeReportedVersions(deviceId, rows[0]);
 
     // Re-emit device status with updated hw/firmware info
     const device = this.devices.get(deviceId);
     if (device) {
-      const event: ServerEvent = {
-        type: "device:status",
-        payload: {
-          id: deviceId,
-          name: device.name,
-          port: device.port,
-          status: "connected",
-          connectedAt: device.connectedAt,
-          lastSeenAt: null,
-          hardwareModel: hwModel,
-          firmwareVersion: firmware,
-          batteryLevel: this.batteryLevels.get(deviceId) ?? null,
-          hasGpsPosition: this.gpsAcquired.has(deviceId),
-          gpsDetail: this.gpsDetails.get(deviceId) ?? null,
-          ownNodeId: this.myNodeIds.get(deviceId) ?? null,
-        },
-      };
-      this.emit("event", event);
+      this._emitStatus(deviceId, device.name, device.port, "connected", device.connectedAt);
     }
   }
 }

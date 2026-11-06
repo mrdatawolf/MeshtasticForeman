@@ -5,7 +5,7 @@
 }
 
 .sectionLabel {
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-size: 0.82rem;
   font-weight: bold;
 }

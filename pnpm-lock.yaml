@@ -83,6 +83,9 @@ importers:
       mqtt:
         specifier: ^5.15.1
         version: 5.15.2(supports-color@7.2.0)
+      serialport:
+        specifier: ^13.0.0
+        version: 13.0.0(supports-color@7.2.0)
       zod:
         specifier: ^3.24.0
         version: 3.25.76

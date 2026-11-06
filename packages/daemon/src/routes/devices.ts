@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { z } from "zod";
 
+import { ConnectCancelledError } from "../device/device-manager.js";
 import { getHwModels } from "../hw-models.js";
 
 import { deviceIdSchema, nodeIdSchema, sendValidationError } from "./schemas.js";
@@ -69,8 +70,14 @@ export async function registerDeviceRoutes(
     if (!result.success) {
       return sendValidationError(reply, result.error);
     }
-    const device = await deviceManager.connect(result.data.port, result.data.name);
-    return device;
+    try {
+      return await deviceManager.connect(result.data.port, result.data.name);
+    } catch (err) {
+      if (err instanceof ConnectCancelledError) {
+        return reply.status(409).send({ error: err.message });
+      }
+      throw err;
+    }
   });
 
   app.get("/api/devices/:id/nodes", async (req, reply) => {

@@ -12,6 +12,7 @@ import {
 } from "recharts";
 
 import * as analyticsApi from "../../api/analytics.js";
+import { withoutHiddenNodes } from "../../lib/lastSeenFilter.js";
 
 import { cx, styles } from "./analyticsStyles.js";
 import {
@@ -30,6 +31,7 @@ import {
 import localStyles from "./signal.module.css";
 import { useAnalyticsQuery } from "./useAnalyticsQuery.js";
 
+import type { AnalyticsTabProps } from "./components.js";
 import type { LinkQualityEntry, SnrHistoryPoint } from "../../api/analytics.js";
 import type { MqttNode, NodeInfo } from "@foreman/shared";
 import type { CSSProperties } from "react";
@@ -37,12 +39,16 @@ import type { CSSProperties } from "react";
 // Tab 1 — Signal Quality
 // ---------------------------------------------------------------------------
 
-export function SignalTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNode[] }) {
+export function SignalTab({ nodes, mqttNodes, hiddenNodeIds }: AnalyticsTabProps) {
   const [since, setSince] = useState("24h");
-  const { data: snrData } = useAnalyticsQuery<SnrHistoryPoint[]>(
+  const { data: allSnrData } = useAnalyticsQuery<SnrHistoryPoint[]>(
     (signal) => analyticsApi.snrHistory({ since }, signal),
     [since],
     [],
+  );
+  const snrData = useMemo(
+    () => allSnrData && withoutHiddenNodes(allSnrData, hiddenNodeIds),
+    [allSnrData, hiddenNodeIds],
   );
 
   // Collect unique node IDs, sorted by total count desc (cap at 8 lines)
@@ -157,12 +163,18 @@ export function SignalTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: 
 // Tab 6 — Link Quality Matrix
 // ---------------------------------------------------------------------------
 
-export function LinkQualityTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNode[] }) {
+export function LinkQualityTab({ nodes, mqttNodes, hiddenNodeIds }: AnalyticsTabProps) {
   const [since, setSince] = useState("7d");
-  const { data } = useAnalyticsQuery<LinkQualityEntry[]>(
+  const { data: allData } = useAnalyticsQuery<LinkQualityEntry[]>(
     (signal) => analyticsApi.linkQuality({ since }, signal),
     [since],
     [],
+  );
+  const data = useMemo(
+    () =>
+      allData &&
+      allData.filter((e) => !hiddenNodeIds.has(e.fromNodeId) && !hiddenNodeIds.has(e.toNodeId)),
+    [allData, hiddenNodeIds],
   );
 
   // Collect unique node IDs, sorted by total message count

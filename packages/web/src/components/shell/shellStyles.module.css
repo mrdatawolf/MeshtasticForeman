@@ -3,7 +3,7 @@
 .page {
   font-family: monospace;
   background: #0f172a;
-  color: #e2e8f0;
+  color: var(--text-primary);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -11,11 +11,20 @@
 
 .header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   padding: 0.65rem 1.25rem;
   border-bottom: 1px solid #1e293b;
   flex-shrink: 0;
+}
+
+/* Menu panels open leftward from their button, so a menu that wraps to the left
+   edge would open off screen. Phones use the fixed panel below instead. */
+@media (min-width: 641px) {
+  .header {
+    justify-content: flex-end;
+  }
 }
 
 .logo {
@@ -33,6 +42,7 @@
 
 .nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
 }
 
@@ -40,7 +50,7 @@
 
 .tab {
   background: transparent;
-  color: #94a3b8;
+  color: var(--text-secondary);
   border: none;
   padding: 0.35rem 1rem;
   border-radius: 0.375rem;
@@ -51,7 +61,7 @@
 
 .tab.tabActive {
   background: #3b82f6;
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 /* Header dropdown menu trigger buttons (Device/Gps/Mqtt/Settings menus) */
@@ -67,7 +77,7 @@
   gap: 0.3rem;
   background: #0f172a;
   border: 1px solid #1e293b;
-  color: #e2e8f0;
+  color: var(--text-primary);
   padding: 0.25rem 0.65rem;
   border-radius: 0.375rem;
   cursor: pointer;
@@ -102,6 +112,18 @@
   overflow: hidden;
 }
 
+/* On a phone the header wraps, so a panel aligned to its button can leave the screen. */
+@media (max-width: 640px) {
+  .menuPanel {
+    position: fixed;
+    top: auto;
+    left: 0.5rem;
+    right: 0.5rem;
+    min-width: 0;
+    margin-top: 0.4rem;
+  }
+}
+
 .menuSection {
   display: flex;
   flex-wrap: wrap;
@@ -112,7 +134,7 @@
 
 .menuSectionLabel {
   width: 100%;
-  color: #334155;
+  color: var(--text-muted);
   font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -137,7 +159,7 @@
   gap: 0.3rem;
   background: #0f172a;
   border: 1px solid #1e293b;
-  color: #94a3b8;
+  color: var(--text-secondary);
   padding: 0.2rem 0.6rem;
   border-radius: 0.25rem;
   cursor: pointer;
@@ -148,7 +170,7 @@
 .menuNavBtn.menuNavBtnActive {
   background: #1e3a5f;
   border-color: #3b82f6;
-  color: #e2e8f0;
+  color: var(--text-primary);
 }
 
 .deviceActionBtn {
@@ -177,7 +199,7 @@
   gap: 0.3rem;
   background: #0f172a;
   border: 1px solid #1e293b;
-  color: #64748b;
+  color: var(--text-muted);
   padding: 0.15rem 0.5rem;
   border-radius: 0.25rem;
   cursor: pointer;
@@ -188,7 +210,7 @@
 .hdrFilterBtn.hdrFilterBtnActive {
   background: #1e3a5f;
   border-color: #3b82f6;
-  color: #e2e8f0;
+  color: var(--text-primary);
 }
 
 /* Variant used where the call site historically overrode the active color to
@@ -225,11 +247,11 @@
   color: #fb923c;
 }
 .hdrFilterBtn.tagForeman {
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 .filterLabel {
-  color: #475569;
+  color: var(--text-muted);
   font-size: 0.7rem;
   white-space: nowrap;
 }
@@ -243,6 +265,7 @@
 }
 
 .hdrCount {
+  color: var(--text-primary);
   background: #334155;
   border-radius: 9999px;
   padding: 0 0.3rem;
@@ -254,7 +277,7 @@
   padding: 0.15rem 0.5rem;
   border-radius: 9999px;
   font-size: 0.75rem;
-  color: #fff;
+  color: var(--text-on-accent);
   font-weight: bold;
 }
 
@@ -268,7 +291,7 @@
 /* Small shared utilities */
 
 .caret {
-  color: #475569;
+  color: var(--text-muted);
   margin-left: 0.3rem;
   font-size: 0.65rem;
 }
@@ -278,7 +301,7 @@
 }
 
 .muted72 {
-  color: #475569;
+  color: var(--text-muted);
   font-size: 0.72rem;
 }
 

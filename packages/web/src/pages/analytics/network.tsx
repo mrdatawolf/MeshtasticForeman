@@ -35,19 +35,19 @@ import {
 import localStyles from "./network.module.css";
 import { useAnalyticsQuery } from "./useAnalyticsQuery.js";
 
+import type { AnalyticsTabProps } from "./components.js";
 import type {
   HardwareBucket,
   HopBucket,
   NeighborLink,
   TracerouteRecord,
 } from "../../api/analytics.js";
-import type { MqttNode, NodeInfo } from "@foreman/shared";
 import type { CSSProperties } from "react";
 
 // Tab 3 — Network
 // ---------------------------------------------------------------------------
 
-export function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNode[] }) {
+export function NetworkTab({ nodes, mqttNodes, hiddenNodeIds }: AnalyticsTabProps) {
   const [graphSince, setGraphSince] = useState("24h");
   const graphQuerySince = graphSince !== "all" ? graphSince : undefined;
   const { data: hops } = useAnalyticsQuery<HopBucket[]>(
@@ -102,6 +102,7 @@ export function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes:
     >();
 
     for (const lk of neighbors) {
+      if (hiddenNodeIds.has(lk.fromNodeId) || hiddenNodeIds.has(lk.toNodeId)) continue;
       nodeIds.add(lk.fromNodeId);
       nodeIds.add(lk.toNodeId);
       const key = `${Math.min(lk.fromNodeId, lk.toNodeId)}_${Math.max(lk.fromNodeId, lk.toNodeId)}`;
@@ -126,7 +127,7 @@ export function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes:
       })),
       links: [...edgeMap.values()],
     };
-  }, [neighbors, nodes, mqttNodes]);
+  }, [neighbors, nodes, mqttNodes, hiddenNodeIds]);
 
   // Build traceroute graph data
   const tracerouteGraphData = useMemo(() => {
@@ -137,8 +138,9 @@ export function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes:
 
     for (const tr of routes) {
       const path = [tr.fromNodeId, ...tr.route, tr.toNodeId];
-      for (const id of path) nodeIds.add(id);
+      for (const id of path) if (!hiddenNodeIds.has(id)) nodeIds.add(id);
       for (let i = 0; i < path.length - 1; i++) {
+        if (hiddenNodeIds.has(path[i]) || hiddenNodeIds.has(path[i + 1])) continue;
         const key = `${Math.min(path[i], path[i + 1])}_${Math.max(path[i], path[i + 1])}`;
         if (!edgeSet.has(key)) {
           edgeSet.add(key);
@@ -155,7 +157,7 @@ export function NetworkTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes:
       })),
       links,
     };
-  }, [routes, nodes, mqttNodes]);
+  }, [routes, nodes, mqttNodes, hiddenNodeIds]);
 
   const hopRows = useMemo(
     () =>

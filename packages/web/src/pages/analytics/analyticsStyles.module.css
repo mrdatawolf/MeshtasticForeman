@@ -43,7 +43,7 @@
   font-weight: bold;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #64748b;
+  color: var(--text-muted);
   padding-bottom: 0.5rem;
   border-bottom: 1px solid #1e293b;
   margin-bottom: 0.75rem;
@@ -56,7 +56,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #475569;
+  color: var(--text-muted);
   font-size: 0.75rem;
   font-family: monospace;
 }
@@ -66,7 +66,7 @@
   font-weight: bold;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #475569;
+  color: var(--text-muted);
   margin-bottom: 0.3rem;
   margin-top: 0.5rem;
 }
@@ -82,7 +82,7 @@
 .deliverySummary {
   font-size: 0.72rem;
   font-family: monospace;
-  color: #94a3b8;
+  color: var(--text-secondary);
   margin-bottom: 0.25rem;
 }
 
@@ -91,7 +91,7 @@
   gap: 1.5rem;
   font-size: 0.72rem;
   font-family: monospace;
-  color: #64748b;
+  color: var(--text-muted);
   margin-bottom: 0.5rem;
 }
 
@@ -103,7 +103,7 @@
 .matrixHeader {
   padding: 0.2rem 0.4rem;
   text-align: center;
-  color: #94a3b8;
+  color: var(--text-secondary);
   background: #020617;
   border-bottom: 1px solid #1e293b;
   font-weight: normal;
@@ -115,7 +115,7 @@
 
 .matrixRowHeader {
   padding: 0.2rem 0.5rem;
-  color: #94a3b8;
+  color: var(--text-secondary);
   background: #020617;
   border-right: 1px solid #1e293b;
   white-space: nowrap;
@@ -128,13 +128,13 @@
   padding: 0.2rem 0.4rem;
   text-align: center;
   font-size: 0.62rem;
-  color: #64748b;
+  color: var(--text-muted);
   border: 1px solid #0f172a;
 }
 
 .logCell {
   padding: 0.25rem 0.5rem;
-  color: #94a3b8;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -147,7 +147,7 @@
 
 .rangeBtn {
   background: #0f172a;
-  color: #64748b;
+  color: var(--text-muted);
   border: 1px solid #1e293b;
   padding: 0.15rem 0.5rem;
   border-radius: 0.25rem;
@@ -186,7 +186,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #475569;
+  color: var(--text-muted);
   font-size: 0.75rem;
 }
 
@@ -206,7 +206,7 @@
 }
 
 .mutedNote {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.7rem;
   font-family: monospace;
 }

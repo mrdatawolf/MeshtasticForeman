@@ -5,7 +5,7 @@
 }
 
 .wizardLabel {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -18,15 +18,15 @@
 
 .pipCurrent {
   background: #3b82f6;
-  color: #e2e8f0;
+  color: var(--text-on-accent);
 }
 
 .pipDone {
   background: #1e3a5f;
-  color: #e2e8f0;
+  color: var(--text-primary);
 }
 
 .pipUpcoming {
   background: #1e293b;
-  color: #475569;
+  color: var(--text-muted);
 }

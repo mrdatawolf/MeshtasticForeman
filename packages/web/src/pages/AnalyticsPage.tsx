@@ -21,8 +21,10 @@ type AnalyticsTab =
   | "timeline"
   | "positions";
 interface Props {
+  /** Unfiltered, so names resolve in data for nodes the last-seen filter hides. */
   nodes: NodeInfo[];
   mqttNodes: MqttNode[];
+  hiddenNodeIds: ReadonlySet<number>;
   devices: DeviceInfo[];
 }
 
@@ -30,7 +32,8 @@ function cx(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
 }
 
-export function AnalyticsPage({ nodes, mqttNodes, devices }: Props) {
+export function AnalyticsPage({ nodes, mqttNodes, hiddenNodeIds, devices }: Props) {
+  const tabProps = { nodes, mqttNodes, hiddenNodeIds };
   const [tab, setTab] = useState<AnalyticsTab>("messages");
   return (
     <div className={styles.page}>
@@ -62,16 +65,14 @@ export function AnalyticsPage({ nodes, mqttNodes, devices }: Props) {
           </button>
         ))}
       </div>
-      {tab === "signal" && <SignalTab nodes={nodes} mqttNodes={mqttNodes} />}
-      {tab === "messages" && <MessagesTab nodes={nodes} mqttNodes={mqttNodes} />}
-      {tab === "network" && <NetworkTab nodes={nodes} mqttNodes={mqttNodes} />}
-      {tab === "telemetry" && <TelemetryTab nodes={nodes} mqttNodes={mqttNodes} />}
+      {tab === "signal" && <SignalTab {...tabProps} />}
+      {tab === "messages" && <MessagesTab {...tabProps} />}
+      {tab === "network" && <NetworkTab {...tabProps} />}
+      {tab === "telemetry" && <TelemetryTab {...tabProps} />}
       {tab === "packets" && <PacketsTab />}
-      {tab === "linkquality" && <LinkQualityTab nodes={nodes} mqttNodes={mqttNodes} />}
-      {tab === "timeline" && (
-        <ActivityTimelineTab nodes={nodes} mqttNodes={mqttNodes} devices={devices} />
-      )}
-      {tab === "positions" && <PositionsTab nodes={nodes} mqttNodes={mqttNodes} />}
+      {tab === "linkquality" && <LinkQualityTab {...tabProps} />}
+      {tab === "timeline" && <ActivityTimelineTab {...tabProps} devices={devices} />}
+      {tab === "positions" && <PositionsTab {...tabProps} />}
     </div>
   );
 }

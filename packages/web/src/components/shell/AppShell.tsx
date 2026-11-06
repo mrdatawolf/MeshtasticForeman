@@ -4,9 +4,18 @@ import remarkGfm from "remark-gfm";
 
 import apiPromisesRaw from "../../../../../API_PROMISES.md?raw";
 import logo from "../../assets/logo.png";
+import { useNow } from "../../hooks/useNow.js";
+import {
+  countUniqueNodes,
+  findHiddenNodeIds,
+  loadLastSeenWindow,
+  saveLastSeenWindow,
+  withoutHiddenNodes,
+} from "../../lib/lastSeenFilter.js";
 import { applyNodeOverrides } from "../../lib/nodeOverrides.js";
 import { ActivityPage } from "../../pages/ActivityPage.js";
 import { AnalyticsPage } from "../../pages/AnalyticsPage.js";
+import { DebugPage } from "../../pages/DebugPage.js";
 import { DeviceConfigPage } from "../../pages/DeviceConfigPage.js";
 import { IntroModal } from "../../pages/IntroModal.js";
 import { LogsPage } from "../../pages/LogsPage.js";
@@ -19,6 +28,7 @@ import { foremanClient } from "../../ws/client.js";
 import appShellStyles from "./AppShell.module.css";
 import { DeviceMenu } from "./DeviceMenu.js";
 import { GpsMenu } from "./GpsMenu.js";
+import { LastSeenFilter } from "./LastSeenFilter.js";
 import { MainNavigation } from "./MainNavigation.js";
 import { MqttMenu } from "./MqttMenu.js";
 import { SettingsMenu } from "./SettingsMenu.js";
@@ -33,7 +43,28 @@ import type {
   TagFilter,
 } from "./types.js";
 import type { AppState } from "../../appState.js";
+import type { LastSeenWindow } from "../../lib/lastSeenFilter.js";
 import type { NodeOverride } from "@foreman/shared";
+
+const INTRO_SEEN_KEY = "foreman_intro_seen";
+/** How often nodes are re-checked, so they age out without new data arriving. */
+const LAST_SEEN_REFRESH_MS = 60_000;
+
+function hasSeenIntro(): boolean {
+  try {
+    return Boolean(localStorage.getItem(INTRO_SEEN_KEY));
+  } catch {
+    return false;
+  }
+}
+
+function markIntroSeen(): void {
+  try {
+    localStorage.setItem(INTRO_SEEN_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
 
 interface Props {
   appState: AppState;
@@ -54,7 +85,7 @@ export function AppShell({
 }: Props) {
   const { devices, nodes, mqttNodes, activity, logs, mqttEnabled, deviceConfigs } = appState;
   const [tab, setTab] = useState<Tab>("nodes");
-  const [introOpen, setIntroOpen] = useState(() => !localStorage.getItem("foreman_intro_seen"));
+  const [introOpen, setIntroOpen] = useState(() => !hasSeenIntro());
   const [pendingWizard, setPendingWizard] = useState(false);
   const [mqttScope, setMqttScope] = useState<MqttScope>("county");
   const [apiDocsOpen, setApiDocsOpen] = useState(false);
@@ -69,10 +100,19 @@ export function AppShell({
   const [logsLevel, setLogsLevel] = useState<LogsLevel>("all");
   const [logsTag, setLogsTag] = useState<TagFilter>("all");
   const [logsPaused, setLogsPaused] = useState(false);
+  const [lastSeenWindow, setLastSeenWindow] = useState<LastSeenWindow>(loadLastSeenWindow);
+  const now = useNow(LAST_SEEN_REFRESH_MS);
 
   const navigate = useCallback((next: Tab) => setTab(next), []);
-  const effectiveNodes = applyNodeOverrides(nodes, overrides);
-  const effectiveMqttNodes = applyNodeOverrides(mqttNodes, overrides);
+  const handleLastSeenChange = useCallback((next: LastSeenWindow) => {
+    setLastSeenWindow(next);
+    saveLastSeenWindow(next);
+  }, []);
+  const effectiveNodes = useMemo(() => applyNodeOverrides(nodes, overrides), [nodes, overrides]);
+  const effectiveMqttNodes = useMemo(
+    () => applyNodeOverrides(mqttNodes, overrides),
+    [mqttNodes, overrides],
+  );
   const gatewayRegion = useMemo(() => {
     const ownNodeId = devices.find((device) => device.status === "connected")?.ownNodeId;
     return ownNodeId == null
@@ -94,10 +134,32 @@ export function AppShell({
           ),
     [effectiveMqttNodes, mqttRegionPrefix],
   );
-  const mappableMeshCount = effectiveNodes.filter(
+  // Hidden IDs come from the unscoped lists, because a node's age is the most recent
+  // of its mesh and MQTT times even when region scope removes its MQTT record. The
+  // unfiltered lists stay in use for lookups, gatewayRegion, and Overrides.
+  const hiddenNodeIds = useMemo(() => {
+    const ownNodeIds = new Set(
+      devices.flatMap((device) =>
+        device.status === "connected" && device.ownNodeId != null ? [device.ownNodeId] : [],
+      ),
+    );
+    return findHiddenNodeIds(effectiveNodes, effectiveMqttNodes, lastSeenWindow, now, ownNodeIds);
+  }, [devices, effectiveNodes, effectiveMqttNodes, lastSeenWindow, now]);
+  const visibleNodes = useMemo(
+    () => withoutHiddenNodes(effectiveNodes, hiddenNodeIds),
+    [effectiveNodes, hiddenNodeIds],
+  );
+  const visibleScopedMqttNodes = useMemo(
+    () => withoutHiddenNodes(scopedMqttNodes, hiddenNodeIds),
+    [scopedMqttNodes, hiddenNodeIds],
+  );
+  const visibleMqttNodeCount = withoutHiddenNodes(effectiveMqttNodes, hiddenNodeIds).length;
+  const shownNodeCount = countUniqueNodes(visibleNodes, visibleScopedMqttNodes);
+  const totalNodeCount = countUniqueNodes(effectiveNodes, scopedMqttNodes);
+  const mappableMeshCount = visibleNodes.filter(
     (node) => node.latitude != null && node.longitude != null,
   ).length;
-  const mappableMqttCount = scopedMqttNodes.filter(
+  const mappableMqttCount = visibleScopedMqttNodes.filter(
     (node) => node.latitude != null && node.longitude != null,
   ).length;
   const logTagCounts: Record<string, number> = {};
@@ -124,13 +186,19 @@ export function AppShell({
         <img src={logo} alt="Meshtastic Foreman" className={styles.logo} />
         <h1 className={styles.title}>Meshtastic Foreman</h1>
         <MainNavigation tab={tab} onNavigate={setTab} />
+        <LastSeenFilter
+          window={lastSeenWindow}
+          shownCount={shownNodeCount}
+          totalCount={totalNodeCount}
+          onChange={handleLastSeenChange}
+        />
         <GpsMenu devices={devices} pending={gpsPending} setPending={setGpsPending} />
         <MqttMenu
           enabled={mqttEnabled}
           scope={mqttScope}
           gatewayRegion={gatewayRegion}
-          scopedNodeCount={scopedMqttNodes.length}
-          totalNodeCount={effectiveMqttNodes.length}
+          scopedNodeCount={visibleScopedMqttNodes.length}
+          totalNodeCount={visibleMqttNodeCount}
           onToggle={() =>
             foremanClient.send({ type: "mqtt:toggle", payload: { enabled: !mqttEnabled } })
           }
@@ -178,8 +246,9 @@ export function AppShell({
         <div className={appShellStyles.tabPanelScroll}>
           <NodesPage
             devices={devices}
-            nodes={effectiveNodes}
-            mqttNodes={scopedMqttNodes}
+            nodes={visibleNodes}
+            mqttNodes={visibleScopedMqttNodes}
+            hiddenNodeCount={totalNodeCount - shownNodeCount}
             onMessage={(nodeId) => {
               setMessageTarget(nodeId);
               setTab("messages");
@@ -193,8 +262,10 @@ export function AppShell({
       )}
       {tab === "map" && (
         <MapPage
-          nodes={effectiveNodes}
-          mqttNodes={scopedMqttNodes}
+          nodes={visibleNodes}
+          mqttNodes={visibleScopedMqttNodes}
+          lookupNodes={effectiveNodes}
+          lookupMqttNodes={scopedMqttNodes}
           showMesh={showMesh}
           setShowMesh={setShowMesh}
           showMqtt={showMqtt}
@@ -217,6 +288,7 @@ export function AppShell({
             devices={devices}
             nodes={effectiveNodes}
             mqttNodes={scopedMqttNodes}
+            pickerNodes={visibleNodes}
             initialNodeId={messageTarget}
             onInitialNodeConsumed={() => setMessageTarget(null)}
           />
@@ -263,19 +335,29 @@ export function AppShell({
           />
         </div>
       )}
+      {tab === "debug" && (
+        <div className={appShellStyles.tabPanelScroll}>
+          <DebugPage devices={devices} />
+        </div>
+      )}
       {tab === "analytics" && (
         <div className={appShellStyles.tabPanelColumn}>
-          <AnalyticsPage nodes={effectiveNodes} mqttNodes={effectiveMqttNodes} devices={devices} />
+          <AnalyticsPage
+            nodes={effectiveNodes}
+            mqttNodes={effectiveMqttNodes}
+            hiddenNodeIds={hiddenNodeIds}
+            devices={devices}
+          />
         </div>
       )}
       {introOpen && (
         <IntroModal
           onClose={() => {
-            localStorage.setItem("foreman_intro_seen", "1");
+            markIntroSeen();
             setIntroOpen(false);
           }}
           onSetupWizard={() => {
-            localStorage.setItem("foreman_intro_seen", "1");
+            markIntroSeen();
             setIntroOpen(false);
             navigate("config");
             setPendingWizard(true);

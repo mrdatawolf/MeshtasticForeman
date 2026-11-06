@@ -12,8 +12,10 @@
  *    `new MeshDevice()` works without "is not a constructor" errors.
  */
 
+import { EventEmitter } from "node:events";
+
 import { PGlite } from "@electric-sql/pglite";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
 
 import { runMigrations } from "../db/migrations.js";
 import { DeviceManager } from "../device/device-manager.js";
@@ -199,6 +201,12 @@ describe("DeviceManager", () => {
     db = await createTestDb();
     manager = new DeviceManager(db, { bot: { enabled: false } });
     emitted = collectEvents(manager);
+  });
+
+  // Every test opens its own PGlite instance. Left open, they add up to many GB.
+  afterEach(async () => {
+    await manager.shutdown();
+    await db.close();
   });
 
   // -------------------------------------------------------------------------
@@ -1060,6 +1068,199 @@ describe("DeviceManager", () => {
   });
 
   // -------------------------------------------------------------------------
+  describe("reported versions in device:status", () => {
+    const PORT = "/dev/ttyUSB0";
+    const settle = () => new Promise((r) => setTimeout(r, 20));
+
+    async function seedKnownRadio(firmware = "2.7.15", hwModel = "43") {
+      const device = await seedDevice(db, { port: PORT, name: "Node" });
+      await db.query("UPDATE devices SET firmware = $1, hw_model = $2 WHERE id = $3", [
+        firmware,
+        hwModel,
+        device.id,
+      ]);
+      return device;
+    }
+
+    function statusEvents(id?: string) {
+      return emitted.flatMap((event) =>
+        event.type === "device:status" && (id === undefined || event.payload.id === id)
+          ? [event.payload]
+          : [],
+      );
+    }
+
+    function fakeGateway() {
+      return Object.assign(new EventEmitter(), {
+        attachDevice: vi.fn(),
+        detachDevice: vi.fn(),
+      });
+    }
+
+    async function savedVersions(id: string) {
+      const { rows } = await db.query<{ hw_model: string | null; firmware: string | null }>(
+        "SELECT hw_model, firmware FROM devices WHERE id = $1",
+        [id],
+      );
+      return rows[0];
+    }
+
+    it("carries the known version on every status event, on every path", async () => {
+      const { Types } = await import("@meshtastic/core");
+      const gateway = fakeGateway();
+      manager.setMqttGateway(gateway as never);
+      const { id, name } = await seedKnownRadio();
+
+      await manager.connect(PORT, name, id);
+      gateway.emit("gps:position", id, { latitude: 1, longitude: 2 });
+      manager.refreshGpsPosition(id);
+      getFakeEvents().onMyNodeInfo.dispatch({ myNodeNum: 123 });
+      getFakeEvents().onTelemetryPacket.dispatch({
+        from: 123,
+        data: { variant: { case: "deviceMetrics", value: { batteryLevel: 75 } } },
+      });
+      await settle();
+      getFakeEvents().onDeviceMetadataPacket.dispatch({ data: {} });
+      await settle();
+      const batteryEvents = statusEvents().filter((event) => event.batteryLevel === 75);
+      expect(batteryEvents.length).toBeGreaterThan(0);
+
+      // A dropped connection, and then a failed reconnect.
+      getFakeEvents().onDeviceStatus.dispatch(Types.DeviceStatusEnum.DeviceDisconnected);
+      await settle();
+      const { TransportNodeSerial } = await import("@meshtastic/transport-node-serial");
+      vi.mocked(TransportNodeSerial.create).mockRejectedValueOnce(new Error("port busy"));
+      manager.reconnect(id, PORT, name);
+      await settle();
+      await manager.disconnect(id);
+
+      const events = statusEvents();
+      expect(new Set(events.map((event) => event.status))).toEqual(
+        new Set(["connecting", "connected", "disconnected", "error"]),
+      );
+      for (const event of events) {
+        expect(event).toMatchObject({ firmwareVersion: "2.7.15", hardwareModel: "43" });
+      }
+    });
+
+    it("keeps the version after a manual disconnect", async () => {
+      const { id, name } = await seedKnownRadio();
+      await manager.connect(PORT, name, id);
+      emitted.length = 0;
+
+      await manager.disconnect(id);
+
+      expect(statusEvents()).toEqual([
+        expect.objectContaining({
+          status: "disconnected",
+          firmwareVersion: "2.7.15",
+          hardwareModel: "43",
+        }),
+      ]);
+    });
+
+    it("keeps the version when a disconnect cancels the first connect of this run", async () => {
+      const { id, name } = await seedKnownRadio();
+
+      const connecting = manager.connect(PORT, name, id).catch(() => null);
+      await manager.disconnect(id);
+      await connecting;
+
+      expect(statusEvents().at(-1)).toMatchObject({
+        status: "disconnected",
+        firmwareVersion: "2.7.15",
+        hardwareModel: "43",
+      });
+    });
+
+    it("uses a newly reported version on later status events", async () => {
+      await manager.connect(PORT, "Node");
+      expect(statusEvents().at(-1)).toMatchObject({ firmwareVersion: null, hardwareModel: null });
+
+      getFakeEvents().onDeviceMetadataPacket.dispatch({
+        data: { firmwareVersion: "2.7.15", hwModel: 43 },
+      });
+      await settle();
+      const [{ id }] = statusEvents();
+      manager.refreshGpsPosition(id);
+
+      expect(statusEvents().at(-1)).toMatchObject({
+        firmwareVersion: "2.7.15",
+        hardwareModel: "43",
+      });
+    });
+
+    it.each([
+      ["missing fields", {}],
+      ["protobuf defaults", { firmwareVersion: "", hwModel: 0 }],
+      ["a blank version", { firmwareVersion: "   ", hwModel: null }],
+    ])("does not erase saved versions on a metadata packet with %s", async (_label, data) => {
+      const { id, name } = await seedKnownRadio();
+      await manager.connect(PORT, name, id);
+      emitted.length = 0;
+
+      getFakeEvents().onDeviceMetadataPacket.dispatch({ data });
+      await settle();
+
+      expect(await savedVersions(id)).toEqual({ hw_model: "43", firmware: "2.7.15" });
+      expect(statusEvents()).toEqual([
+        expect.objectContaining({ firmwareVersion: "2.7.15", hardwareModel: "43" }),
+      ]);
+    });
+
+    it("updates only the field a metadata packet reports", async () => {
+      const { id, name } = await seedKnownRadio();
+      await manager.connect(PORT, name, id);
+
+      getFakeEvents().onDeviceMetadataPacket.dispatch({ data: { firmwareVersion: "2.8.0" } });
+      await settle();
+
+      expect(await savedVersions(id)).toEqual({ hw_model: "43", firmware: "2.8.0" });
+    });
+
+    it("replaces the old radio's version once a swapped radio reports its own", async () => {
+      const { id, name } = await seedKnownRadio("2.5.0", "9");
+
+      await manager.connect(PORT, name, id);
+      getFakeEvents().onDeviceMetadataPacket.dispatch({
+        data: { firmwareVersion: "2.7.15", hwModel: 43 },
+      });
+      await settle();
+      await manager.disconnect(id);
+      emitted.length = 0;
+
+      // Reloaded from the saved row, not from whatever this run saw first.
+      await db.query("UPDATE devices SET firmware = '2.7.16' WHERE id = $1", [id]);
+      await manager.connect(PORT, name, id);
+      expect(statusEvents()[0]).toMatchObject({ status: "connecting", firmwareVersion: "2.7.16" });
+
+      getFakeEvents().onDeviceMetadataPacket.dispatch({
+        data: { firmwareVersion: "2.8.0", hwModel: 50 },
+      });
+      await settle();
+      manager.refreshGpsPosition(id);
+      await manager.disconnect(id);
+
+      for (const event of statusEvents().slice(-2)) {
+        expect(event).toMatchObject({ firmwareVersion: "2.8.0", hardwareModel: "50" });
+      }
+    });
+
+    it("keeps each device's version separate", async () => {
+      const first = await manager.connect("/dev/ttyUSB0", "First");
+      getFakeEvents().onDeviceMetadataPacket.dispatch({ data: { firmwareVersion: "2.5.0" } });
+      const second = await manager.connect("/dev/ttyUSB1", "Second");
+      getFakeEvents().onDeviceMetadataPacket.dispatch({ data: { firmwareVersion: "2.7.15" } });
+      await settle();
+
+      manager.refreshGpsPosition(first.id);
+      manager.refreshGpsPosition(second.id);
+
+      expect(statusEvents(first.id).at(-1)?.firmwareVersion).toBe("2.5.0");
+      expect(statusEvents(second.id).at(-1)?.firmwareVersion).toBe("2.7.15");
+    });
+  });
+
   describe("auto-reconnect on device disconnect", () => {
     it("emits device:status disconnected when the device reports disconnect", async () => {
       const { Types } = await import("@meshtastic/core");

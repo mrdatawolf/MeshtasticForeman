@@ -172,7 +172,7 @@ export function ActivityPage({ entries, window, sourceFilter, paused }: Props) {
               </div>
             ))}
             {displayEntries.length === 0 && (
-              <div style={{ color: "#475569", padding: "1rem", textAlign: "center" }}>
+              <div style={{ color: "var(--text-muted)", padding: "1rem", textAlign: "center" }}>
                 No activity in this window
               </div>
             )}
@@ -212,7 +212,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: "bold",
     letterSpacing: "0.08em",
     textTransform: "uppercase",
-    color: "#64748b",
+    color: "var(--text-muted)",
     paddingBottom: "0.4rem",
     borderBottom: "1px solid #1e293b",
     marginBottom: "0.4rem",
@@ -232,19 +232,19 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     borderBottom: "1px solid #0f172a",
   },
-  feedTime: { color: "#475569", flexShrink: 0, width: "5.5rem" },
+  feedTime: { color: "var(--text-muted)", flexShrink: 0, width: "5.5rem" },
   feedSource: { flexShrink: 0, width: "2.5rem", fontWeight: "bold" },
   feedPortnum: { color: "#a78bfa", flexShrink: 0, minWidth: "10rem" },
-  feedFrom: { color: "#94a3b8", flexShrink: 0, width: "6rem" },
+  feedFrom: { color: "var(--text-secondary)", flexShrink: 0, width: "6rem" },
   feedRegion: {
-    color: "#64748b",
+    color: "var(--text-muted)",
     fontSize: "0.7rem",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
   viaMqtt: {
-    color: "#64748b",
+    color: "var(--text-muted)",
     fontSize: "0.65rem",
     border: "1px solid #334155",
     borderRadius: "0.2rem",
@@ -283,12 +283,12 @@ const styles: Record<string, React.CSSProperties> = {
   statBarFill: { height: "100%", transition: "width 0.3s ease" },
   statLabel: {
     fontSize: "0.7rem",
-    color: "#94a3b8",
+    color: "var(--text-secondary)",
     flex: 1,
     zIndex: 1,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
-  statCount: { fontSize: "0.7rem", color: "#64748b", zIndex: 1, flexShrink: 0 },
+  statCount: { fontSize: "0.7rem", color: "var(--text-muted)", zIndex: 1, flexShrink: 0 },
 };

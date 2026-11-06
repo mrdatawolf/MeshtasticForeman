@@ -12,13 +12,13 @@
 }
 
 .chLabel {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.65rem;
   text-transform: uppercase;
 }
 
 .roleLabel {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.7rem;
 }
 .roleLabelPrimary {
@@ -26,18 +26,18 @@
 }
 
 .name {
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-size: 0.85rem;
   font-weight: bold;
   margin-bottom: 0.2rem;
 }
 
 .namePlaceholder {
-  color: #475569;
+  color: var(--text-muted);
 }
 
 .pskLine {
-  color: #475569;
+  color: var(--text-muted);
   font-size: 0.72rem;
   font-family: monospace;
 }

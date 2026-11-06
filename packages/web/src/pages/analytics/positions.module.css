@@ -1,6 +1,6 @@
 .select {
   background: #0f172a;
-  color: #e2e8f0;
+  color: var(--text-primary);
   border: 1px solid #1e293b;
   border-radius: 0.25rem;
   padding: 0.15rem 0.4rem;
@@ -9,7 +9,7 @@
 }
 
 .mutedNote {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.7rem;
   font-family: monospace;
 }

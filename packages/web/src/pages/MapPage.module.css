@@ -18,7 +18,7 @@
 }
 
 .routeCountText {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.7rem;
 }
 
@@ -35,7 +35,7 @@
 
 .stackHeaderLabel {
   font-size: 0.65rem;
-  color: #64748b;
+  color: var(--text-on-light-muted);
   width: 100%;
   margin-bottom: 0.1rem;
 }
@@ -71,7 +71,7 @@
 }
 
 .searchIcon {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.75rem;
   user-select: none;
 }
@@ -80,14 +80,14 @@
   background: transparent;
   border: none;
   outline: none;
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-size: 0.75rem;
   font-family: monospace;
   width: 14rem;
 }
 
 .searchCount {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 0.7rem;
   font-family: monospace;
   white-space: nowrap;
@@ -97,7 +97,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.85rem;
   line-height: 1;
   padding: 0 0.1rem;
@@ -215,7 +215,7 @@
   left: 1rem;
   background: #0f172acc;
   backdrop-filter: blur(4px);
-  color: #e2e8f0;
+  color: var(--text-primary);
   padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
   font-size: 0.75rem;
@@ -310,5 +310,5 @@
 }
 
 .legendMuted {
-  color: #64748b;
+  color: var(--text-secondary);
 }

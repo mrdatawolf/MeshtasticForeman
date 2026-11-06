@@ -13,6 +13,14 @@ const ForceGraph2D = lazy(() => import("react-force-graph-2d"));
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Props for tabs that show nodes. The lists are unfiltered, for name lookups. */
+export interface AnalyticsTabProps {
+  nodes: NodeInfo[];
+  mqttNodes: MqttNode[];
+  /** Nodes the header's last-seen filter hides. Remove them from what the tab shows. */
+  hiddenNodeIds: ReadonlySet<number>;
+}
+
 export function nodeName(id: number, nodes: NodeInfo[], mqttNodes: MqttNode[]): string {
   const n = (nodes as Array<NodeInfo | MqttNode>).concat(mqttNodes).find((x) => x.nodeId === id);
   return resolveNodeName(id, n ?? {});
@@ -69,7 +77,7 @@ export const MAP_STYLE =
 // ---------------------------------------------------------------------------
 
 export const GRID_COLOR = "#1e293b";
-export const TICK_STYLE = { fill: "#64748b", fontSize: 11, fontFamily: "monospace" };
+export const TICK_STYLE = { fill: "var(--text-muted)", fontSize: 11, fontFamily: "monospace" };
 export const TOOLTIP_STYLE = {
   contentStyle: {
     background: "#0f172a",
@@ -78,14 +86,14 @@ export const TOOLTIP_STYLE = {
     fontFamily: "monospace",
     fontSize: "0.75rem",
   },
-  labelStyle: { color: "#94a3b8" },
-  itemStyle: { color: "#e2e8f0" },
+  labelStyle: { color: "var(--text-secondary)" },
+  itemStyle: { color: "var(--text-primary)" },
 };
 /** Legend's `wrapperStyle` prop — same library constraint as above. */
 export const LEGEND_WRAPPER_STYLE: CSSProperties = {
   fontSize: "0.7rem",
   fontFamily: "monospace",
-  color: "#94a3b8",
+  color: "var(--text-secondary)",
 };
 
 export const ROLE_COLORS = { received: "#60a5fa", sent: "#34d399", relayed: "#a78bfa" };
@@ -207,6 +215,8 @@ export function MeshGraph({
           if (!node.name || node.x == null || node.y == null) return;
           const fontSize = Math.max(10, 12 / globalScale);
           ctx.font = `${fontSize}px monospace`;
+          // Canvas cannot resolve CSS variables, so this stays a literal. It passes on
+          // the graph's #020617 background and is covered by textContrast.test.ts.
           ctx.fillStyle = "#94a3b8";
           ctx.textAlign = "center";
           ctx.fillText(node.name, node.x, node.y + 10);

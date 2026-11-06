@@ -3,6 +3,7 @@ import MapGL, { Source, Layer, NavigationControl } from "react-map-gl/maplibre";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import * as analyticsApi from "../../api/analytics.js";
+import { withoutHiddenNodes } from "../../lib/lastSeenFilter.js";
 
 import { cx, styles } from "./analyticsStyles.js";
 import {
@@ -17,8 +18,8 @@ import {
 import localStyles from "./positions.module.css";
 import { useAnalyticsQuery } from "./useAnalyticsQuery.js";
 
+import type { AnalyticsTabProps } from "./components.js";
 import type { PositionRecord } from "../../api/analytics.js";
-import type { MqttNode, NodeInfo } from "@foreman/shared";
 import type { CSSProperties } from "react";
 
 // Tab 8 — Position History & Trail Map
@@ -26,10 +27,12 @@ import type { CSSProperties } from "react";
 
 const TRAIL_VIEW = { longitude: -98.5, latitude: 39.5, zoom: 3 };
 
-export function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNode[] }) {
+export function PositionsTab({ nodes, mqttNodes, hiddenNodeIds }: AnalyticsTabProps) {
   const [since, setSince] = useState("24h");
-  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
-  const { data } = useAnalyticsQuery<PositionRecord[]>(
+  const [pickedNodeId, setPickedNodeId] = useState<number | null>(null);
+  const selectedNodeId =
+    pickedNodeId != null && hiddenNodeIds.has(pickedNodeId) ? null : pickedNodeId;
+  const { data: allData } = useAnalyticsQuery<PositionRecord[]>(
     (signal) =>
       analyticsApi.positionHistory(
         { since, nodeId: selectedNodeId ?? undefined, limit: 5000 },
@@ -37,6 +40,10 @@ export function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNode
       ),
     [since, selectedNodeId],
     [],
+  );
+  const data = useMemo(
+    () => allData && withoutHiddenNodes(allData, hiddenNodeIds),
+    [allData, hiddenNodeIds],
   );
 
   // Unique nodes present in data
@@ -113,7 +120,7 @@ export function PositionsTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNode
         />
         <select
           value={selectedNodeId ?? ""}
-          onChange={(e) => setSelectedNodeId(e.target.value ? Number(e.target.value) : null)}
+          onChange={(e) => setPickedNodeId(e.target.value ? Number(e.target.value) : null)}
           className={localStyles.select}
         >
           <option value="">All nodes</option>

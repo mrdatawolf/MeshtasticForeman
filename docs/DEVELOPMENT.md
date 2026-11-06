@@ -104,6 +104,16 @@ Not yet formalized beyond what the codebase already does. Stage 1 of
 where these conventions are meant to become explicit and enforced. Until then,
 match existing style in the file being changed.
 
+### Text colours
+
+Text colours in `packages/web` come from the tokens in
+`packages/web/src/styles/tokens.css`. Use a token instead of a hex value for
+neutral text. Choose `--text-on-light*` inside the light map popups and
+`--text-on-accent` on saturated fills. Status colours (green, red, amber) stay
+as literals. `packages/web/src/styles/textContrast.test.ts` runs in `pnpm test`
+and fails on a text colour below 4.5:1, or on a new `opacity` below 1 that has
+not been reviewed.
+
 ## Testing philosophy
 
 No enforced test suite yet. `docs/ROADMAP.md` Stage 2 defines the intended
