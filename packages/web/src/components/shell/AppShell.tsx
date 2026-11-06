@@ -192,7 +192,12 @@ export function AppShell({
           totalCount={totalNodeCount}
           onChange={handleLastSeenChange}
         />
-        <GpsMenu devices={devices} pending={gpsPending} setPending={setGpsPending} />
+        <GpsMenu
+          devices={devices}
+          pending={gpsPending}
+          setPending={setGpsPending}
+          onOpenDebug={() => navigate("debug")}
+        />
         <MqttMenu
           enabled={mqttEnabled}
           scope={mqttScope}

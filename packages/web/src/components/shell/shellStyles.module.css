@@ -124,6 +124,16 @@
   }
 }
 
+.debugLink {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
 .menuSection {
   display: flex;
   flex-wrap: wrap;

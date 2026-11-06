@@ -72,6 +72,7 @@ export interface DeviceInfo {
   name: string;
   port: string;
   status: ConnectionStatus;
+  notResponding: boolean; // true while the Radio responding check (CONTRACT-013) fails; `status` is unaffected
   connectedAt: string | null;
   lastSeenAt: string | null;
   hardwareModel: string | null;

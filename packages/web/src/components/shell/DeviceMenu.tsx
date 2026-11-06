@@ -80,7 +80,8 @@ async function apiConnect(port: string, name: string) {
   });
 }
 
-function statusClass(status: DeviceInfo["status"]) {
+function statusClass({ status, notResponding }: DeviceInfo) {
+  if (notResponding) return deviceStyles.statusDisconnected;
   return status === "connected"
     ? deviceStyles.statusConnected
     : status === "connecting"
@@ -116,9 +117,13 @@ export function DeviceMenu(props: Props) {
               props.devices.map((device) => (
                 <div key={device.id} className={deviceStyles.deviceEntry}>
                   <div className={deviceStyles.deviceRow}>
-                    <span className={statusClass(device.status)}>●</span>
+                    <span className={statusClass(device)}>●</span>
                     <span className={deviceStyles.deviceId}>{device.port}</span>
-                    <span className={deviceStyles.deviceStatusLabel}>{device.status}</span>
+                    {device.notResponding ? (
+                      <span className={deviceStyles.deviceNotResponding}>not responding</span>
+                    ) : (
+                      <span className={deviceStyles.deviceStatusLabel}>{device.status}</span>
+                    )}
                     {device.firmwareVersion && (
                       <span className={deviceStyles.deviceMeta}>fw {device.firmwareVersion}</span>
                     )}
@@ -129,6 +134,14 @@ export function DeviceMenu(props: Props) {
                     )}
                     {device.batteryLevel != null && <BatteryBar level={device.batteryLevel} />}
                   </div>
+                  {device.notResponding && (
+                    <span className={deviceStyles.deviceMeta}>
+                      The radio is not answering requests.{" "}
+                      <button className={styles.debugLink} onClick={() => navigate("debug")}>
+                        Open Debug page
+                      </button>
+                    </span>
+                  )}
                   <div className={deviceStyles.deviceActions}>
                     {device.status === "connected" ? (
                       <button

@@ -11,12 +11,12 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { runMigrations } from "../db/migrations.js";
+import { radioState } from "../device/radio-state.js";
 import {
   buildDeviceChecks,
   collectDebugChecks,
   createPortInspector,
   mqttCheck,
-  radioState,
   readCoreVersion,
   savedDevicesCheck,
 } from "../debug/checks.js";

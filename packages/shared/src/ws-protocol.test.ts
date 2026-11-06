@@ -154,6 +154,7 @@ const device = {
   name: "Test Radio",
   port: "/dev/ttyUSB0",
   status: "connected" as const,
+  notResponding: false,
   connectedAt: "2026-08-24T12:00:00.000Z",
   lastSeenAt: "2026-08-24T12:01:00.000Z",
   hardwareModel: "TBEAM",

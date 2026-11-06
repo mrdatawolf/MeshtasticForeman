@@ -108,6 +108,7 @@ export async function registerWsRoute(
             name: d.name,
             port: d.port,
             status: live ? ("connected" as const) : ("disconnected" as const),
+            notResponding: deviceManager.isNotResponding(d.id),
             connectedAt: live?.connectedAt ?? null,
             lastSeenAt: live?.connectedAt ?? d.last_seen ?? null,
             hardwareModel: d.hw_model ?? null,
