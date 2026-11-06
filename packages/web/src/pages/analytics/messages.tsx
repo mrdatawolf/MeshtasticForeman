@@ -16,6 +16,7 @@ import {
 } from "recharts";
 
 import * as analyticsApi from "../../api/analytics.js";
+import { withoutHiddenNodes } from "../../lib/lastSeenFilter.js";
 
 import { cx, styles } from "./analyticsStyles.js";
 import {
@@ -36,6 +37,7 @@ import {
 import localStyles from "./messages.module.css";
 import { useAnalyticsQuery } from "./useAnalyticsQuery.js";
 
+import type { AnalyticsTabProps } from "./components.js";
 import type {
   BusiestNode,
   ChannelBucket,
@@ -44,12 +46,12 @@ import type {
   MessageVolumePoint,
   NodeActivityPoint,
 } from "../../api/analytics.js";
-import type { DeviceInfo, MqttNode, NodeInfo } from "@foreman/shared";
+import type { DeviceInfo } from "@foreman/shared";
 
 // Tab 2 — Messages
 // ---------------------------------------------------------------------------
 
-export function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNode[] }) {
+export function MessagesTab({ nodes, mqttNodes, hiddenNodeIds }: AnalyticsTabProps) {
   const [since, setSince] = useState("7d");
   const bucket = since === "30d" ? "day" : "hour";
 
@@ -90,11 +92,11 @@ export function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes
   // Busiest nodes with resolved names
   const busiestRows = useMemo(
     () =>
-      (busiest ?? []).map((b) => ({
+      withoutHiddenNodes(busiest ?? [], hiddenNodeIds).map((b) => ({
         ...b,
         name: nodeName(b.nodeId, nodes, mqttNodes),
       })),
-    [busiest, nodes, mqttNodes],
+    [busiest, nodes, mqttNodes, hiddenNodeIds],
   );
 
   // Channel utilization with display names
@@ -301,12 +303,9 @@ export function MessagesTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes
 export function ActivityTimelineTab({
   nodes,
   mqttNodes,
+  hiddenNodeIds,
   devices,
-}: {
-  nodes: NodeInfo[];
-  mqttNodes: MqttNode[];
-  devices: DeviceInfo[];
-}) {
+}: AnalyticsTabProps & { devices: DeviceInfo[] }) {
   const [since, setSince] = useState("7d");
   const [showLocal, setShowLocal] = useState(false);
 
@@ -316,10 +315,14 @@ export function ActivityTimelineTab({
   );
 
   const bucket = since === "30d" || since === "all" ? "day" : "hour";
-  const { data } = useAnalyticsQuery<NodeActivityPoint[]>(
+  const { data: allData } = useAnalyticsQuery<NodeActivityPoint[]>(
     (signal) => analyticsApi.nodeActivity({ since, bucket }, signal),
     [since, bucket],
     [],
+  );
+  const data = useMemo(
+    () => allData && withoutHiddenNodes(allData, hiddenNodeIds),
+    [allData, hiddenNodeIds],
   );
 
   // Top 15 most active nodes (excluding local device unless toggled)

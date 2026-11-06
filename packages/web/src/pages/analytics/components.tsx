@@ -13,6 +13,14 @@ const ForceGraph2D = lazy(() => import("react-force-graph-2d"));
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Props for tabs that show nodes. The lists are unfiltered, for name lookups. */
+export interface AnalyticsTabProps {
+  nodes: NodeInfo[];
+  mqttNodes: MqttNode[];
+  /** Nodes the header's last-seen filter hides. Remove them from what the tab shows. */
+  hiddenNodeIds: ReadonlySet<number>;
+}
+
 export function nodeName(id: number, nodes: NodeInfo[], mqttNodes: MqttNode[]): string {
   const n = (nodes as Array<NodeInfo | MqttNode>).concat(mqttNodes).find((x) => x.nodeId === id);
   return resolveNodeName(id, n ?? {});

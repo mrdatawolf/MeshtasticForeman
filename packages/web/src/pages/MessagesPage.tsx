@@ -15,8 +15,11 @@ import type { DeviceInfo, NodeInfo, MqttNode, Message } from "@foreman/shared";
 
 interface Props {
   devices: DeviceInfo[];
+  /** Unfiltered, so names resolve for nodes the last-seen filter hides. */
   nodes: NodeInfo[];
   mqttNodes: MqttNode[];
+  /** Mesh nodes offered when starting a conversation. */
+  pickerNodes: NodeInfo[];
   initialNodeId?: number | null;
   onInitialNodeConsumed?: () => void;
 }
@@ -272,6 +275,7 @@ export function MessagesPage({
   devices,
   nodes,
   mqttNodes,
+  pickerNodes,
   initialNodeId,
   onInitialNodeConsumed,
 }: Props) {
@@ -335,7 +339,7 @@ export function MessagesPage({
   );
 
   // Mesh nodes sorted by most-recently-heard for the picker
-  const meshNodesSorted = [...nodes].sort((a, b) => {
+  const meshNodesSorted = [...pickerNodes].sort((a, b) => {
     if (!a.lastHeard) return 1;
     if (!b.lastHeard) return -1;
     return new Date(b.lastHeard).getTime() - new Date(a.lastHeard).getTime();
@@ -361,7 +365,11 @@ export function MessagesPage({
                 <div style={styles.picker}>
                   <div style={styles.pickerLabel}>Local mesh nodes</div>
                   {meshNodesSorted.length === 0 ? (
-                    <div style={styles.pickerEmpty}>No mesh nodes seen yet.</div>
+                    <div style={styles.pickerEmpty}>
+                      {nodes.length > 0
+                        ? "No mesh nodes in this time range."
+                        : "No mesh nodes seen yet."}
+                    </div>
                   ) : (
                     meshNodesSorted.map((n) => (
                       <button

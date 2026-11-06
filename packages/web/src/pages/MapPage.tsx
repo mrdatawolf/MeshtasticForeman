@@ -128,8 +128,12 @@ function buildSegments(traceroute: StoredTraceroute, posMap: Map<number, Coord>)
 type SelectedNode = { source: "mesh"; node: NodeInfo } | { source: "mqtt"; node: MqttNode };
 
 interface Props {
+  /** Nodes to draw, after the last-seen filter. */
   nodes: NodeInfo[];
   mqttNodes: MqttNode[];
+  /** Unfiltered, so traceroutes can still place nodes the filter hides. */
+  lookupNodes: NodeInfo[];
+  lookupMqttNodes: MqttNode[];
   showMesh: boolean;
   setShowMesh: (fn: (v: boolean) => boolean) => void;
   showMqtt: boolean;
@@ -147,6 +151,8 @@ interface Props {
 export function MapPage({
   nodes,
   mqttNodes,
+  lookupNodes,
+  lookupMqttNodes,
   showMesh,
   showMqtt,
   deviceId,
@@ -184,21 +190,28 @@ export function MapPage({
   // Node focused from within the map (popup coverage button). Takes priority over
   // the prop-based focusedNodeId which comes from the Nodes tab.
   const [localFocusedNodeId, setLocalFocusedNodeId] = useState<number | null>(null);
-  const effectiveFocusedNodeId = localFocusedNodeId ?? focusedNodeId ?? null;
+  const requestedFocusNodeId = localFocusedNodeId ?? focusedNodeId ?? null;
+  // A node the last-seen filter hides stops being focused, and focus returns if it reappears.
+  const effectiveFocusedNodeId =
+    requestedFocusNodeId != null &&
+    [...nodes, ...mqttNodes].some((n) => n.nodeId === requestedFocusNodeId)
+      ? requestedFocusNodeId
+      : null;
 
-  // All unique modem presets present in current nodes — used to render preset filter buttons.
+  // All unique modem presets present in known nodes — used to render preset filter buttons.
+  // Unfiltered, so a selected preset's button cannot vanish and leave it impossible to clear.
   const availablePresets = useMemo(() => {
     const seen = new Set<number>();
     const cfg = deviceConfigs?.get(deviceId ?? "");
     const meshPreset = (cfg?.radioConfig as { lora?: { modemPreset?: number } } | undefined)?.lora
       ?.modemPreset;
     if (meshPreset != null) seen.add(meshPreset);
-    for (const n of mqttNodes) {
+    for (const n of lookupMqttNodes) {
       const p = channelNameToPreset(n.channelName);
       if (p != null) seen.add(p);
     }
     return [...seen].sort((a, b) => a - b);
-  }, [nodes, mqttNodes, deviceId, deviceConfigs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lookupMqttNodes, deviceId, deviceConfigs]);  
 
   // Tracks nodes whose terrain is currently being force-refreshed via the popup button.
   const [refreshingTerrainNodes, setRefreshingTerrainNodes] = useState<Set<number>>(new Set());
@@ -254,6 +267,15 @@ export function MapPage({
     }
   }, [showMqtt]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Clear popup when its node leaves the list, for example under the last-seen filter
+  useEffect(() => {
+    if (!selected) return;
+    const list: Array<{ nodeId: number }> = selected.source === "mesh" ? nodes : mqttNodes;
+    if (list.some((n) => n.nodeId === selected.node.nodeId)) return;
+    setSelected(null);
+    setStackedNodes([]);
+  }, [selected, nodes, mqttNodes]);
+
   // Fetch stored traceroutes from the API
   const fetchTraceroutes = useCallback(async () => {
     try {
@@ -302,18 +324,18 @@ export function MapPage({
   // Build nodeId → [lon, lat] lookup from all known nodes
   const posMap = useMemo<Map<number, Coord>>(() => {
     const m = new Map<number, Coord>();
-    for (const n of nodes) {
+    for (const n of lookupNodes) {
       if (n.latitude != null && n.longitude != null) {
         m.set(n.nodeId, [n.longitude, n.latitude]);
       }
     }
-    for (const n of mqttNodes) {
+    for (const n of lookupMqttNodes) {
       if (n.latitude != null && n.longitude != null) {
         m.set(n.nodeId, [n.longitude, n.latitude]);
       }
     }
     return m;
-  }, [nodes, mqttNodes]);
+  }, [lookupNodes, lookupMqttNodes]);
 
   // Build GeoJSON for traceroute lines — two layers: solid and dashed
   const { solidGeoJson, dashedGeoJson } = useMemo(() => {
@@ -672,7 +694,11 @@ export function MapPage({
     viewshedStatus,
   ]);
 
-  const firstNode = allMappable[0];
+  // Falls back to unfiltered nodes: MapCanvas remounts when hasGpsNodes changes, which
+  // would reset the view whenever the last-seen filter hides every marker.
+  const firstNode =
+    allMappable[0] ??
+    [...lookupNodes, ...lookupMqttNodes].find((n) => n.latitude != null && n.longitude != null);
   const initialView = {
     longitude: firstNode?.longitude ?? -98.5,
     latitude: firstNode?.latitude ?? 39.5,
@@ -742,7 +768,7 @@ export function MapPage({
     <div className={styles.wrap}>
       <MapCanvas
         mapRef={mapRef}
-        hasGpsNodes={allMappable.length > 0}
+        hasGpsNodes={firstNode != null}
         initialView={initialView}
         mapStyle={mapStyle}
         planningMode={proposalPlanningMode}

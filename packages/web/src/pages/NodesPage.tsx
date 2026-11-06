@@ -2,11 +2,16 @@ import { formatNodeId, resolveNodeName } from "@foreman/shared";
 import { useState, useEffect, Fragment } from "react";
 
 import logo from "../assets/logo.png";
+import { buildMergedNodes, lastHeardMs, resolvedLastHeard } from "../lib/mergedNodes.js";
 import { formatRelativeTime } from "../lib/relativeTime.js";
 
 import { NodeDetailPanel } from "./NodeDetailPanel.js";
 
+import type { MergedNode } from "../lib/mergedNodes.js";
 import type { DeviceInfo, NodeInfo, MqttNode } from "@foreman/shared";
+
+export { buildMergedNodes, resolvedLastHeard };
+export type { MergedNode };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -204,50 +209,6 @@ function hwModel(model: number | null, protoMap: Map<number, string>): string {
 }
 
 // ---------------------------------------------------------------------------
-// Data merging
-// ---------------------------------------------------------------------------
-
-export interface MergedNode {
-  nodeId: number;
-  mesh: NodeInfo | null;
-  mqtt: MqttNode | null;
-}
-
-export function buildMergedNodes(nodes: NodeInfo[], mqttNodes: MqttNode[]): MergedNode[] {
-  const map = new Map<number, MergedNode>();
-  for (const n of nodes) map.set(n.nodeId, { nodeId: n.nodeId, mesh: n, mqtt: null });
-  for (const n of mqttNodes) {
-    const existing = map.get(n.nodeId);
-    if (existing) {
-      existing.mqtt = n;
-    } else {
-      map.set(n.nodeId, { nodeId: n.nodeId, mesh: null, mqtt: n });
-    }
-  }
-  return [...map.values()];
-}
-
-function lastHeardMs(m: MergedNode): number {
-  const meshMs = m.mesh?.lastHeard ? new Date(m.mesh.lastHeard).getTime() : 0;
-  const mqttMs = m.mqtt?.lastHeard ? new Date(m.mqtt.lastHeard).getTime() : 0;
-  return Math.max(meshMs, mqttMs);
-}
-
-/**
- * The single "true last heard" timestamp for a merged node: whichever of its
- * mesh/MQTT sources is more recent, as an ISO string. Used for both the
- * displayed "Last Heard" column and the `lastHeard` sort key so the two never
- * disagree (see TASK-045). This is distinct from `mqtt.lastHeard`, which is
- * still shown on its own, unchanged, in the MQTT sub-row.
- */
-export function resolvedLastHeard(m: MergedNode): string | null {
-  const meshMs = m.mesh?.lastHeard ? new Date(m.mesh.lastHeard).getTime() : 0;
-  const mqttMs = m.mqtt?.lastHeard ? new Date(m.mqtt.lastHeard).getTime() : 0;
-  if (meshMs === 0 && mqttMs === 0) return null;
-  return mqttMs > meshMs ? m.mqtt!.lastHeard : m.mesh!.lastHeard;
-}
-
-// ---------------------------------------------------------------------------
 // Filter
 // ---------------------------------------------------------------------------
 
@@ -346,6 +307,8 @@ interface Props {
   devices: DeviceInfo[];
   nodes: NodeInfo[];
   mqttNodes: MqttNode[];
+  /** Nodes the header's last-seen filter removed from `nodes` and `mqttNodes`. */
+  hiddenNodeCount?: number;
   onMessage?: (nodeId: number) => void;
   onCoverageMap?: (nodeId: number) => void;
 }
@@ -354,7 +317,14 @@ interface Props {
 // Component
 // ---------------------------------------------------------------------------
 
-export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap }: Props) {
+export function NodesPage({
+  devices,
+  nodes,
+  mqttNodes,
+  hiddenNodeCount = 0,
+  onMessage,
+  onCoverageMap,
+}: Props) {
   const [filter, setFilter] = useState("");
   const [sortCol, setSortCol] = useState<SortCol>("distance");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -482,7 +452,11 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
         {isEmpty ? (
           <div style={styles.emptyState}>
             <img src={logo} alt="" style={styles.emptyLogo} />
-            <p style={styles.muted}>No nodes seen yet.</p>
+            <p style={styles.muted}>
+              {hiddenNodeCount > 0
+                ? `No nodes in this time range. ${hiddenNodeCount} hidden by the Last seen filter.`
+                : "No nodes seen yet."}
+            </p>
           </div>
         ) : noResults ? (
           <div style={styles.emptyState}>

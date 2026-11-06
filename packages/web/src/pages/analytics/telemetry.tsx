@@ -11,6 +11,7 @@ import {
 } from "recharts";
 
 import * as analyticsApi from "../../api/analytics.js";
+import { withoutHiddenNodes } from "../../lib/lastSeenFilter.js";
 
 import { styles } from "./analyticsStyles.js";
 import {
@@ -29,18 +30,22 @@ import {
 import localStyles from "./telemetry.module.css";
 import { useAnalyticsQuery } from "./useAnalyticsQuery.js";
 
+import type { AnalyticsTabProps } from "./components.js";
 import type { TelemetryPoint } from "../../api/analytics.js";
-import type { MqttNode, NodeInfo } from "@foreman/shared";
 
 // Tab 4 — Telemetry
 // ---------------------------------------------------------------------------
 
-export function TelemetryTab({ nodes, mqttNodes }: { nodes: NodeInfo[]; mqttNodes: MqttNode[] }) {
+export function TelemetryTab({ nodes, mqttNodes, hiddenNodeIds }: AnalyticsTabProps) {
   const [since, setSince] = useState("24h");
-  const { data } = useAnalyticsQuery<TelemetryPoint[]>(
+  const { data: allData } = useAnalyticsQuery<TelemetryPoint[]>(
     (signal) => analyticsApi.telemetryHistory({ since }, signal),
     [since],
     [],
+  );
+  const data = useMemo(
+    () => allData && withoutHiddenNodes(allData, hiddenNodeIds),
+    [allData, hiddenNodeIds],
   );
 
   // Unique node IDs present in the dataset
