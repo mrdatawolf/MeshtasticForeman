@@ -159,6 +159,7 @@ describe("DeviceManager debug behavior", () => {
       reconnectTargets: Map<string, unknown>;
       connectAttempts: Set<unknown>;
       lastPacketMs: Map<string, number>;
+      respondingTimers: Map<string, NodeJS.Timeout>;
       _scheduleReconnect(deviceId: string, port: string, name: string): void;
     };
   const connect = () => manager.connect(PORT, NAME, DEVICE_ID);
@@ -656,6 +657,255 @@ describe("DeviceManager debug behavior", () => {
       expect(await probing).toBeInstanceOf(ProbeInterruptedError);
       await shuttingDown;
       expect(probeRunner).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("not responding status", () => {
+    const WINDOW_MS = 25_000;
+    const statusPayloads = (deviceId = DEVICE_ID) =>
+      events.flatMap((event) =>
+        event.type === "device:status" && event.payload.id === deviceId ? [event.payload] : [],
+      );
+    const lastStatus = (deviceId = DEVICE_ID) => statusPayloads(deviceId).at(-1);
+    const frame = (device = lastDevice()) =>
+      device.events.onFromRadio.dispatch({ payloadVariant: { case: "packet" } });
+    /** Connects a radio that goes silent, then lets its response window run out. */
+    const connectSilent = async () => {
+      await connect();
+      await vi.advanceTimersByTimeAsync(WINDOW_MS);
+    };
+
+    it("reports nothing until the window ends, then one event with no incoming frame", async () => {
+      await connect();
+      events.length = 0;
+
+      await vi.advanceTimersByTimeAsync(WINDOW_MS - 1);
+      expect(statusPayloads()).toEqual([]);
+      expect(manager.isNotResponding(DEVICE_ID)).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(statusPayloads()).toHaveLength(1);
+      expect(lastStatus()).toMatchObject({ status: "connected", notResponding: true });
+      expect(manager.isNotResponding(DEVICE_ID)).toBe(true);
+    });
+
+    it("keeps connectedAt on the event the timer sends", async () => {
+      const device = await connect();
+
+      await vi.advanceTimersByTimeAsync(WINDOW_MS);
+
+      expect(lastStatus()?.connectedAt).toBe(device.connectedAt);
+    });
+
+    it("does not call a radio connected while connect() is still waiting on it", async () => {
+      nextConfigure.promise = new Promise(() => {});
+      const connecting = cancellableConnect();
+      await vi.waitFor(() => expect(lastDevice()?.configure).toHaveBeenCalled());
+
+      await vi.advanceTimersByTimeAsync(WINDOW_MS);
+
+      expect(lastStatus()).toMatchObject({ status: "connecting", notResponding: true });
+      expect(statuses()).not.toContain("connected");
+
+      await manager.disconnect(DEVICE_ID);
+      await connecting;
+    });
+
+    it("carries the state on the connected event of a radio silent since connect", async () => {
+      const configured = deferred<number>();
+      nextConfigure.promise = configured.promise;
+      const connecting = connect();
+      await vi.waitFor(() => expect(lastDevice()?.configure).toHaveBeenCalled());
+      await vi.advanceTimersByTimeAsync(WINDOW_MS);
+
+      configured.resolve(0);
+      await connecting;
+
+      expect(lastStatus()).toMatchObject({ status: "connected", notResponding: true });
+    });
+
+    it("clears on the next frame, with one event and no reload", async () => {
+      await connectSilent();
+      events.length = 0;
+
+      frame();
+
+      expect(statusPayloads()).toHaveLength(1);
+      expect(lastStatus()).toMatchObject({ status: "connected", notResponding: false });
+      expect(manager.isNotResponding(DEVICE_ID)).toBe(false);
+    });
+
+    it("sends no status event per frame", async () => {
+      await connectSilent();
+      frame();
+      events.length = 0;
+
+      for (let i = 0; i < 100; i += 1) frame();
+
+      expect(statusPayloads()).toEqual([]);
+    });
+
+    it("sends no status event when a frame arrives inside the window", async () => {
+      await connect();
+      events.length = 0;
+
+      await vi.advanceTimersByTimeAsync(WINDOW_MS - 1);
+      frame();
+      await vi.advanceTimersByTimeAsync(WINDOW_MS);
+
+      expect(statusPayloads()).toEqual([]);
+      expect(internals().respondingTimers.size).toBe(0);
+    });
+
+    it("never reports a healthy radio with no traffic", async () => {
+      await connect();
+      frame();
+      lastDevice().configure.mockImplementation(() => {
+        frame();
+        return Promise.resolve(0);
+      });
+
+      await vi.advanceTimersByTimeAsync(600_000);
+
+      expect(lastDevice().configure.mock.calls.length).toBeGreaterThan(2);
+      expect(statusPayloads().some((status) => status.notResponding)).toBe(false);
+      expect(internals().respondingTimers.size).toBe(0);
+    });
+
+    it("the watchdog's repeat requests do not restart the window or clear the state", async () => {
+      await connectSilent();
+      events.length = 0;
+
+      await vi.advanceTimersByTimeAsync(300_000);
+
+      expect(lastDevice().configure.mock.calls.length).toBeGreaterThan(2);
+      expect(manager.isNotResponding(DEVICE_ID)).toBe(true);
+      expect(statusPayloads()).toEqual([]);
+    });
+
+    it("waits again when a timer fires before the window has ended", async () => {
+      await connect();
+      vi.setSystemTime(Date.now() - 5_000);
+      events.length = 0;
+
+      await vi.advanceTimersByTimeAsync(WINDOW_MS);
+      expect(statusPayloads()).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(lastStatus()?.notResponding).toBe(true);
+    });
+
+    it("carries the state on status events from other paths", async () => {
+      await connectSilent();
+      events.length = 0;
+
+      manager.refreshGpsPosition(DEVICE_ID);
+      expect(statusPayloads()).toHaveLength(1);
+
+      lastDevice().events.onDeviceMetadataPacket.dispatch({ data: { firmwareVersion: "2.7.15" } });
+      await vi.waitFor(() => expect(statusPayloads()).toHaveLength(2));
+
+      for (const status of statusPayloads()) expect(status.notResponding).toBe(true);
+    });
+
+    it("carries the state on the event the telemetry path builds by itself", async () => {
+      await connectSilent();
+      lastDevice().events.onMyNodeInfo.dispatch({ myNodeNum: 123 });
+      events.length = 0;
+
+      // This handler only reads the state. A real telemetry packet would be a frame too.
+      lastDevice().events.onTelemetryPacket.dispatch({
+        from: 123,
+        data: { variant: { case: "deviceMetrics", value: { batteryLevel: 75 } } },
+      });
+
+      await vi.waitFor(() => expect(statusPayloads()).toHaveLength(1));
+      expect(lastStatus()).toMatchObject({ batteryLevel: 75, notResponding: true });
+    });
+
+    it("a disconnect stops the timer", async () => {
+      await connect();
+      expect(internals().respondingTimers.size).toBe(1);
+
+      await manager.disconnect(DEVICE_ID);
+
+      expect(internals().respondingTimers.size).toBe(0);
+      events.length = 0;
+      await vi.advanceTimersByTimeAsync(WINDOW_MS);
+      expect(statusPayloads()).toEqual([]);
+    });
+
+    it("clears when a not-responding radio is disconnected", async () => {
+      await connectSilent();
+
+      await manager.disconnect(DEVICE_ID);
+
+      expect(lastStatus()).toMatchObject({ status: "disconnected", notResponding: false });
+    });
+
+    it("a dropped connection stops the timer and clears the state", async () => {
+      await connect();
+      dropConnection();
+      await vi.waitFor(() => expect(statuses()).toContain("disconnected"));
+
+      expect(internals().respondingTimers.size).toBe(0);
+      expect(lastStatus()).toMatchObject({ status: "disconnected", notResponding: false });
+    });
+
+    it("a new connection starts its own window", async () => {
+      await connectSilent();
+      await manager.disconnect(DEVICE_ID);
+      events.length = 0;
+
+      await connect();
+
+      expect(statusPayloads().map((status) => status.notResponding)).toEqual([false, false]);
+      await vi.advanceTimersByTimeAsync(WINDOW_MS);
+      expect(lastStatus()?.notResponding).toBe(true);
+    });
+
+    it("a late frame from an old connection does not clear the new one", async () => {
+      await connect();
+      const old = lastDevice();
+      await manager.disconnect(DEVICE_ID);
+      await connect();
+      await vi.advanceTimersByTimeAsync(WINDOW_MS);
+
+      frame(old);
+
+      expect(manager.isNotResponding(DEVICE_ID)).toBe(true);
+    });
+
+    it("shutdown leaves nothing running", async () => {
+      await connect();
+      expect(internals().respondingTimers.size).toBe(1);
+
+      await manager.shutdown();
+
+      expect(internals().respondingTimers.size).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("tracks each device by itself", async () => {
+      const otherId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+      await db.query("INSERT INTO devices(id, name, port) VALUES ($1, $2, $3)", [
+        otherId,
+        "Other",
+        "/dev/ttyUSB1",
+      ]);
+      await connect();
+      const first = lastDevice();
+      await manager.connect("/dev/ttyUSB1", "Other", otherId);
+      const second = lastDevice();
+
+      frame(second);
+      await vi.advanceTimersByTimeAsync(WINDOW_MS);
+
+      expect(lastStatus(DEVICE_ID)?.notResponding).toBe(true);
+      expect(lastStatus(otherId)?.notResponding).toBe(false);
+
+      frame(first);
+      expect(lastStatus(DEVICE_ID)?.notResponding).toBe(false);
     });
   });
 
