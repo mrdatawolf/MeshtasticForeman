@@ -136,6 +136,20 @@ New tests are in `device-manager-debug.test.ts` ("not responding status"),
 | Both messages link to Debug | Component tests and browser check | Ticked |
 | Each device shows its own state | Daemon, component and browser tests with two devices | Ticked |
 
+### Real radio check by the main session
+
+Run on 2026-11-06 from this branch against the radio on `/dev/ttyACM0` (firmware
+2.7.26.54e0d8d), with a temporary database, MQTT and the bot off, and no config writes
+or messages sent.
+
+- Radio responding stayed `pass` at every 45 second poll for 5.5 minutes. Frames kept
+  arriving, about one every 30 to 60 seconds.
+- In a second run, the WebSocket device list showed `connected` with
+  `notResponding=false`.
+- This is good evidence for criterion 3 but does not finish it. The radio was not
+  fully quiet, so step 1 below still needs a quiet period. Steps 2 to 6 were not run,
+  because a software test cannot make a real radio hang.
+
 ### Manual run for the human
 
 Not done. It needs a real radio. Run it from this branch, not the live install.
