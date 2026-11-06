@@ -1,4 +1,4 @@
-# TASK-049: Add a global last-seen filter to the header
+# TASK-050: Add a global last-seen filter to the header
 
 Owner role: interface-designer
 Assigned agent: Codex
@@ -6,15 +6,15 @@ Proposed by: Claude, at Patrick Moon's request
 Proposed date: 2026-11-06
 Approved by: Patrick
 Approved date: 2026-11-06
-Related contracts: None. A contract is the human's call, see Open decisions.
+Related contracts: None. The human decided a contract is not needed.
 Related ADRs: None
-Dependencies: None. Should follow TASK-046 so the control uses its text tokens.
+Dependencies: None. Should follow TASK-048 so the control uses its text tokens.
 
 ## Desired outcome
 
 A single control in the header limits the app to nodes heard within the last week,
-month, quarter, or year, so long-gone nodes stop cluttering every page. The default
-is the last week.
+month, quarter, or year, or shows all nodes, so long-gone nodes stop cluttering
+every page. The default is the last week.
 
 ## Context
 
@@ -34,7 +34,8 @@ so it gets the control automatically.
 ### Included
 
 - A header control in `AppShell.tsx` with the options Week (7 days, default),
-  Month (30 days), Quarter (90 days), and Year (365 days).
+  Month (30 days), Quarter (90 days), Year (365 days), and All.
+- Nodes with no last-heard time are hidden, except under All.
 - The choice remembered per browser in `localStorage`, falling back to Week when
   storage is unavailable or holds an invalid value.
 - Filtering on Nodes and Map.
@@ -66,6 +67,9 @@ so it gets the control automatically.
 - [ ] The choice survives a reload, and the app works when storage is unavailable.
 - [ ] A node's age uses the most recent of its mesh and MQTT last-heard times, so
       a node heard on either stays visible as one complete row.
+- [ ] All shows every node, including nodes older than a year and nodes with no
+      last-heard time.
+- [ ] Nodes with no last-heard time are hidden under Week, Month, Quarter, and Year.
 - [ ] The connected radio's own node is always shown.
 - [ ] A hidden node that is heard again reappears without a reload.
 - [ ] Message threads and names still resolve for nodes the filter hides. An
@@ -92,12 +96,16 @@ page with a mix of recent and old nodes.
 
 1. Should there be an "All" option? Without one, a node older than a year cannot be
    seen anywhere in these lists. Proposed: yes.
+   -  Yes
 2. Should nodes with no last-heard time be shown? They have no age. Proposed: hide
    them, except under "All" if it is added.
+   - hide them except under all
 3. Should Analytics' range buttons and Map's `Age` control stay separate? They
    filter events, not nodes. Proposed: keep them separate, as scoped above.
+   - seperate as scoped above.
 4. Is a separate contract required? Proposed: no, because this is frontend-only
    and these acceptance criteria cover it.
+   - no
 
 ## Blocker
 

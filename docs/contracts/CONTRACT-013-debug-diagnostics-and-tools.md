@@ -1,9 +1,9 @@
 # CONTRACT-013: Debug Diagnostics and Tools
 
-Status: Proposed
-Approved by:
-Approved date:
-Related tasks: TASK-047, TASK-048
+Status: Accepted
+Approved by: Patrick
+Approved date: 2026-11-06
+Related tasks: TASK-047, TASK-049
 Related ADRs: ADR-004
 Depends on: CONTRACT-007 for validation and error responses
 
@@ -27,7 +27,7 @@ the user did not ask for.
 ### Excluded
 
 - The page layout, which belongs to TASK-047.
-- The app-wide "not responding" status, which belongs to TASK-048.
+- The app-wide "not responding" status, which belongs to TASK-049.
 - A reboot tool, config writes, factory reset, and running outside programs.
 - API authentication.
 
