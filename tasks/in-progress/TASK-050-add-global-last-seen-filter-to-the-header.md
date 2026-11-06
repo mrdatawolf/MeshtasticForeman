@@ -1,7 +1,7 @@
 # TASK-050: Add a global last-seen filter to the header
 
 Owner role: interface-designer
-Assigned agent: Codex
+Assigned agent: interface-designer
 Proposed by: Claude, at Patrick Moon's request
 Proposed date: 2026-11-06
 Approved by: Patrick
