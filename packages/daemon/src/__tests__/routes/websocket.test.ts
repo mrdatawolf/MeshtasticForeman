@@ -49,7 +49,7 @@ describe("WebSocket snapshot", () => {
     await app.ready();
 
     // The snapshot can arrive before the socket reports open, so listen from the start.
-    let socket: Awaited<ReturnType<FastifyInstance["injectWS"]>> | undefined;
+    let closeSocket = () => {};
     const devices = await new Promise<DeviceInfo[]>((resolve) => {
       void app
         .injectWS(
@@ -57,7 +57,7 @@ describe("WebSocket snapshot", () => {
           {},
           {
             onInit(ws) {
-              socket = ws;
+              closeSocket = () => ws.terminate();
               ws.on("message", (data: Buffer) => {
                 const event = JSON.parse(data.toString()) as ServerEvent;
                 if (event.type === "device:list") resolve(event.payload);
@@ -67,7 +67,7 @@ describe("WebSocket snapshot", () => {
         )
         .catch(() => {});
     });
-    socket?.terminate();
+    closeSocket();
 
     expect(devices.map(({ id, notResponding }) => [id, notResponding])).toEqual([
       ["hung", true],
