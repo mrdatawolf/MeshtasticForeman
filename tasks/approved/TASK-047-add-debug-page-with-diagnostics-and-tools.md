@@ -6,9 +6,9 @@ Proposed by: Claude, at Patrick Moon's request
 Proposed date: 2026-11-04
 Approved by:  Patrick
 Approved date: 2026-11-06
-Related contracts: CONTRACT-013 (Proposed)
+Related contracts: CONTRACT-013 (Accepted)
 Related ADRs: ADR-004
-Dependencies: None. Should follow TASK-046 so the page uses its text tokens.
+Dependencies: None. Should follow TASK-048 so the page uses its text tokens.
 
 ## Desired outcome
 
@@ -116,7 +116,7 @@ reuses it and does not add a second path.
   hang, and it would add an unauthenticated action on the LAN.
 - Factory reset, config writes, or deleting saved devices.
 - Changing the meaning of `connected` across the app, and the app-wide "not
-  responding" status. Both are in TASK-048.
+  responding" status. Both are in TASK-049.
 - Authentication for the API.
 
 ## Plan
@@ -179,14 +179,14 @@ the port, a reconnect, and a silent or unplugged radio.
 
 Recorded from the human on 2026-11-06:
 
-1. The app-wide "not responding" status is a follow-up task: TASK-048.
+1. The app-wide "not responding" status is a follow-up task: TASK-049.
 2. Reboot radio is left out. Instead of a hover tooltip, which does not work at
    phone width, the page shows the reboot suggestion as visible text.
 3. A separate contract is required: CONTRACT-013.
 
 ## Blocker
 
-Needs CONTRACT-013 to be accepted by the human before this task can be approved.
+None.
 
 ## Implementation handoff
 

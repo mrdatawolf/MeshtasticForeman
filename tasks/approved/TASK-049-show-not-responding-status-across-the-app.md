@@ -1,4 +1,4 @@
-# TASK-048: Show not-responding status across the app
+# TASK-049: Show not-responding status across the app
 
 Owner role: interface-designer (frontend), implementer (daemon)
 Assigned agent: Codex
@@ -6,7 +6,7 @@ Proposed by: Claude, at Patrick Moon's request
 Proposed date: 2026-11-06
 Approved by: Patrick
 Approved date: 2026-11-06
-Related contracts: CONTRACT-013 (Proposed)
+Related contracts: CONTRACT-013 (Accepted)
 Related ADRs: ADR-004
 Dependencies: TASK-047, which adds the frame tracking this task reads.
 

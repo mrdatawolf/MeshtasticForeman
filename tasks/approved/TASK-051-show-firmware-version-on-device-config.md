@@ -1,4 +1,4 @@
-# TASK-050: Show firmware version on Device Config
+# TASK-051: Show firmware version on Device Config
 
 Owner role: interface-designer (frontend), implementer (daemon)
 Assigned agent:
@@ -8,7 +8,7 @@ Approved by: Patrick
 Approved date: 2026-11-06
 Related contracts: None. Small work, covered by the acceptance criteria below.
 Related ADRs: ADR-004
-Dependencies: None. Should follow TASK-046 so the display uses its text tokens.
+Dependencies: None. Should follow TASK-048 so the display uses its text tokens.
 
 ## Desired outcome
 
@@ -81,7 +81,7 @@ that the version on the page matches `meshtastic --port <port> --info`.
 - The in-memory copy of the version must be cleared or reloaded with the device's
   other per-connection state, so a swapped radio on the same port cannot show the
   old radio's version once it has reported its own.
-- TASK-047's Versions check and TASK-048's status changes read or touch the same
+- TASK-047's Versions check and TASK-049's status changes read or touch the same
   status event, so whichever comes second should build on this fix.
 
 ## Blocker

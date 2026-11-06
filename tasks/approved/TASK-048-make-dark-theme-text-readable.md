@@ -1,4 +1,4 @@
-# TASK-046: Make dark theme text readable
+# TASK-048: Make dark theme text readable
 
 Owner role: interface-designer
 Assigned agent: Codex
