@@ -15,6 +15,7 @@ import { createLogger } from "./logger.js";
 import { MqttGateway } from "./mqtt/gateway.js";
 import { registerAnalyticsRoutes } from "./routes/analytics.js";
 import { registerCoverageRoutes } from "./routes/coverage.js";
+import { registerDebugRoutes } from "./routes/debug.js";
 import { registerDeviceRoutes } from "./routes/devices.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerProposalRoutes } from "./routes/proposals.js";
@@ -231,6 +232,7 @@ async function main() {
 
   // 4. Routes
   await registerDeviceRoutes(app, deviceManager, mqttGateway, db);
+  await registerDebugRoutes(app, deviceManager, mqttGateway, db);
   await registerAnalyticsRoutes(app, db);
   await registerCoverageRoutes(app, db, { coverage: config.coverage });
   await registerProposalRoutes(app, db);
