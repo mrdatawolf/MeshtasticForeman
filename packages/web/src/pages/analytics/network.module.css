@@ -7,13 +7,13 @@
 }
 
 .mutedNote {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.7rem;
   font-family: monospace;
 }
 
 .routeCount {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.7rem;
   font-family: monospace;
   margin-bottom: 0.6rem;
@@ -32,7 +32,7 @@
   gap: 0.3rem;
   font-size: 0.68rem;
   font-family: monospace;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .snrSwatch {
@@ -57,7 +57,7 @@
 }
 
 .legendFormatterLabel {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 0.7rem;
   font-family: monospace;
 }

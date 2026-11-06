@@ -19,7 +19,7 @@ function formatTime(iso: string): string {
 type TagFilter = "all" | "devices" | "mqtt" | "ws" | "db" | "foreman";
 
 const LEVEL_COLORS: Record<string, string> = {
-  log: "#94a3b8",
+  log: "var(--text-secondary)",
   warn: "#fbbf24",
   error: "#f87171",
 };
@@ -29,11 +29,11 @@ const TAG_COLORS: Record<string, string> = {
   mqtt: "#34d399",
   ws: "#a78bfa",
   db: "#fb923c",
-  foreman: "#94a3b8",
+  foreman: "var(--text-secondary)",
 };
 
 function tagColor(tag: string): string {
-  return TAG_COLORS[tag] ?? "#64748b";
+  return TAG_COLORS[tag] ?? "var(--text-muted)";
 }
 
 // ---------------------------------------------------------------------------
@@ -91,13 +91,13 @@ export function LogsPage({ entries, levelFilter, tagFilter, paused }: Props) {
           <div key={e.id} style={styles.row}>
             <span style={styles.time}>{formatTime(e.ts)}</span>
             {e.tag && <span style={{ ...styles.tag, color: tagColor(e.tag) }}>[{e.tag}]</span>}
-            <span style={{ ...styles.text, color: LEVEL_COLORS[e.level] ?? "#94a3b8" }}>
+            <span style={{ ...styles.text, color: LEVEL_COLORS[e.level] ?? "var(--text-secondary)" }}>
               {e.tag ? e.text.replace(`[${e.tag}]`, "").trimStart() : e.text}
             </span>
           </div>
         ))}
         {displayEntries.length === 0 && (
-          <div style={{ color: "#475569", padding: "1rem", textAlign: "center" }}>No log lines</div>
+          <div style={{ color: "var(--text-muted)", padding: "1rem", textAlign: "center" }}>No log lines</div>
         )}
       </div>
     </div>
@@ -134,7 +134,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "flex-start",
     borderBottom: "1px solid #0f172a",
   },
-  time: { color: "#334155", flexShrink: 0, width: "5.5rem" },
+  time: { color: "var(--text-muted)", flexShrink: 0, width: "5.5rem" },
   tag: { flexShrink: 0, fontWeight: "bold", width: "5.5rem" },
   text: { flex: 1, whiteSpace: "pre-wrap", wordBreak: "break-all" },
 };

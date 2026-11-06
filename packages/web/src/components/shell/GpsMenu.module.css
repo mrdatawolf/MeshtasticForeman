@@ -25,25 +25,25 @@
 }
 
 .gpsTableLabel {
-  color: #475569;
+  color: var(--text-muted);
   padding-right: 0.75rem;
   padding-bottom: 0.15rem;
 }
 
 .gpsTableValue {
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-family: monospace;
 }
 
 .gpsWaiting {
-  color: #475569;
+  color: var(--text-muted);
   font-size: 0.75rem;
 }
 
 .gpsRefreshBtn {
   background: #1e293b;
   border: 1px solid #334155;
-  color: #94a3b8;
+  color: var(--text-secondary);
   padding: 0.2rem 0.6rem;
   border-radius: 0.25rem;
   cursor: pointer;
@@ -78,7 +78,7 @@
 }
 
 .gpsNoNodeId {
-  color: #475569;
+  color: var(--text-muted);
   font-size: 0.7rem;
   margin-top: 0.4rem;
   display: block;

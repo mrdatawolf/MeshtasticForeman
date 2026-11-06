@@ -163,8 +163,13 @@ function ThreadView({ nodeId, nodes, mqttNodes, deviceId, onDeleteConversation }
               )}
             </div>
           )}
-          <div style={{ ...styles.msgText, opacity: m.role === "relayed" ? 0.5 : 1 }}>
-            {m.text ?? <em style={{ color: "#475569" }}>encrypted</em>}
+          <div
+            style={{
+              ...styles.msgText,
+              ...(m.role === "relayed" && { color: "var(--text-secondary)" }),
+            }}
+          >
+            {m.text ?? <em style={{ color: "var(--text-muted)" }}>encrypted</em>}
           </div>
           <div style={styles.msgMeta}>
             {formatTime(m.rxTime)}
@@ -442,7 +447,7 @@ function bubbleStyle(outgoing: boolean, relayed: boolean, reply = false): React.
     border: `1px solid ${relayed ? "#1e293b" : reply ? "#7c3aed" : outgoing ? "#2563eb" : "#334155"}`,
     borderRadius: "0.5rem",
     padding: "0.45rem 0.7rem",
-    opacity: relayed ? 0.7 : 1,
+    opacity: relayed ? 0.75 : 1,
   };
 }
 
@@ -450,7 +455,7 @@ function newBtnStyle(open: boolean): React.CSSProperties {
   return {
     background: open ? "#1e3a5f" : "#1e293b",
     border: `1px solid ${open ? "#3b82f6" : "#334155"}`,
-    color: open ? "#60a5fa" : "#94a3b8",
+    color: open ? "#60a5fa" : "var(--text-secondary)",
     padding: "0.15rem 0.5rem",
     borderRadius: "0.3rem",
     cursor: "pointer",
@@ -494,7 +499,7 @@ function sendBtnStyle(disabled: boolean): React.CSSProperties {
   return {
     background: disabled ? "#1e293b" : "#1d4ed8",
     border: "none",
-    color: disabled ? "#475569" : "#fff",
+    color: disabled ? "var(--text-disabled)" : "#fff",
     padding: "0.4rem 0.9rem",
     borderRadius: "0.375rem",
     cursor: disabled ? "not-allowed" : "pointer",
@@ -531,7 +536,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   sidebarHeader: {
-    color: "#334155",
+    color: "var(--text-muted)",
     fontSize: "0.65rem",
     textTransform: "uppercase" as const,
     letterSpacing: "0.08em",
@@ -549,29 +554,29 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "hidden",
   },
   pickerLabel: {
-    color: "#334155",
+    color: "var(--text-muted)",
     fontSize: "0.62rem",
     textTransform: "uppercase" as const,
     letterSpacing: "0.07em",
     padding: "0.5rem 0.75rem 0.3rem",
   },
   pickerEmpty: {
-    color: "#475569",
+    color: "var(--text-muted)",
     fontSize: "0.75rem",
     padding: "0.5rem 0.75rem 0.75rem",
   },
   pickerName: {
-    color: "#e2e8f0",
+    color: "var(--text-primary)",
     fontWeight: "bold",
     fontSize: "0.82rem",
   },
   pickerSub: {
-    color: "#64748b",
+    color: "var(--text-muted)",
     fontSize: "0.72rem",
     marginLeft: "0.4rem",
   },
   pickerHex: {
-    color: "#334155",
+    color: "var(--text-muted)",
     fontFamily: "monospace",
     fontSize: "0.68rem",
     marginLeft: "auto",
@@ -602,7 +607,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "0.95rem",
   },
   threadHex: {
-    color: "#475569",
+    color: "var(--text-muted)",
     fontSize: "0.78rem",
     fontFamily: "monospace",
   },
@@ -626,12 +631,12 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "0.6rem",
   },
   msgText: {
-    color: "#e2e8f0",
+    color: "var(--text-primary)",
     fontSize: "0.83rem",
     lineHeight: "1.45",
   },
   msgMeta: {
-    color: "#475569",
+    color: "var(--text-muted)",
     fontSize: "0.68rem",
     marginTop: "0.2rem",
     display: "flex",
@@ -639,7 +644,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "0.3rem",
   },
   relayedLabel: {
-    color: "#475569",
+    color: "var(--text-muted)",
     fontSize: "0.62rem",
     textTransform: "uppercase",
     letterSpacing: "0.06em",
@@ -654,10 +659,9 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   replyingToLabel: {
-    color: "#7c3aed",
+    color: "#a78bfa",
     fontSize: "0.62rem",
     marginBottom: "0.2rem",
-    opacity: 0.85,
   },
   senderLabel: {
     color: "#60a5fa",
@@ -667,7 +671,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   ackPending: {
     fontSize: "0.7rem",
-    opacity: 0.6,
   },
   ackOk: {
     color: "#22c55e",
@@ -689,7 +692,7 @@ const styles: Record<string, React.CSSProperties> = {
   channelSelect: {
     background: "#1e293b",
     border: "1px solid #334155",
-    color: "#94a3b8",
+    color: "var(--text-secondary)",
     borderRadius: "0.375rem",
     padding: "0.4rem 0.3rem",
     fontFamily: "monospace",
@@ -700,7 +703,7 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     background: "#1e293b",
     border: "1px solid #334155",
-    color: "#e2e8f0",
+    color: "var(--text-primary)",
     borderRadius: "0.375rem",
     padding: "0.4rem 0.6rem",
     fontFamily: "monospace",
@@ -708,13 +711,13 @@ const styles: Record<string, React.CSSProperties> = {
     outline: "none",
   },
   convoName: {
-    color: "#e2e8f0",
+    color: "var(--text-primary)",
     fontWeight: "bold",
     fontSize: "0.82rem",
     marginBottom: "0.15rem",
   },
   convoPreview: {
-    color: "#64748b",
+    color: "var(--text-muted)",
     fontSize: "0.74rem",
     whiteSpace: "nowrap",
     overflow: "hidden",
@@ -722,11 +725,11 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: "0.15rem",
   },
   convoTime: {
-    color: "#334155",
+    color: "var(--text-muted)",
     fontSize: "0.68rem",
   },
   empty: {
-    color: "#334155",
+    color: "var(--text-muted)",
     fontSize: "0.8rem",
     textAlign: "center",
     padding: "2rem 0",
@@ -736,7 +739,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#334155",
+    color: "var(--text-muted)",
     fontSize: "0.85rem",
   },
 };

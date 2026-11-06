@@ -1,7 +1,7 @@
 # TASK-048: Make dark theme text readable
 
 Owner role: interface-designer
-Assigned agent: Codex
+Assigned agent: interface-designer
 Proposed by: Claude, at Patrick Moon's request
 Proposed date: 2026-11-04
 Approved by: Patrick

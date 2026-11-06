@@ -29,7 +29,7 @@
   padding: 0.2rem 0.4rem;
   font-family: monospace;
   font-size: 0.75rem;
-  color: #1e293b;
+  color: var(--text-on-light);
   box-sizing: border-box;
 }
 
@@ -38,8 +38,12 @@
   min-height: 2.5rem;
 }
 
+.input::placeholder {
+  color: var(--text-on-light-muted);
+}
+
 .metaLine {
-  color: #64748b;
+  color: var(--text-on-light-muted);
   font-size: 0.65rem;
   font-family: monospace;
 }

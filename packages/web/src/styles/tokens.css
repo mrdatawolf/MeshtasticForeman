@@ -1,0 +1,49 @@
+/*
+ * Text colour tokens: the single source of truth for neutral text colours.
+ *
+ * The app has one theme and its text sits on many surfaces, so the dark-surface
+ * tokens are chosen to pass on all of them rather than only on the page colour.
+ * That lets a component pick a token by meaning without checking its background.
+ *
+ * Dark surfaces covered: #020617 #080f1a #0a0f1a #0d1420 #0f172a #0f2a1a #0f2a4a
+ * #052e16 #1e293b #1e3a5f #334155. Measured ratios are enforced by
+ * textContrast.test.ts, so run that test after changing any value here.
+ *
+ * Backgrounds, borders, and status colours (green, red, amber) are deliberately
+ * not tokens. Status colours stay as literals where they are used.
+ */
+:root {
+  /* Main content: headings, values, and body text. */
+  --text-primary: #e2e8f0;
+  /* Labels and supporting text. Also the lowest token that stays readable on the
+     translucent map panels, whose real background depends on the basemap. */
+  --text-secondary: #b4c0d0;
+  /* De-emphasised text: timestamps, hints, and empty states. Not for use on the
+     translucent map panels. */
+  --text-muted: #9fadc0;
+  /* Disabled controls only. Meets 3:1, so it must not carry readable content. */
+  --text-disabled: #64748b;
+
+  /* Text on saturated fills (#3b82f6, #22c55e, #ef4444), where white fails. */
+  --text-on-accent: #0f172a;
+
+  /* Text on the light map popups. The dark-surface tokens are unreadable here. */
+  --text-on-light: #1e293b;
+  --text-on-light-secondary: #334155;
+  --text-on-light-muted: #64748b;
+}
+
+/* Browser default placeholders fall below 4.5:1 on the dark input surfaces. */
+::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+/*
+ * Recharts writes each legend label's colour inline from its series colour, and
+ * several of those fail as text. The swatch beside the label keeps the series
+ * colour, so only the label text is overridden. !important beats the inline style.
+ */
+.recharts-legend-item-text {
+  color: var(--text-secondary) !important;
+}

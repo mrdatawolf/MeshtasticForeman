@@ -1,5 +1,5 @@
 .legendLabel {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 0.68rem;
   font-family: monospace;
 }
@@ -14,7 +14,7 @@
 
 .select {
   background: #1e293b;
-  color: #94a3b8;
+  color: var(--text-secondary);
   border: 1px solid #334155;
   border-radius: 0.3rem;
   padding: 0.2rem 0.4rem;
@@ -23,7 +23,7 @@
 }
 
 .rowStatus {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.7rem;
   font-family: monospace;
   flex: 1;
@@ -61,7 +61,7 @@
 
 .th {
   padding: 0.3rem 0.5rem;
-  color: #94a3b8;
+  color: var(--text-secondary);
   text-align: left;
   border-bottom: 1px solid #334155;
   white-space: nowrap;
@@ -73,7 +73,7 @@
 
 .logCell {
   padding: 0.25rem 0.5rem;
-  color: #94a3b8;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -94,7 +94,7 @@
 }
 
 .logCellSnrNone {
-  color: #475569;
+  color: var(--text-muted);
 }
 
 .logCellMqttYes {
@@ -102,5 +102,5 @@
 }
 
 .logCellMqttNo {
-  color: #334155;
+  color: var(--text-muted);
 }

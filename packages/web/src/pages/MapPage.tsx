@@ -26,6 +26,7 @@ import { ProposalEditor } from "../components/map/ProposalEditor.js";
 import { deleteViewshed, fetchElevation, fetchViewshed } from "../components/map/terrainApi.js";
 import { buildCoverageCircle, clipViewshedToRadius } from "../lib/coordinateHelpers.js";
 import { mergeCoveragePolygons } from "../lib/coverageMath.js";
+import { nodeFillLabelColor, nodeLabelColor } from "../lib/nodeLabelColor.js";
 import { foremanClient } from "../ws/client.js";
 
 import styles from "./MapPage.module.css";
@@ -37,9 +38,12 @@ import type { CSSProperties } from "react";
 
 type PendingMapAction = { nodeId: number; action: "ping" | "traceroute" };
 
+function nodeHue(nodeId: number): number {
+  return (nodeId * 137.508) % 360;
+}
+
 function nodeColor(nodeId: number): string {
-  const hue = (nodeId * 137.508) % 360;
-  return `hsl(${hue}, 70%, 55%)`;
+  return `hsl(${nodeHue(nodeId)}, 70%, 55%)`;
 }
 
 // ---------------------------------------------------------------------------
@@ -806,7 +810,9 @@ export function MapPage({
                     style={
                       {
                         "--marker-bg": isLocal ? color : "#0f172a",
-                        "--marker-fg": isLocal ? "#fff" : color,
+                        "--marker-fg": isLocal
+                          ? nodeFillLabelColor(nodeHue(node.nodeId))
+                          : nodeLabelColor(nodeHue(node.nodeId)),
                         "--marker-border": `2px solid ${color}`,
                       } as CSSProperties
                     }
@@ -849,7 +855,7 @@ export function MapPage({
                     )}
                     style={
                       {
-                        "--marker-fg": color,
+                        "--marker-fg": nodeLabelColor(nodeHue(node.nodeId)),
                         "--marker-border": `2px dashed ${color}`,
                         "--marker-shadow": `${color}22`,
                       } as CSSProperties
@@ -1072,7 +1078,9 @@ export function MapPage({
                             {
                               "--stack-border": `1px solid ${isActive ? nodeColor(sn.node.nodeId) : "#334155"}`,
                               "--stack-bg": isActive ? `${nodeColor(sn.node.nodeId)}22` : "#0f172a",
-                              "--stack-color": isActive ? nodeColor(sn.node.nodeId) : "#94a3b8",
+                              "--stack-color": isActive
+                                ? "var(--text-on-light)"
+                                : "var(--text-secondary)",
                             } as CSSProperties
                           }
                           title={resolveNodeName(sn.node.nodeId, sn.node, {

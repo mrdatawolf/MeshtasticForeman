@@ -1,10 +1,10 @@
 .sensitiveMask {
-  color: #334155;
+  color: var(--text-muted);
   letter-spacing: 0.1em;
 }
 
 .emptyDim {
-  color: #334155;
+  color: var(--text-muted);
 }
 
 .boolTrue {
@@ -12,24 +12,24 @@
 }
 
 .boolFalse {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .plainValue {
-  color: #e2e8f0;
+  color: var(--text-primary);
 }
 
 .enumCode {
-  color: #334155;
+  color: var(--text-muted);
   margin-left: 0.4rem;
   font-size: 0.7rem;
 }
 
 .arrayValue {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .rawValue {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.72rem;
 }

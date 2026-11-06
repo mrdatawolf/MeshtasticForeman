@@ -524,7 +524,7 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
                       label="Mesh only"
                       count={meshOnly.length}
                       colCount={8}
-                      color="#94a3b8"
+                      color="var(--text-secondary)"
                       collapsed={!!collapsed["mesh"]}
                       onToggle={() => toggleSection("mesh")}
                     />
@@ -552,7 +552,7 @@ export function NodesPage({ devices, nodes, mqttNodes, onMessage, onCoverageMap 
                       label="Unknown"
                       count={unknownNodes.length}
                       colCount={8}
-                      color="#6b7280"
+                      color="var(--text-muted)"
                       collapsed={!!collapsed["unknown"]}
                       onToggle={() => toggleSection("unknown")}
                     />
@@ -595,12 +595,12 @@ function SortableHeader({
         ...styles.th,
         cursor: "pointer",
         userSelect: "none",
-        color: active ? "#e2e8f0" : "#94a3b8",
+        color: active ? "var(--text-primary)" : "var(--text-secondary)",
       }}
       onClick={() => onSort(col)}
     >
       {label}
-      <span style={{ marginLeft: "0.3rem", fontSize: "0.65rem", opacity: active ? 1 : 0.35 }}>
+      <span style={{ marginLeft: "0.3rem", fontSize: "0.65rem", opacity: active ? 1 : 0.7 }}>
         {active ? (sortDir === "asc" ? "▲" : "▼") : "▲▼"}
       </span>
     </th>
@@ -652,7 +652,7 @@ function SectionHeader({
             borderRadius: "9999px",
             padding: "0.1rem 0.4rem",
             fontSize: "0.65rem",
-            color: "#64748b",
+            color: "var(--text-muted)",
             fontWeight: "normal",
             letterSpacing: 0,
             textTransform: "none",
@@ -726,7 +726,7 @@ function NodeRows({ merged, selectedNodeId, protoMap, onRowClick }: NodeRowsProp
               paddingTop: "0.25rem",
               paddingBottom: "0.3rem",
               fontSize: "0.75rem",
-              color: "#64748b",
+              color: "var(--text-muted)",
             }}
           >
             <span style={{ color: "#34d399", fontWeight: "bold", marginRight: "0.5rem" }}>
@@ -735,7 +735,7 @@ function NodeRows({ merged, selectedNodeId, protoMap, onRowClick }: NodeRowsProp
             {mqtt.lastGateway && (
               <>
                 via{" "}
-                <span style={{ fontFamily: "monospace", color: "#94a3b8" }}>
+                <span style={{ fontFamily: "monospace", color: "var(--text-secondary)" }}>
                   {mqtt.lastGateway}
                 </span>
                 {" · "}
@@ -744,10 +744,10 @@ function NodeRows({ merged, selectedNodeId, protoMap, onRowClick }: NodeRowsProp
             {formatLastHeard(mqtt.lastHeard)}
             {mqtt.snr != null && mqtt.snr !== 0 && ` · SNR ${mqtt.snr.toFixed(1)} dB`}
             {mqtt.regionPath && (
-              <span style={{ marginLeft: "0.5rem", color: "#475569" }}>{mqtt.regionPath}</span>
+              <span style={{ marginLeft: "0.5rem", color: "var(--text-muted)" }}>{mqtt.regionPath}</span>
             )}
             {mqtt.latitude != null && mqtt.longitude != null && mesh.latitude == null && (
-              <span style={{ marginLeft: "0.5rem", fontFamily: "monospace", color: "#94a3b8" }}>
+              <span style={{ marginLeft: "0.5rem", fontFamily: "monospace", color: "var(--text-secondary)" }}>
                 · GPS {mqtt.latitude.toFixed(5)}, {mqtt.longitude.toFixed(5)}
               </span>
             )}
@@ -774,7 +774,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sectionTitle: {
     fontSize: "1rem",
-    color: "#94a3b8",
+    color: "var(--text-secondary)",
     textTransform: "uppercase",
     letterSpacing: "0.1em",
     margin: 0,
@@ -800,7 +800,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#1e293b",
     border: "1px solid #334155",
     borderRadius: "0.375rem",
-    color: "#e2e8f0",
+    color: "var(--text-primary)",
     padding: "0.3rem 2rem 0.3rem 0.6rem",
     fontFamily: "monospace",
     fontSize: "0.8rem",
@@ -814,20 +814,20 @@ const styles: Record<string, React.CSSProperties> = {
     transform: "translateY(-50%)",
     background: "none",
     border: "none",
-    color: "#64748b",
+    color: "var(--text-muted)",
     cursor: "pointer",
     fontSize: "0.75rem",
     padding: "0 0.2rem",
     lineHeight: 1,
   },
-  muted: { color: "#64748b", fontSize: "0.85rem" },
+  muted: { color: "var(--text-muted)", fontSize: "0.85rem" },
   tableWrap: { overflowX: "auto" },
   table: { width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" },
   th: {
     textAlign: "left",
     padding: "0.5rem 0.75rem",
     background: "#1e293b",
-    color: "#94a3b8",
+    color: "var(--text-secondary)",
     fontWeight: "normal",
     borderBottom: "1px solid #334155",
     whiteSpace: "nowrap",
@@ -846,7 +846,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "1.5rem",
   },
   emptyLogo: { width: "12rem", opacity: 0.15 },
-  mono: { fontFamily: "monospace", fontSize: "0.8rem", color: "#94a3b8" },
+  mono: { fontFamily: "monospace", fontSize: "0.8rem", color: "var(--text-secondary)" },
   mqttChip: {
     display: "inline-block",
     background: "#052e16",

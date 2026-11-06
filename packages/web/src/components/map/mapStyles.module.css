@@ -9,7 +9,7 @@
 .controlPanel {
   background: #0f172acc;
   backdrop-filter: blur(4px);
-  color: #e2e8f0;
+  color: var(--text-primary);
   padding: 0.4rem 0.6rem;
   border-radius: 0.5rem;
   font-size: 0.75rem;
@@ -30,7 +30,7 @@
 }
 
 .controlLabel {
-  color: #94a3b8;
+  color: var(--text-secondary);
   margin-right: 0.15rem;
   font-size: 0.7rem;
 }
@@ -60,7 +60,7 @@
   border-radius: 0.3rem;
   border: 1px solid #334155;
   background: #1e293b;
-  color: #94a3b8;
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
@@ -77,7 +77,7 @@
 
 /* Inactive + "off" state gets a slightly muted label color (e.g. traceroute/coverage On/Off). */
 .ageFilterBtnOff {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 /* Color variants applied together with .ageFilterBtnActive for specific toggles. */
@@ -139,7 +139,7 @@
 }
 
 .divider {
-  color: #475569;
+  color: var(--text-secondary);
   margin: 0 0.1rem;
   font-size: 0.8rem;
 }
@@ -173,7 +173,7 @@
 }
 
 .proposalMeta {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.65rem;
   font-family: monospace;
 }

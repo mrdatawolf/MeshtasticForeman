@@ -136,8 +136,8 @@ const stepStyles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     marginTop: "0.1rem",
   },
-  title: { color: "#e2e8f0", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "0.15rem" },
-  body: { color: "#94a3b8", fontSize: "0.8rem", lineHeight: 1.6 },
+  title: { color: "var(--text-primary)", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "0.15rem" },
+  body: { color: "var(--text-secondary)", fontSize: "0.8rem", lineHeight: 1.6 },
 };
 
 const cardStyles: Record<string, React.CSSProperties> = {
@@ -154,7 +154,7 @@ const cardStyles: Record<string, React.CSSProperties> = {
     marginBottom: "0.2rem",
     fontFamily: "monospace",
   },
-  desc: { color: "#64748b", fontSize: "0.75rem", lineHeight: 1.5 },
+  desc: { color: "var(--text-muted)", fontSize: "0.75rem", lineHeight: 1.5 },
 };
 
 const styles: Record<string, React.CSSProperties> = {
@@ -195,7 +195,7 @@ const styles: Record<string, React.CSSProperties> = {
   closeBtn: {
     background: "none",
     border: "1px solid #1e293b",
-    color: "#64748b",
+    color: "var(--text-muted)",
     cursor: "pointer",
     borderRadius: "0.25rem",
     padding: "0.15rem 0.5rem",
@@ -211,7 +211,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "1.5rem",
   },
   lead: {
-    color: "#94a3b8",
+    color: "var(--text-secondary)",
     fontSize: "0.85rem",
     lineHeight: 1.65,
     margin: 0,
@@ -219,7 +219,7 @@ const styles: Record<string, React.CSSProperties> = {
   section: { display: "flex", flexDirection: "column", gap: "0.6rem" },
   sectionTitle: {
     fontSize: "0.65rem",
-    color: "#475569",
+    color: "var(--text-muted)",
     textTransform: "uppercase",
     letterSpacing: "0.08em",
   },
@@ -230,7 +230,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "0.5rem",
   },
   tips: {
-    color: "#64748b",
+    color: "var(--text-muted)",
     fontSize: "0.8rem",
     lineHeight: 1.6,
     paddingLeft: "1.25rem",
@@ -247,7 +247,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#7dd3fc",
     fontFamily: "monospace",
   },
-  strong: { color: "#e2e8f0" },
+  strong: { color: "var(--text-primary)" },
   footer: {
     display: "flex",
     justifyContent: "flex-end",
@@ -260,7 +260,7 @@ const styles: Record<string, React.CSSProperties> = {
   skipBtn: {
     background: "transparent",
     border: "1px solid #1e293b",
-    color: "#64748b",
+    color: "var(--text-muted)",
     padding: "0.35rem 1rem",
     borderRadius: "0.375rem",
     cursor: "pointer",

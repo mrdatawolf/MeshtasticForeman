@@ -5,7 +5,7 @@
 }
 
 .fieldLabel {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.75rem;
   width: 9rem;
   flex-shrink: 0;
@@ -19,13 +19,13 @@
 }
 
 .featureTitle {
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-size: 0.85rem;
   font-weight: bold;
 }
 
 .featureDesc {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.74rem;
 }
 
