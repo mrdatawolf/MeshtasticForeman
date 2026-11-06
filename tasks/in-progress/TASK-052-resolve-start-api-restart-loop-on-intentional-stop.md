@@ -1,7 +1,7 @@
 # TASK-052: Resolve the start-api restart loop on intentional stop
 
 Owner role: Implementer
-Assigned agent:
+Assigned agent: general-purpose subagent
 Proposed by: Claude, at Patrick Moon's request
 Proposed date: 2026-11-06
 Approved by: Patrick
