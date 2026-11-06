@@ -15,7 +15,7 @@
 import { EventEmitter } from "node:events";
 
 import { PGlite } from "@electric-sql/pglite";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
 
 import { runMigrations } from "../db/migrations.js";
 import { DeviceManager } from "../device/device-manager.js";
@@ -201,6 +201,12 @@ describe("DeviceManager", () => {
     db = await createTestDb();
     manager = new DeviceManager(db, { bot: { enabled: false } });
     emitted = collectEvents(manager);
+  });
+
+  // Every test opens its own PGlite instance. Left open, they add up to many GB.
+  afterEach(async () => {
+    await manager.shutdown();
+    await db.close();
   });
 
   // -------------------------------------------------------------------------
