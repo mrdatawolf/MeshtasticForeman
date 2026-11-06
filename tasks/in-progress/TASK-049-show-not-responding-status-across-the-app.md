@@ -1,7 +1,7 @@
 # TASK-049: Show not-responding status across the app
 
 Owner role: interface-designer (frontend), implementer (daemon)
-Assigned agent: Codex
+Assigned agent: general-purpose subagent
 Proposed by: Claude, at Patrick Moon's request
 Proposed date: 2026-11-06
 Approved by: Patrick
@@ -67,11 +67,14 @@ unplugged radio.
 
 ## Blocker
 
-Needs TASK-047 to be completed.
+Cleared. This task needed TASK-047 to be completed. On 2026-11-06 Patrick cleared
+the blocker and said TASK-049 can move forward while TASK-047 was still in
+`tasks/review/`. At the base commit for this work (`a4b4a3a`), the TASK-047 file
+is already in `tasks/completed/`, and its code is present.
 
 ## Implementation handoff
 
-Not started.
+In progress.
 
 ## Review
 
