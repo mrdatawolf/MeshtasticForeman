@@ -97,6 +97,9 @@ radio, so start with the steps below.
 | Reconnect serial | Connects again without restarting the daemon. |
 | Raw serial probe | After you confirm, drops the connection for up to about 30 seconds and tests the radio directly, then reconnects. |
 
+If a radio stops answering, a red **Not responding** button with its name appears in the header on
+every page. Select it to open the Debug page.
+
 **Radio responding** is the check to read first. It fails when the radio sends nothing for 25
 seconds after a config request, and stays failed until the radio sends something. A radio that is quiet with nothing to answer is fine.
 
